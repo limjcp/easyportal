@@ -11,13 +11,13 @@ type MarketingHeaderProps = {
 export function MarketingHeader({ currentPage, onNavigate, onOpenLogin }: MarketingHeaderProps) {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
-      <button
+      {/* <button
         type="button"
         className="flex w-full items-center justify-center bg-[#1f2937] px-4 py-2 text-center text-xs font-semibold text-white hover:bg-[#111827]"
         onClick={() => onNavigate(SITE_BANNER.href)}
       >
         {SITE_BANNER.text}
-      </button>
+      </button> */}
       <div className="mx-auto flex w-full max-w-[1180px] flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
         <button type="button" className="flex items-center gap-3" onClick={() => onNavigate("/")}>
           <MvpLogo />
