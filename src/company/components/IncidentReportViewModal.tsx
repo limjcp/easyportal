@@ -1,0 +1,445 @@
+import { useEffect, useState, type ReactNode } from "react";
+import { FaExclamationTriangle, FaPrint, FaSearch, FaTimes } from "react-icons/fa";
+import type { IncidentReportAttachment, IncidentReportDetail } from "../../resident/data/types";
+
+type IncidentReportViewModalProps = {
+  open: boolean;
+  detail: IncidentReportDetail | null;
+  onClose: () => void;
+  onViewRelated?: (unit: string, owner: string) => void;
+};
+
+const inputClass =
+  "mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800";
+
+function DisabledField({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="mb-2.5">
+      <label className="text-sm font-medium text-slate-700">{label}</label>
+      <input type="text" readOnly disabled value={value ?? ""} className={inputClass} />
+    </div>
+  );
+}
+
+function DangerPanel({
+  title,
+  toolbar,
+  children,
+  headerRight,
+}: {
+  title: ReactNode;
+  toolbar?: ReactNode;
+  headerRight?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="overflow-hidden rounded-sm border border-[#ebccd1]">
+      <div className="flex items-center justify-between bg-[#d9534f] px-3 py-2 text-white">
+        <h4 className="text-sm font-semibold">{title}</h4>
+        <div className="flex items-center gap-2">
+          {headerRight}
+          {toolbar}
+        </div>
+      </div>
+      <div className="bg-white p-3">{children}</div>
+    </div>
+  );
+}
+
+function DefaultPanel({
+  title,
+  toolbar,
+  children,
+  headerClass = "bg-slate-100 text-slate-800",
+}: {
+  title: ReactNode;
+  toolbar?: ReactNode;
+  children: ReactNode;
+  headerClass?: string;
+}) {
+  return (
+    <div className="overflow-hidden rounded-sm border border-slate-200">
+      <div className={`flex items-center justify-between px-3 py-2 ${headerClass}`}>
+        <h4 className="text-sm font-semibold">{title}</h4>
+        {toolbar}
+      </div>
+      <div className="bg-white p-3">{children}</div>
+    </div>
+  );
+}
+
+function AttachmentThumb({ att }: { att: IncidentReportAttachment }) {
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  return (
+    <>
+      <div className="text-center">
+        <div className="group relative mx-auto inline-block overflow-hidden rounded border border-slate-200 bg-slate-50">
+          {att.previewUrl ? (
+            <img
+              src={att.previewUrl}
+              alt={att.fileName}
+              className="h-24 w-28 object-cover"
+            />
+          ) : (
+            <div className="flex h-24 w-28 items-center justify-center text-xs text-slate-500">
+              {att.kind === "pdf" ? "PDF" : "File"}
+            </div>
+          )}
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition group-hover:opacity-100">
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(true)}
+              className="rounded border border-white/80 bg-white/90 px-2 py-1 text-slate-700"
+              aria-label={`View ${att.fileName}`}
+            >
+              <FaSearch />
+            </button>
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-slate-800">
+          {att.fileName}
+          <br />
+          {att.uploadedBy} - {att.uploadedDate}
+        </p>
+      </div>
+
+      {previewOpen && att.previewUrl && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setPreviewOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="relative max-h-[90vh] max-w-4xl"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+          >
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(false)}
+              className="absolute -right-2 -top-2 rounded-full bg-white p-2 shadow"
+              aria-label="Close preview"
+            >
+              <FaTimes />
+            </button>
+            <img
+              src={att.previewUrl.replace("/200/150", "/800/600")}
+              alt={att.fileName}
+              className="max-h-[85vh] rounded border border-white shadow-lg"
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+export function IncidentReportViewModal({
+  open,
+  detail,
+  onClose,
+  onViewRelated,
+}: IncidentReportViewModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open || !detail) return;
+    const t = setTimeout(() => {
+      const el = document.getElementById("commentsSection");
+      if (el) el.scrollTop = el.scrollHeight;
+    }, 100);
+    return () => clearTimeout(t);
+  }, [open, detail?.id]);
+
+  if (!open) return null;
+
+  if (!detail) {
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+        <div className="rounded-sm bg-white px-8 py-6 text-sm text-slate-600 shadow-2xl">
+          Loading incident report…
+        </div>
+      </div>
+    );
+  }
+
+  const resolvedLabel =
+    detail.resolvedBy && detail.resolvedAtDisplay
+      ? `Resolved by ${detail.resolvedBy} on ${detail.resolvedAtDisplay}`
+      : detail.resolvedBy
+        ? `Resolved by ${detail.resolvedBy}${detail.resolvedAt ? ` on ${detail.resolvedAt}` : ""}`
+        : null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/50 p-2 sm:p-4 sm:pt-6">
+      <div
+        className="mb-6 flex w-full max-w-5xl flex-col rounded-sm bg-white shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="incident-report-title"
+      >
+        {/* Header */}
+        <div className="border-b border-slate-200 bg-white px-5 pb-5 pt-5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="float-right text-slate-500 hover:text-slate-800"
+            aria-label="Close"
+          >
+            <FaTimes className="text-base" />
+          </button>
+          <h2
+            id="incident-report-title"
+            className="clear-both flex flex-wrap items-center gap-2 text-xl font-normal text-slate-800"
+          >
+            <FaExclamationTriangle className="text-[#d9534f]" />
+            Incident Report #{detail.incidentNumber}
+            {resolvedLabel && (
+              <span className="ml-auto rounded bg-[#5cb85c] px-2 py-1 text-xs font-medium text-white">
+                {resolvedLabel}
+              </span>
+            )}
+            <span className="rounded bg-[#d9534f] px-2 py-1 text-xs font-medium text-white">
+              {detail.severity} Severity
+            </span>
+          </h2>
+        </div>
+
+        {/* Body */}
+        <div className="space-y-4 px-4 py-4 sm:px-5">
+          <DangerPanel
+            title="Incident Report:"
+            headerRight={
+              <span className="text-xs font-normal opacity-95">
+                {detail.reportHeaderTime ?? detail.submittedAt ?? detail.incidentDate}
+              </span>
+            }
+          >
+            <div className="grid gap-4 lg:grid-cols-12">
+              <div className="lg:col-span-5">
+                <DefaultPanel title="User Information:">
+                  <DisabledField label="Created By:" value={detail.createdBy} />
+                  <DisabledField label="Resident:" value={detail.resident ?? detail.createdBy} />
+                  <DisabledField label="Unit:" value={detail.unit} />
+                  {onViewRelated && detail.unit && (detail.resident ?? detail.createdBy) && (
+                    <button
+                      type="button"
+                      onClick={() => onViewRelated(detail.unit, detail.resident ?? detail.createdBy)}
+                      className="mt-1 text-sm font-medium text-[#3476ef] hover:underline"
+                    >
+                      View all reports for this unit & owner
+                    </button>
+                  )}
+                </DefaultPanel>
+              </div>
+              <div className="lg:col-span-7">
+                <DefaultPanel title="Assignment & View Permission:">
+                  <DisabledField label="Assigned To:" value={detail.assignedTo ?? "All Admins"} />
+                  <DisabledField
+                    label="Who can view this Request:"
+                    value={detail.viewPermission ?? "The selected resident"}
+                  />
+                </DefaultPanel>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <DefaultPanel title="Incident Report Details:">
+                <DisabledField
+                  label="Building:"
+                  value={detail.buildingAddress ?? detail.buildingLabel}
+                />
+                <div className="grid gap-0 sm:grid-cols-12">
+                  <div className="sm:col-span-2">
+                    <DisabledField label="Severity:" value={detail.severity} />
+                  </div>
+                  <div className="sm:col-span-5">
+                    <DisabledField label="Incident Report Type:" value={detail.reportType} />
+                  </div>
+                  <div className="sm:col-span-5">
+                    <DisabledField label="Location:" value={detail.location} />
+                  </div>
+                </div>
+                <div className="mt-1">
+                  <label className="text-sm font-medium text-slate-700">Description:</label>
+                  <textarea
+                    readOnly
+                    disabled
+                    rows={8}
+                    value={detail.description}
+                    className={`${inputClass} mt-1 resize-none`}
+                  />
+                </div>
+              </DefaultPanel>
+            </div>
+          </DangerPanel>
+
+          <DangerPanel
+            title="File Attachments:"
+            toolbar={
+              <button
+                type="button"
+                onClick={() => alert("Add attachment — coming soon.")}
+                className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-700 hover:bg-slate-50"
+              >
+                + Add
+              </button>
+            }
+          >
+            {detail.attachments.length === 0 ? (
+              <p className="text-center text-sm text-slate-500">No attachments.</p>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-3">
+                {detail.attachments.map((att) => (
+                  <AttachmentThumb key={att.id} att={att} />
+                ))}
+              </div>
+            )}
+          </DangerPanel>
+
+          <div>
+            <DangerPanel
+              title={
+                <>
+                  Scrollable Admin Comments{" "}
+                  <span className="text-xs font-normal">
+                    (Visible to Admins <strong className="underline">ONLY</strong>)
+                  </span>
+                </>
+              }
+              toolbar={
+                <button
+                  type="button"
+                  onClick={() => alert("Add admin comment — coming soon.")}
+                  className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-700 hover:bg-slate-50"
+                >
+                  + Add
+                </button>
+              }
+            >
+              <div
+                id="adminCommentsSection"
+                className="max-h-[325px] overflow-y-auto overflow-x-hidden"
+              >
+                {detail.adminComments.length === 0 ? (
+                  <p className="mt-1 text-center text-sm text-slate-500">No Comments.</p>
+                ) : (
+                  detail.adminComments.map((c, i) => (
+                    <div key={`admin-${i}`} className="mb-4">
+                      <strong className="text-sm">{c.dateTime}:</strong>
+                      <div
+                        className="mt-1 border border-[#d9d9d9] bg-[#f5f7f7] px-4 py-2 text-sm"
+                        style={{ borderRadius: "0 20px 20px 0" }}
+                      >
+                        <strong>{c.author}:</strong>
+                        <br />
+                        {c.message}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </DangerPanel>
+          </div>
+
+          <DefaultPanel
+            title={
+              <>
+                Scrollable Comments:{" "}
+                <span className="text-xs font-normal">(Visible to Resident & Admins)</span>
+              </>
+            }
+            headerClass="bg-slate-100 text-slate-800"
+            toolbar={
+              <button
+                type="button"
+                onClick={() => alert("Add comment — coming soon.")}
+                className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-700 hover:bg-slate-50"
+              >
+                + Add
+              </button>
+            }
+          >
+            <div
+              id="commentsSection"
+              className="max-h-[325px] overflow-y-auto overflow-x-hidden"
+            >
+              {detail.publicComments.length === 0 ? (
+                <p className="mt-1 text-center text-sm text-slate-500">No Comments.</p>
+              ) : (
+                detail.publicComments.map((c, i) => (
+                  <div key={`pub-${i}`} className="mb-4 px-1">
+                    <strong className="text-sm text-slate-800">{c.dateTime}:</strong>
+                    <div
+                      className="mt-1 border border-[#d9d9d9] bg-[#f5f7f7] px-4 py-2 text-sm text-slate-800"
+                      style={{ borderRadius: "0 20px 20px 0" }}
+                    >
+                      <strong>{c.author}:</strong>
+                      <br />
+                      {c.message.split("\n").map((line, j) => (
+                        <span key={j}>
+                          {line}
+                          {j < c.message.split("\n").length - 1 && <br />}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </DefaultPanel>
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-slate-200 bg-white px-4 py-4 text-center">
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => alert("Archive this record? — coming soon.")}
+              className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Archive
+            </button>
+            <button
+              type="button"
+              onClick={() => alert("Set as Unread — coming soon.")}
+              className="rounded bg-slate-800 px-3 py-1.5 text-sm text-white hover:bg-slate-700"
+            >
+              Set as Unread
+            </button>
+            {detail.status === "Resolved" && (
+              <button
+                type="button"
+                onClick={() => alert("Reopen and Revert to Pending — coming soon.")}
+                className="rounded bg-slate-800 px-3 py-1.5 text-sm text-white hover:bg-slate-700"
+              >
+                Reopen and Revert to Pending
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="rounded bg-[#5bc0de] px-3 py-1.5 text-sm text-white hover:bg-[#46b8da]"
+            >
+              <FaPrint className="mr-1 inline" />
+              Print
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
