@@ -1,6 +1,6 @@
 export const SITE_CONTACT = {
   tollFree: "1-844-252-6636",
-  email: "info@mvpcondos.com",
+  email: "privacy@mvpcondos.com",
   gta: "(416) 902-7284",
   southwestern: "(226) 499-4687",
   barrie: "(705) 986-8888",
@@ -38,8 +38,8 @@ export const SITE_TRUST_POINTS = [
 ];
 
 export const SITE_HIGHLIGHT_METRICS = [
-  { label: "Average onboarding timeline", value: "30-45 days" },
-  { label: "Emergency line coverage", value: "24/7" },
-  { label: "Board reporting cadence", value: "Monthly" },
+  { label: "Average onboarding timeline", value: "14 days" },
+  { label: "emergency hotline", value: "24/7" },
+  { label: "board reporting", value: "Monthly" },
 ];
 

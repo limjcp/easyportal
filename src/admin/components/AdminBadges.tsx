@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { FaChevronDown } from "react-icons/fa";
 
 type OptionsDropdownProps = {
-  options: { label: string; onClick: () => void }[];
+  options: { label: string; onClick: () => void; disabled?: boolean }[];
 };
 
 type MenuPosition = {
@@ -88,11 +88,15 @@ export function OptionsDropdown({ options }: OptionsDropdownProps) {
             key={opt.label}
             type="button"
             role="menuitem"
+            disabled={opt.disabled}
             onClick={() => {
+              if (opt.disabled) return;
               opt.onClick();
               setOpen(false);
             }}
-            className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+            className={`block w-full px-4 py-2 text-left text-sm ${
+              opt.disabled ? "cursor-not-allowed text-slate-400" : "text-slate-700 hover:bg-slate-50"
+            }`}
           >
             {opt.label}
           </button>

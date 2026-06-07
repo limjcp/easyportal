@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type DragEvent } from "react";
 import type { IconType } from "react-icons";
 import {
   FaCalendarAlt,
+  FaCalendarCheck,
   FaCertificate,
   FaCommentDots,
   FaComments,
@@ -47,16 +48,17 @@ const TILE_ICONS: Record<string, IconType> = {
   "Board Elections": FaVoteYea,
   "Fire Safety Plan": FaFireExtinguisher,
   Chat: FaComments,
+  "Amenity Bookings": FaCalendarCheck,
   ...DETAIL_TILE_ICONS,
 };
 
 type TileGridProps = {
   onNavigate: (route: ResidentRoute) => void;
+  badgeRefreshKey?: number;
 };
 
-export function TileGrid({ onNavigate }: TileGridProps) {
-  const { portalModules, portalTileSettings, customPortalTiles, profileFieldOptions } =
-    usePortalConfig();
+export function TileGrid({ onNavigate, badgeRefreshKey = 0 }: TileGridProps) {
+  const { portalModules, portalTileSettings, customPortalTiles } = usePortalConfig();
   const opacity = portalTileSettings.portalTileOpacity;
   const [personalLayout, setPersonalLayout] = useState<ArrangeTile[] | null>(null);
   const [displayTiles, setDisplayTiles] = useState<ArrangeTile[]>([]);
@@ -64,6 +66,22 @@ export function TileGrid({ onNavigate }: TileGridProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [hoverZone, setHoverZone] = useState<PortalTileLayoutZone | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [badgeCounts, setBadgeCounts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    residentRepo
+      .getPortalModuleBadgeCounts()
+      .then((counts) => {
+        if (!cancelled) setBadgeCounts(counts);
+      })
+      .catch(() => {
+        if (!cancelled) setBadgeCounts({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [badgeRefreshKey]);
 
   const visibleModules = useMemo(
     () =>
@@ -72,9 +90,9 @@ export function TileGrid({ onNavigate }: TileGridProps) {
           module.enabled &&
           module.tileLabel &&
           tileLabelToRoute(module.tileLabel) &&
-          isDetailTileVisible(module, profileFieldOptions)
+          isDetailTileVisible(module)
       ),
-    [portalModules, profileFieldOptions]
+    [portalModules]
   );
   const visibleCustomTiles = useMemo(
     () => customPortalTiles.filter((tile) => tile.enabled),
@@ -105,10 +123,15 @@ export function TileGrid({ onNavigate }: TileGridProps) {
 
   useEffect(() => {
     let cancelled = false;
-    residentRepo.getPersonalTileLayout().then((savedLayout) => {
-      if (cancelled) return;
-      setPersonalLayout(savedLayout);
-    });
+    residentRepo
+      .getPersonalTileLayout()
+      .then((savedLayout) => {
+        if (cancelled) return;
+        setPersonalLayout(savedLayout);
+      })
+      .catch(() => {
+        if (!cancelled) setPersonalLayout(null);
+      });
     return () => {
       cancelled = true;
     };
@@ -190,6 +213,8 @@ export function TileGrid({ onNavigate }: TileGridProps) {
     const tileKey = tile.id.slice(7);
     const Icon = isModule ? TILE_ICONS[tile.label] ?? FaLink : FaLink;
     const customTile = isModule ? undefined : customTileMap.get(tileKey);
+    const badgeCount = isModule ? badgeCounts[tileKey] ?? 0 : 0;
+    const badgeLabel = badgeCount > 9 ? "9+" : String(badgeCount);
 
     return (
       <div key={tile.id}>
@@ -232,7 +257,14 @@ export function TileGrid({ onNavigate }: TileGridProps) {
               </span>
             )}
           </div>
-          <Icon className={`${compact ? "text-xl" : "text-3xl"} text-white transition group-hover:scale-105`} />
+          <div className="relative">
+            <Icon className={`${compact ? "text-xl" : "text-3xl"} text-white transition group-hover:scale-105`} />
+            {badgeCount > 0 ? (
+              <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                {badgeLabel}
+              </span>
+            ) : null}
+          </div>
           <span
             className={`${compact ? "text-xs" : "text-sm"} text-center font-medium tracking-[0.01em] text-white/95`}
           >
@@ -245,6 +277,11 @@ export function TileGrid({ onNavigate }: TileGridProps) {
 
   return (
     <div className="space-y-4">
+      {visibleModules.length === 0 && compactTiles.length === 0 ? (
+        <div className="rounded-sm border border-white/20 bg-black/20 px-4 py-8 text-center text-sm text-white/80">
+          No portal tiles are enabled yet. A building admin can enable modules in Portal Settings.
+        </div>
+      ) : null}
       <div
         className={`grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 ${
           isDragging && hoverZone === "primary" ? "rounded-sm ring-1 ring-white/70" : ""

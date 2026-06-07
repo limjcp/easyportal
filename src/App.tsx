@@ -10,9 +10,14 @@ import { MarketingPortal } from "./marketing/MarketingPortal";
 import { isMarketingPath } from "./marketing/navigation";
 import type { LoginPortalRole } from "./resident/data/types";
 import type { CompanyBuilding } from "./resident/data/types";
-import { companyStore } from "./company/data/companyStore";
-import { buildVendorSession, findVendorByUsername } from "./auth/mockAuth";
 import { ThemePreviewPage } from "./prototype/ThemePreviewPage";
+import { useAuth } from "./auth/AuthProvider";
+import { getPersistedPortalView, setPersistedPortalView } from "./auth/persistedView";
+import { setPersistedAdminRoute } from "./auth/persistedAdminRoute";
+import { setActiveBuildingId, setActiveCompanyId, getActiveBuildingId } from "./data/supabase/buildingContext";
+import { companyRepository } from "./company/data/companyRepository";
+import { formatBuildingOptionLabel } from "./admin/navigation";
+import { scrollPageToTop } from "./utils/scroll";
 
 type AppView = "marketing" | "login" | "resident" | "admin" | "company" | "vendor" | "prototype";
 
@@ -28,16 +33,21 @@ const getInitialView = (): AppView => {
     if (isMarketingPath(window.location.pathname)) {
       return "marketing";
     }
+    const persisted = getPersistedPortalView();
+    if (persisted) return persisted;
   }
   return "marketing";
 };
 
 export default function App() {
+  const auth = useAuth();
   const [view, setView] = useState<AppView>(getInitialView);
   const [publicPathname, setPublicPathname] = useState<string>(
     typeof window === "undefined" ? "/" : window.location.pathname
   );
   const [activeBuilding, setActiveBuilding] = useState<CompanyBuilding | null>(null);
+  const [adminBuildings, setAdminBuildings] = useState<CompanyBuilding[]>([]);
+  const [adminActiveBuildingId, setAdminActiveBuildingId] = useState<string | null>(() => getActiveBuildingId());
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
 
   useEffect(() => {
@@ -47,47 +57,164 @@ export default function App() {
     const onPopState = () => {
       setPublicPathname(window.location.pathname);
       setView(getInitialView());
+      scrollPageToTop();
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
+  useEffect(() => {
+    if (auth.initializing || !auth.session || !auth.activePortal) return;
+    setView(
+      auth.activePortal === "company"
+        ? "company"
+        : auth.activePortal === "building"
+          ? "admin"
+          : auth.activePortal === "vendor"
+            ? "vendor"
+            : "resident"
+    );
+  }, [auth.initializing, auth.session, auth.activePortal]);
+
+  useEffect(() => {
+    if (auth.initializing || !auth.session) return;
+    if (view === "company" || view === "admin" || view === "resident" || view === "vendor") {
+      setPersistedPortalView(view);
+    }
+  }, [view, auth.initializing, auth.session]);
+
+  useEffect(() => {
+    if (auth.initializing || view !== "admin" || !auth.session) return;
+    if (auth.portalAccess?.isSuperAdmin) return;
+    if (auth.portalAccess?.portals.includes("building")) return;
+    auth.setActivePortal("resident");
+    setView("resident");
+  }, [auth.initializing, auth.session, auth.portalAccess?.portals, auth.portalAccess?.isSuperAdmin, view, auth.setActivePortal]);
+
+  const handleSwitchToAdmin = () => {
+    if (!auth.portalAccess?.isSuperAdmin && !auth.portalAccess?.portals.includes("building")) {
+      window.alert("You do not have access to the Building Admin portal.");
+      return;
+    }
+    const buildingId = getActiveBuildingId() ?? auth.portalAccess?.buildingIds[0] ?? null;
+    if (buildingId) {
+      setActiveBuildingId(buildingId);
+      setAdminActiveBuildingId(buildingId);
+    }
+    auth.setActivePortal("building");
+    setView("admin");
+  };
+
+  useEffect(() => {
+    if (view !== "admin" || !auth.session) return;
+    let cancelled = false;
+    companyRepository
+      .getBuildings()
+      .then((buildings) => {
+        if (cancelled) return;
+        setAdminBuildings(buildings);
+        const activeId = getActiveBuildingId();
+        if (!activeId && buildings[0]) {
+          setActiveBuildingId(buildings[0].id);
+          setAdminActiveBuildingId(buildings[0].id);
+        } else if (activeId) {
+          setAdminActiveBuildingId(activeId);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAdminBuildings([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, auth.session]);
+
+  const activeAdminBuilding =
+    adminBuildings.find((b) => b.id === adminActiveBuildingId) ?? adminBuildings[0] ?? null;
+
+  const handleSwitchAdminBuilding = (building: CompanyBuilding) => {
+    setActiveBuildingId(building.id);
+    setAdminActiveBuildingId(building.id);
+    setAdminBuildings((prev) => {
+      const exists = prev.some((b) => b.id === building.id);
+      return exists ? prev : [...prev, building];
+    });
+  };
+
+  const handleOpenResidentPortal = () => {
+    const buildingId = activeBuilding?.id ?? adminActiveBuildingId ?? getActiveBuildingId();
+    if (buildingId) {
+      setActiveBuildingId(buildingId);
+      setAdminActiveBuildingId(buildingId);
+    }
+    auth.setActivePortal("resident");
+    setView("resident");
+  };
+
   const navigatePublic = (nextPath: string) => {
     if (typeof window !== "undefined") {
       window.history.pushState({}, "", nextPath);
+      scrollPageToTop();
     }
     setPublicPathname(nextPath);
     setView(nextPath === "/login" ? "login" : "marketing");
   };
 
-  const handleLogin = (portal: LoginPortalRole, username: string) => {
-    if (portal === "company") {
-      companyStore.user.role = username.toLowerCase().includes("owner")
-        ? "Company Owner"
-        : "Company Administrator";
-    }
+  const handleLogin = (portal: LoginPortalRole) => {
+    auth.setActivePortal(portal);
     setActiveBuilding(null);
-    if (portal === "vendor") {
-      const vendor = findVendorByUsername(username);
-      companyStore.vendorSession = vendor ? buildVendorSession(vendor) : null;
-      setView("vendor");
-      return;
-    }
-    companyStore.vendorSession = null;
-    setView(
-      portal === "company" ? "company" : portal === "building" ? "admin" : "resident"
-    );
+    const nextView =
+      portal === "company" ? "company" : portal === "building" ? "admin" : portal === "vendor" ? "vendor" : "resident";
+    setPersistedPortalView(nextView);
+    setView(nextView);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setActiveBuilding(null);
-    companyStore.vendorSession = null;
+    setActiveBuildingId(null);
+    setActiveCompanyId(null);
     setIsChatbotOpen(false);
+    setPersistedPortalView(null);
+    setPersistedAdminRoute(null);
+    await auth.signOut();
     navigatePublic("/login");
   };
 
+  const handleOpenBuilding = (building: CompanyBuilding | null) => {
+    setActiveBuilding(building);
+    if (building) setActiveBuildingId(building.id);
+    else setActiveBuildingId(null);
+  };
+
+  const portalSwitcher = auth.portalAccess?.isSuperAdmin ? (
+    <div className="fixed bottom-4 left-4 z-50 flex gap-2 rounded bg-white p-2 shadow-lg">
+      {(["company", "admin", "resident", "vendor"] as const).map((portal) => (
+        <button
+          key={portal}
+          type="button"
+          className="rounded bg-[#3476ef] px-3 py-1 text-xs text-white"
+          onClick={async () => {
+            const role = portal === "admin" ? "building" : portal;
+            if ((portal === "admin" || portal === "resident") && !getActiveBuildingId()) {
+              const buildings = await companyRepository.getBuildings();
+              if (buildings[0]) setActiveBuildingId(buildings[0].id);
+            }
+            auth.setActivePortal(role);
+            setView(portal === "admin" ? "admin" : portal);
+          }}
+        >
+          {portal}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  if (auth.initializing && view !== "marketing" && view !== "login") {
+    return <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">Loading…</div>;
+  }
+
   return (
-    <div className="min-h-screen bg-[#e7edf3] text-slate-900">
+    <div className="min-h-screen bg-background text-foreground">
       {view === "marketing" && (
         <MarketingPortal
           pathname={publicPathname}
@@ -99,30 +226,39 @@ export default function App() {
         <LoginPage onLogin={handleLogin} onOpenMarketing={(path) => navigatePublic(path ?? "/")} />
       )}
       {view === "resident" && (
-        <ResidentPortal
-          onSwitchToAdmin={() => {
-            setActiveBuilding(null);
-            setView("admin");
-          }}
-          onLogout={handleLogout}
-        />
+        <ResidentPortal onSwitchToAdmin={handleSwitchToAdmin} onLogout={handleLogout} />
       )}
       {view === "company" && (
         <CompanyPortal
           activeBuilding={activeBuilding}
-          onOpenBuilding={setActiveBuilding}
-          onCloseBuilding={() => setActiveBuilding(null)}
+          onOpenBuilding={handleOpenBuilding}
+          onCloseBuilding={() => handleOpenBuilding(null)}
+          onOpenResidentPortal={handleOpenResidentPortal}
           onLogout={handleLogout}
         />
       )}
       {view === "admin" && (
         <BuildingAdmin
-          onSwitchToResident={() => setView("resident")}
+          onSwitchToResident={() => {
+            if (activeAdminBuilding) {
+              setActiveBuildingId(activeAdminBuilding.id);
+              setAdminActiveBuildingId(activeAdminBuilding.id);
+            }
+            auth.setActivePortal("resident");
+            setView("resident");
+          }}
           onLogout={handleLogout}
+          buildingLabel={
+            activeAdminBuilding ? formatBuildingOptionLabel(activeAdminBuilding) : undefined
+          }
+          buildings={adminBuildings.length > 1 ? adminBuildings : undefined}
+          activeBuildingId={activeAdminBuilding?.id ?? adminActiveBuildingId ?? undefined}
+          onSwitchBuilding={adminBuildings.length > 1 ? handleSwitchAdminBuilding : undefined}
         />
       )}
       {view === "vendor" && <VendorPortal onLogout={handleLogout} />}
       {view === "prototype" && <ThemePreviewPage onBack={() => setView("login")} />}
+      {portalSwitcher}
       {view !== "login" && view !== "marketing" && view !== "prototype" && (
         <>
           <MvpCondosChatbot open={isChatbotOpen} onClose={() => setIsChatbotOpen(false)} />

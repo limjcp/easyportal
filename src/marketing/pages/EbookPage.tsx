@@ -1,4 +1,4 @@
-import { MarketingContentPage } from "./MarketingContentPage";
+import { EditorialContentPage } from "./EditorialContentPage";
 import { ebookPageContent } from "../data/pageContent/ebook";
 
 type EbookPageProps = {
@@ -6,6 +6,5 @@ type EbookPageProps = {
 };
 
 export function EbookPage({ onNavigate }: EbookPageProps) {
-  return <MarketingContentPage content={ebookPageContent} onNavigate={onNavigate} />;
+  return <EditorialContentPage content={ebookPageContent} onNavigate={onNavigate} />;
 }
-

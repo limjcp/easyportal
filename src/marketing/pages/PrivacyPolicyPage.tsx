@@ -1,7 +1,7 @@
-import { MarketingContentPage } from "./MarketingContentPage";
-import { privacyPolicyPageContent } from "../data/pageContent/privacyPolicy";
-import { SectionBlock } from "../components/SectionBlock";
-import { SITE_CONTACT } from "../data/siteContent";
+import { PrivacyPolicyBody } from "../components/home/PrivacyPolicyBody";
+import { PageHeaderSection } from "../components/home/PageHeaderSection";
+import { privacyPolicyMeta, privacyPolicySections } from "../data/pageContent/privacyPolicyContent";
+import { pe } from "../typography";
 
 type PrivacyPolicyPageProps = {
   onNavigate: (path: string) => void;
@@ -9,15 +9,21 @@ type PrivacyPolicyPageProps = {
 
 export function PrivacyPolicyPage({ onNavigate }: PrivacyPolicyPageProps) {
   return (
-    <div className="space-y-8">
-      <MarketingContentPage content={privacyPolicyPageContent} onNavigate={onNavigate} />
-      <SectionBlock title="Privacy Contact">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-sm text-slate-700">For privacy questions and requests:</p>
-          <p className="text-base font-semibold text-slate-900">{SITE_CONTACT.email}</p>
+    <>
+      <PageHeaderSection
+        eyebrow={`Last updated: ${privacyPolicyMeta.lastUpdated}`}
+        title={privacyPolicyMeta.title}
+      />
+      <section className="px-6 pb-16 md:px-12 lg:px-20 md:pb-20 border-b border-border">
+        <div className="max-w-3xl space-y-6">
+          {privacyPolicyMeta.intro.map((paragraph) => (
+            <p key={paragraph} className={`${pe.body} text-muted-foreground`}>
+              {paragraph}
+            </p>
+          ))}
         </div>
-      </SectionBlock>
-    </div>
+      </section>
+      <PrivacyPolicyBody sections={privacyPolicySections} onNavigate={onNavigate} />
+    </>
   );
 }
-

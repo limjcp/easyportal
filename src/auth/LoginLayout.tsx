@@ -1,8 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { FaFacebookF, FaInstagram, FaTwitter, FaYoutube } from "react-icons/fa";
-import { getPortalConfig, getPublicBackgroundImages } from "../resident/data/portalConfig";
-import type { PublicPortalDocument, PublicPortalSettings } from "../resident/data/types";
+import { DEFAULT_HERO_IMAGE } from "../marketing/constants";
+import { MarketingFooter } from "../marketing/components/MarketingFooter";
 import { MarketingHeader } from "../marketing/components/MarketingHeader";
+import { pe } from "../marketing/typography";
+import { getPortalConfig, getPublicBackgroundImages, loadPortalConfig, setCachedPortalConfig } from "../resident/data/portalConfig";
+import type { PublicPortalDocument, PublicPortalSettings } from "../resident/data/types";
 
 type LoginLayoutProps = {
   children: ReactNode;
@@ -15,85 +17,72 @@ export function LoginLayout({ children, onOpenMarketing }: LoginLayoutProps) {
   const [bgUrl, setBgUrl] = useState<string | undefined>();
 
   useEffect(() => {
-    const config = getPortalConfig();
-    setSettings(config.publicPortalSettings);
-    setPublicDocs(config.publicPortalDocuments);
-    setBgUrl(getPublicBackgroundImages()[0]?.url);
+    loadPortalConfig()
+      .then((config) => {
+        setCachedPortalConfig(config);
+        setSettings(config.publicPortalSettings);
+        setPublicDocs(config.publicPortalDocuments);
+        setBgUrl(getPublicBackgroundImages(config)[0]?.url);
+      })
+      .catch(() => {
+        const config = getPortalConfig();
+        setSettings(config.publicPortalSettings);
+        setPublicDocs(config.publicPortalDocuments);
+      });
   }, []);
 
-  const themeColor = settings?.portalThemeColor ?? "#3476ef";
+  const heroImage = bgUrl ?? DEFAULT_HERO_IMAGE;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#e7edf3] text-slate-900">
-      {bgUrl && (
-        <div
-          className="pointer-events-none fixed inset-0 opacity-20"
-          style={{
-            backgroundImage: `url(${bgUrl})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-          }}
-        />
-      )}
+    <div className="min-h-screen bg-background text-foreground font-sans antialiased">
       <MarketingHeader
         currentPage="home"
+        solidHeader
         onNavigate={(path) => onOpenMarketing?.(path)}
         onOpenLogin={() => undefined}
       />
 
-      <main className="relative z-10 flex flex-1 flex-col items-center justify-center gap-6 px-4 py-12">
-        {settings?.aboutBuilding && (
-          <p className="max-w-lg text-center text-sm text-slate-600">{settings.aboutBuilding}</p>
-        )}
-        {children}
-        {publicDocs.length > 0 && (
-          <div className="w-full max-w-md rounded border border-slate-200 bg-white/90 p-4 text-sm shadow-sm">
-            <h3 className="mb-2 font-semibold text-slate-700">Public Documents</h3>
-            <ul className="space-y-1">
-              {publicDocs.map((d) => (
-                <li key={d.id}>
-                  <button type="button" className="text-[#3476ef] hover:underline" style={{ color: themeColor }}>
-                    {d.title}
-                  </button>
-                  <span className="text-slate-400"> — {d.filename}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </main>
-
-      <footer className="relative z-10 bg-[#1b1d20] text-white">
-        <div className="mx-auto flex max-w-[1400px] items-center justify-between px-4 py-4 sm:px-6">
-          {settings?.facebookUrl ? (
-            <a href={settings.facebookUrl} target="_blank" rel="noreferrer" className="text-white/80 hover:text-white">
-              <FaFacebookF />
-            </a>
-          ) : (
-            <span />
-          )}
-          <p className="text-center text-xs text-white/70 sm:text-sm">
-            {new Date().getFullYear()} © Copyright mvpcondos.com All Rights Reserved.
-          </p>
-          <div className="flex gap-3">
-            {settings?.twitterUrl && (
-              <a href={settings.twitterUrl} target="_blank" rel="noreferrer" className="text-white/80 hover:text-white">
-                <FaTwitter />
-              </a>
-            )}
-            {settings?.instaUrl && (
-              <a href={settings.instaUrl} target="_blank" rel="noreferrer" className="text-white/80 hover:text-white">
-                <FaInstagram />
-              </a>
-            )}
-            {settings?.youTubeUrl && (
-              <a href={settings.youTubeUrl} target="_blank" rel="noreferrer" className="text-white/80 hover:text-white">
-                <FaYoutube />
-              </a>
-            )}
+      <div className="grid min-h-screen lg:grid-cols-2">
+        <div className="relative hidden lg:flex min-h-[calc(100vh-0px)] flex-col justify-end overflow-hidden">
+          <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-foreground/50" />
+          <div className="relative z-10 px-12 lg:px-20 pb-20 pt-32">
+            <p className={`${pe.eyebrow} text-background/50 mb-6`}>MVP Condos Portal</p>
+            <h2 className={`${pe.sectionTitleLg} text-background max-w-md`}>
+              {settings?.aboutBuilding ?? "Your community portal for residents, boards, and management."}
+            </h2>
           </div>
         </div>
-      </footer>
+
+        <main className="flex flex-col justify-center px-6 pt-28 pb-16 md:px-12 lg:px-20 lg:py-28">
+          {settings?.aboutBuilding && (
+            <p className={`mb-8 max-w-md ${pe.bodySm} text-muted-foreground lg:hidden`}>
+              {settings.aboutBuilding}
+            </p>
+          )}
+          {children}
+          {publicDocs.length > 0 && (
+            <div className="mt-12 w-full max-w-md border-t border-border pt-8">
+              <p className={`${pe.eyebrow} text-muted-foreground mb-5`}>Public Documents</p>
+              <ul className="divide-y divide-border">
+                {publicDocs.map((doc) => (
+                  <li key={doc.id} className="py-4">
+                    <button
+                      type="button"
+                      className={`${pe.bodySm} font-light tracking-tight text-foreground hover:text-muted-foreground transition-colors duration-300`}
+                    >
+                      {doc.title}
+                    </button>
+                    <p className={`mt-1 ${pe.caption} text-muted-foreground`}>{doc.filename}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </main>
+      </div>
+
+      <MarketingFooter onNavigate={(path) => onOpenMarketing?.(path)} />
     </div>
   );
 }

@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FaPrint, FaWrench } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
+import { IncidentReportAttachmentGrid } from "../../shared/IncidentReportAttachmentThumb";
+import { validateAttachmentFile } from "../../shared/attachmentUtils";
 import { AdminSectionHeader, CommentSection } from "../components/CommentSection";
 import { SeverityBadge } from "../components/AdminBadges";
 import { adminRepository } from "../data/adminRepository";
@@ -29,10 +31,13 @@ export function ServiceRequestDetailModal({
   const [poPrefill, setPoPrefill] = useState<PurchaseOrderPrefill | undefined>();
   const [serviceCategories, setServiceCategories] = useState<string[]>([]);
   const [customAdminCategory, setCustomAdminCategory] = useState("");
+  const [commentAuthor, setCommentAuthor] = useState("Admin");
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open && requestId) {
       adminRepository.getServiceRequestById(requestId).then(setRequest);
+      adminRepository.getAdminUser().then((user) => setCommentAuthor(user.displayName || "Admin"));
       adminRepository.getServiceCategories().then((categories) => {
         const activeNames = categories
           .filter((category) => category.status === "active")
@@ -45,7 +50,18 @@ export function ServiceRequestDetailModal({
     }
   }, [open, requestId]);
 
-  if (!request) return null;
+  if (!open || !request) return null;
+
+  const addComment = (text: string, visibility: "admin" | "public") => {
+    adminRepository
+      .addServiceRequestComment(
+        request.id,
+        { author: commentAuthor, text, createdAt: new Date().toLocaleString(), visibility },
+        visibility
+      )
+      .then(refresh)
+      .catch((err) => alert(err instanceof Error ? err.message : "Failed to save comment."));
+  };
 
   const refresh = async () => {
     if (requestId) {
@@ -62,6 +78,31 @@ export function ServiceRequestDetailModal({
       );
       setRelatedPOs(related);
       onUpdated();
+    }
+  };
+
+  const addAttachment = async (file: File | null) => {
+    if (!file || !requestId) return;
+    const validationError = validateAttachmentFile(file);
+    if (validationError) {
+      alert(validationError);
+      return;
+    }
+    try {
+      await adminRepository.addServiceRequestAttachment(requestId, file);
+      await refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to upload attachment.");
+    }
+  };
+
+  const removeAttachment = async (attachmentId: string) => {
+    if (!window.confirm("Remove this attachment?")) return;
+    try {
+      await adminRepository.removeServiceRequestAttachment(attachmentId);
+      await refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to remove attachment.");
     }
   };
 
@@ -87,6 +128,17 @@ export function ServiceRequestDetailModal({
       request.adminCategory,
     ].filter(Boolean))
   );
+
+  const markResolved = () =>
+    adminRepository
+      .updateServiceRequest(request.id, {
+        status: "Resolved",
+        resolvedBy: commentAuthor,
+        resolvedAt: new Date().toLocaleDateString(),
+        pendingReply: false,
+        actionRequired: false,
+      })
+      .then(refresh);
 
   return (
     <Modal
@@ -123,6 +175,15 @@ export function ServiceRequestDetailModal({
             <FaPrint />
             Print
           </button>
+          {request.status === "Pending" ? (
+            <button
+              type="button"
+              onClick={markResolved}
+              className="rounded bg-[#5cb85c] px-3 py-1.5 text-sm text-white"
+            >
+              Resolve
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onClose}
@@ -276,11 +337,34 @@ export function ServiceRequestDetailModal({
 
       <AdminSectionHeader
         title="File Attachments"
-        action={<button type="button" className="rounded bg-white/20 px-2 py-0.5 text-xs">+ Add</button>}
+        action={
+          <>
+            <input
+              ref={attachmentInputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              className="hidden"
+              onChange={(e) => {
+                void addAttachment(e.target.files?.[0] ?? null);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => attachmentInputRef.current?.click()}
+              className="rounded bg-white/20 px-2 py-0.5 text-xs"
+            >
+              + Add
+            </button>
+          </>
+        }
       />
-      <p className="p-3 text-sm text-slate-500">
-        {request.attachments.length === 0 ? "No Files Attached" : request.attachments.join(", ")}
-      </p>
+      <div className="p-3">
+        <IncidentReportAttachmentGrid
+          attachments={request.attachments}
+          onRemove={(attachmentId) => void removeAttachment(attachmentId)}
+        />
+      </div>
 
       <CommentSection
         title="Scrollable Admin Comments"
@@ -288,15 +372,7 @@ export function ServiceRequestDetailModal({
         comments={request.adminComments}
         adminOnly
         headerColor="orange"
-        onAdd={(text) =>
-          adminRepository
-            .addServiceRequestComment(
-              request.id,
-              { author: "Scott Munday", text, createdAt: new Date().toLocaleString() },
-              "admin"
-            )
-            .then(refresh)
-        }
+        onAdd={(text) => addComment(text, "admin")}
       />
 
       <CommentSection
@@ -304,15 +380,7 @@ export function ServiceRequestDetailModal({
         subtitle="(Visible to Resident & Admin)"
         comments={request.publicComments}
         headerColor="gray"
-        onAdd={(text) =>
-          adminRepository
-            .addServiceRequestComment(
-              request.id,
-              { author: "Scott Munday", text, createdAt: new Date().toLocaleString() },
-              "public"
-            )
-            .then(refresh)
-        }
+        onAdd={(text) => addComment(text, "public")}
       />
       <PurchaseOrderFormModal
         open={createPOOpen}

@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FaEnvelope, FaExclamationTriangle, FaPrint } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
-import { AdminSectionHeader, CommentSection } from "../components/CommentSection";
-import { SeverityBadge, StatusBadge, UnreadBadge } from "../components/AdminBadges";
+import { IncidentReportAttachmentGrid } from "../../shared/IncidentReportAttachmentThumb";
+import { AdminSectionHeader, CommentSection } from "../components/CommentSection";import { SeverityBadge, StatusBadge, UnreadBadge } from "../components/AdminBadges";
 import { adminRepository } from "../data/adminRepository";
 import type {
   AdminIncidentReport,
@@ -38,10 +38,13 @@ export function IncidentReportDetailModal({
   const [report, setReport] = useState<AdminIncidentReport | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
   const [customAdminType, setCustomAdminType] = useState("");
+  const [commentAuthor, setCommentAuthor] = useState("Admin");
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open && reportId) {
       adminRepository.getIncidentReportById(reportId).then(setReport);
+      adminRepository.getAdminUser().then((user) => setCommentAuthor(user.displayName || "Admin"));
       adminRepository.getIncidentCategories().then((cats) =>
         setCategories(
           (() => {
@@ -54,6 +57,37 @@ export function IncidentReportDetailModal({
       setReport(null);
     }
   }, [open, reportId]);
+
+  const addComment = (text: string, visibility: "admin" | "public") => {
+    if (!reportId) return;
+    adminRepository
+      .addIncidentReportComment(
+        reportId,
+        { author: commentAuthor, text, createdAt: new Date().toLocaleString(), visibility },
+        visibility
+      )
+      .then(refresh)
+      .catch((err) => alert(err instanceof Error ? err.message : "Failed to save comment."));
+  };
+
+  const addAttachment = async (file: File | null) => {
+    if (!reportId || !file) return;
+    try {
+      await adminRepository.addIncidentReportAttachment(reportId, file);
+      await refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to add attachment.");
+    }
+  };
+
+  const removeAttachment = async (attachmentId: string) => {
+    try {
+      await adminRepository.removeIncidentReportAttachment(attachmentId);
+      await refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to remove attachment.");
+    }
+  };
 
   if (!open || !report) return null;
 
@@ -314,11 +348,34 @@ export function IncidentReportDetailModal({
 
       <AdminSectionHeader
         title="File Attachments"
-        action={<button type="button" className="rounded bg-white/20 px-2 py-0.5 text-xs">+ Add</button>}
+        action={
+          <>
+            <input
+              ref={attachmentInputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              className="hidden"
+              onChange={(e) => {
+                void addAttachment(e.target.files?.[0] ?? null);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => attachmentInputRef.current?.click()}
+              className="rounded bg-white/20 px-2 py-0.5 text-xs"
+            >
+              + Add
+            </button>
+          </>
+        }
       />
-      <p className="p-3 text-sm text-slate-500">
-        {report.attachments.length === 0 ? "No Files Attached" : report.attachments.join(", ")}
-      </p>
+      <div className="p-3">
+        <IncidentReportAttachmentGrid
+          attachments={report.attachments}
+          onRemove={(attachmentId) => void removeAttachment(attachmentId)}
+        />
+      </div>
 
       <CommentSection
         title="Scrollable Admin Comments"
@@ -326,15 +383,7 @@ export function IncidentReportDetailModal({
         comments={report.adminComments}
         adminOnly
         headerColor="orange"
-        onAdd={(text) =>
-          adminRepository
-            .addIncidentReportComment(
-              report.id,
-              { author: "Scott Munday", text, createdAt: new Date().toLocaleString() },
-              "admin"
-            )
-            .then(refresh)
-        }
+        onAdd={(text) => addComment(text, "admin")}
       />
 
       <CommentSection
@@ -342,15 +391,7 @@ export function IncidentReportDetailModal({
         subtitle="(Visible to Resident & Admin)"
         comments={report.publicComments}
         headerColor="gray"
-        onAdd={(text) =>
-          adminRepository
-            .addIncidentReportComment(
-              report.id,
-              { author: "Scott Munday", text, createdAt: new Date().toLocaleString() },
-              "public"
-            )
-            .then(refresh)
-        }
+        onAdd={(text) => addComment(text, "public")}
       />
     </Modal>
   );

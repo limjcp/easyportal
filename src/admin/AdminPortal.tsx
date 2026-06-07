@@ -1,7 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "../auth/AuthProvider";
+import { getPersistedAdminRoute, setPersistedAdminRoute } from "../auth/persistedAdminRoute";
+import { getEffectiveBuildingAdminModuleAccessForUser } from "../data/supabase/portalModulePermissions";
 import { AdminLayout } from "./AdminLayout";
 import { adminRepository } from "./data/adminRepository";
 import type { AdminRoute } from "./navigation";
+import { isAdminRouteAllowed } from "./navigation";
 import { AdminPageActions } from "./components/AdminPageActions";
 import { AdminDocumentsPage } from "./pages/AdminDocumentsPage";
 import { AdminEventsPage } from "./pages/AdminEventsPage";
@@ -12,6 +16,7 @@ import { BoardElectionsPage } from "./pages/BoardElectionsPage";
 import { ElectionEditPage } from "./pages/ElectionEditPage";
 import { BoardApplicationDetailPage } from "./pages/BoardApplicationDetailPage";
 import { FireSafetySubmissionsPage } from "./pages/FireSafetySubmissionsPage";
+import { AmenityBookingsPage } from "./pages/AmenityBookingsPage";
 import { BuildingDefinitionPage } from "./pages/BuildingDefinitionPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { GalleriesPage } from "./pages/GalleriesPage";
@@ -34,6 +39,7 @@ import { AdminStatusCertificatesPage } from "./pages/AdminStatusCertificatesPage
 import { AgmMeetingsPage } from "./pages/AgmMeetingsPage";
 import { ConsultationLeadsPage } from "./pages/ConsultationLeadsPage";
 import type { CompanyBuilding } from "../resident/data/types";
+import { ToastProvider } from "../shared/Toast";
 
 type AdminPortalProps = {
   onSwitchToResident?: () => void;
@@ -60,8 +66,16 @@ export function AdminPortal({
   onCloseBuilding,
   embedded = false,
 }: AdminPortalProps) {
-  const [route, setRoute] = useState<AdminRoute>({ page: "dashboard" });
+  const auth = useAuth();
+  const [route, setRouteState] = useState<AdminRoute>(
+    () => getPersistedAdminRoute() ?? { page: "dashboard" }
+  );
+  const navigate = useCallback((next: AdminRoute) => {
+    setRouteState(next);
+    setPersistedAdminRoute(next);
+  }, []);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [navAccess, setNavAccess] = useState<Map<string, boolean> | null>(null);
   const [unreadSuggestions, setUnreadSuggestions] = useState(0);
   const [pendingApprovals, setPendingApprovals] = useState(0);
   const [unreadBoardApplications, setUnreadBoardApplications] = useState(0);
@@ -76,10 +90,30 @@ export function AdminPortal({
     adminRepository.getUnreadConsultationLeadCount().then(setUnreadConsultationLeads);
   }, [refreshKey]);
 
+  useEffect(() => {
+    const userId = auth.session?.user?.id;
+    if (!userId || !activeBuildingId) {
+      setNavAccess(null);
+      return;
+    }
+    getEffectiveBuildingAdminModuleAccessForUser(userId, activeBuildingId)
+      .then(setNavAccess)
+      .catch(() => setNavAccess(null));
+  }, [auth.session?.user?.id, activeBuildingId]);
+
+  useEffect(() => {
+    if (!isAdminRouteAllowed(route, navAccess)) {
+      const fallback: AdminRoute = { page: "dashboard" };
+      setRouteState(fallback);
+      setPersistedAdminRoute(fallback);
+    }
+  }, [route, navAccess]);
+
   return (
+    <ToastProvider>
     <AdminLayout
       route={route}
-      onNavigate={setRoute}
+      onNavigate={navigate}
       onSwitchToResident={onSwitchToResident}
       onLogout={onLogout}
       buildingLabel={buildingLabel}
@@ -90,12 +124,13 @@ export function AdminPortal({
       onBackToCompany={onBackToCompany}
       onCloseBuilding={onCloseBuilding}
       embedded={embedded}
+      navAccess={navAccess}
     >
       {route.page === "dashboard" && (
         <>
-          <AdminPageActions route={route} onNavigate={setRoute} />
+          <AdminPageActions route={route} onNavigate={navigate} />
           <DashboardPage
-            onNavigate={setRoute}
+            onNavigate={navigate}
             unreadSuggestions={unreadSuggestions}
             pendingApprovals={pendingApprovals}
             unreadBoardApplications={unreadBoardApplications}
@@ -106,7 +141,7 @@ export function AdminPortal({
       {route.page === "consultation-leads" && (
         <ConsultationLeadsPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
           onRefresh={bumpRefresh}
         />
@@ -114,21 +149,21 @@ export function AdminPortal({
       {route.page === "building-definition" && (
         <BuildingDefinitionPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
           onRefresh={bumpRefresh}
         />
       )}
       {route.page === "external-data-links" && (
-        <ExternalDataLinksPage route={route} onNavigate={setRoute} />
+        <ExternalDataLinksPage route={route} onNavigate={navigate} />
       )}
       {route.page === "portal-settings" && (
-        <PortalSettingsPage route={route} onNavigate={setRoute} />
+        <PortalSettingsPage route={route} onNavigate={navigate} />
       )}
       {route.page === "admins" && (
         <AdminsPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
           onRefresh={bumpRefresh}
         />
@@ -136,47 +171,55 @@ export function AdminPortal({
       {route.page === "board-approvals" && (
         <BoardApprovalsPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
           onRefresh={bumpRefresh}
         />
       )}
       {route.page === "board-members" && (
-        <BoardMembersPage route={route} onNavigate={setRoute} refreshKey={refreshKey} />
+        <BoardMembersPage route={route} onNavigate={navigate} refreshKey={refreshKey} />
       )}
       {route.page === "board-application-detail" && (
         <BoardApplicationDetailPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           onRefresh={bumpRefresh}
         />
       )}
       {route.page === "board-elections" && (
         <BoardElectionsPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
           onRefresh={bumpRefresh}
         />
       )}
       {route.page === "board-election-edit" && (
-        <ElectionEditPage route={route} onNavigate={setRoute} />
+        <ElectionEditPage route={route} onNavigate={navigate} />
       )}
       {route.page === "agm" && (
         <AgmMeetingsPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
           onRefresh={bumpRefresh}
         />
       )}
       {route.page === "fire-safety" && (
-        <FireSafetySubmissionsPage route={route} onNavigate={setRoute} refreshKey={refreshKey} />
+        <FireSafetySubmissionsPage route={route} onNavigate={navigate} refreshKey={refreshKey} />
+      )}
+      {route.page === "amenity-bookings" && (
+        <AmenityBookingsPage
+          route={route}
+          onNavigate={navigate}
+          refreshKey={refreshKey}
+          onRefresh={bumpRefresh}
+        />
       )}
       {route.page === "documents" && (
         <AdminDocumentsPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
           onRefresh={bumpRefresh}
         />
@@ -184,7 +227,7 @@ export function AdminPortal({
       {route.page === "events" && (
         <AdminEventsPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
           onRefresh={bumpRefresh}
         />
@@ -192,7 +235,7 @@ export function AdminPortal({
       {route.page === "faq" && (
         <AdminFaqPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
           onRefresh={bumpRefresh}
         />
@@ -200,7 +243,7 @@ export function AdminPortal({
       {route.page === "galleries" && (
         <GalleriesPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
           onRefresh={bumpRefresh}
         />
@@ -208,7 +251,7 @@ export function AdminPortal({
       {route.page === "incident-reports" && (
         <IncidentReportsPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
           onRefresh={bumpRefresh}
         />
@@ -216,40 +259,40 @@ export function AdminPortal({
       {route.page === "news-notices" && (
         <NewsNoticesPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
           onRefresh={bumpRefresh}
         />
       )}
       {route.page === "news-notice-edit" && (
-        <NewsNoticeEditPage route={route} onNavigate={setRoute} onRefresh={bumpRefresh} />
+        <NewsNoticeEditPage route={route} onNavigate={navigate} onRefresh={bumpRefresh} />
       )}
       {route.page === "newsletters" && (
         <NewslettersPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
           onRefresh={bumpRefresh}
         />
       )}
       {route.page === "newsletter-edit" && (
-        <NewsletterEditPage route={route} onNavigate={setRoute} onRefresh={bumpRefresh} />
+        <NewsletterEditPage route={route} onNavigate={navigate} onRefresh={bumpRefresh} />
       )}
       {route.page === "polls" && (
         <PollsPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
           onRefresh={bumpRefresh}
         />
       )}
       {route.page === "poll-edit" && (
-        <PollEditPage route={route} onNavigate={setRoute} />
+        <PollEditPage route={route} onNavigate={navigate} />
       )}
       {route.page === "service-requests" && (
         <ServiceRequestsPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
           onRefresh={bumpRefresh}
         />
@@ -257,20 +300,20 @@ export function AdminPortal({
       {route.page === "status-certificates" && (
         <AdminStatusCertificatesPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
         />
       )}
       {route.page === "suggestions" && (
         <SuggestionsPage
           route={route}
-          onNavigate={setRoute}
+          onNavigate={navigate}
           refreshKey={refreshKey}
           onRefresh={bumpRefresh}
         />
       )}
       {route.page === "suggestion-detail" && (
-        <SuggestionDetailPage route={route} onNavigate={setRoute} />
+        <SuggestionDetailPage route={route} onNavigate={navigate} />
       )}
       {route.page === "units-users" && (
         <UnitsUsersPage refreshKey={refreshKey} onRefresh={bumpRefresh} />
@@ -279,5 +322,6 @@ export function AdminPortal({
         <AdminChatPage activeBuildingId={activeBuildingId} embedded={embedded} />
       )}
     </AdminLayout>
+    </ToastProvider>
   );
 }

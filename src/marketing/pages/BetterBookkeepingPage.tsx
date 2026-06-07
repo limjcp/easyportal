@@ -1,4 +1,4 @@
-import { MarketingContentPage } from "./MarketingContentPage";
+import { EditorialContentPage } from "./EditorialContentPage";
 import { betterBookkeepingPageContent } from "../data/pageContent/betterBookkeeping";
 
 type BetterBookkeepingPageProps = {
@@ -6,6 +6,5 @@ type BetterBookkeepingPageProps = {
 };
 
 export function BetterBookkeepingPage({ onNavigate }: BetterBookkeepingPageProps) {
-  return <MarketingContentPage content={betterBookkeepingPageContent} onNavigate={onNavigate} />;
+  return <EditorialContentPage content={betterBookkeepingPageContent} onNavigate={onNavigate} />;
 }
-

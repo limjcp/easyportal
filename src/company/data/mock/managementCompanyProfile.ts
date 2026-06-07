@@ -9,7 +9,7 @@ export const seedManagementCompanyProfile: ManagementCompanyProfile = {
   country: "Canada",
   provinceState: "Ontario",
   timezone: "America/Toronto",
-  companyEmail: "info@mvpcondos.com",
+  companyEmail: "privacy@mvpcondos.com",
   tel1: "(844) 252-6636",
   tel2: "",
   fax: "",

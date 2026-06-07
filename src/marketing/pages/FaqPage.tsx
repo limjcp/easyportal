@@ -1,4 +1,4 @@
-import { MarketingContentPage } from "./MarketingContentPage";
+import { EditorialContentPage } from "./EditorialContentPage";
 import { faqPageContent } from "../data/pageContent/faq";
 
 type FaqPageProps = {
@@ -6,6 +6,5 @@ type FaqPageProps = {
 };
 
 export function FaqPage({ onNavigate }: FaqPageProps) {
-  return <MarketingContentPage content={faqPageContent} onNavigate={onNavigate} />;
+  return <EditorialContentPage content={faqPageContent} onNavigate={onNavigate} />;
 }
-

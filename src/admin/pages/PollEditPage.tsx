@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { Modal } from "../../shared/Modal";
 import { FileUploadZone } from "../../shared/FileUploadZone";
+import { inferAttachmentKind, toDataUrl, validateAttachmentFile } from "../../shared/attachmentUtils";
 import { AdminPanelHeader } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
 import { AdminPageActions } from "../components/AdminPageActions";
 import type { AdminRoute } from "../navigation";
-import type { AgmMeeting, Poll, PollAttachment, PollQuestion } from "../../resident/data/types";
+import type { AgmMeeting, Poll, PollAttachment, PollQuestion, PollResults } from "../../resident/data/types";
+import {
+  formatPollAnswerOptions,
+  parsePollAnswerOptions,
+  POLL_QUESTION_TYPE_SINGLE,
+} from "../../shared/pollUtils";
 
 const RESIDENT_TYPES = [
   "Board Members",
@@ -16,27 +22,10 @@ const RESIDENT_TYPES = [
   "Unit Managers",
 ];
 
-const ALLOWED_MIME_PREFIXES = ["image/"];
-const ALLOWED_EXACT_MIME = ["application/pdf"];
-
 type PollEditPageProps = {
   route: AdminRoute & { page: "poll-edit" };
   onNavigate: (route: AdminRoute) => void;
 };
-
-function canAttachFile(file: File): boolean {
-  if (ALLOWED_EXACT_MIME.includes(file.type)) return true;
-  return ALLOWED_MIME_PREFIXES.some((prefix) => file.type.startsWith(prefix));
-}
-
-function toDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(new Error("Unable to read attachment."));
-    reader.readAsDataURL(file);
-  });
-}
 
 export function PollEditPage({ route, onNavigate }: PollEditPageProps) {
   const [poll, setPoll] = useState<Poll | null>(null);
@@ -44,6 +33,11 @@ export function PollEditPage({ route, onNavigate }: PollEditPageProps) {
   const [attachments, setAttachments] = useState<PollAttachment[]>([]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [newQuestion, setNewQuestion] = useState("");
+  const [newAnswers, setNewAnswers] = useState(["", ""]);
+  const [addingQuestion, setAddingQuestion] = useState(false);
+  const [results, setResults] = useState<PollResults | null>(null);
+
+  const loadResults = () => adminRepository.getPollResults(route.id).then(setResults);
 
   const activeMeetingOptions = useMemo(
     () => meetings.filter((meeting) => meeting.status === "draft" || meeting.status === "active"),
@@ -54,6 +48,7 @@ export function PollEditPage({ route, onNavigate }: PollEditPageProps) {
     adminRepository.getPollById(route.id).then(setPoll);
     adminRepository.getAgmMeetings().then(setMeetings);
     adminRepository.getPollAttachments(route.id).then(setAttachments);
+    void loadResults();
   }, [route.id]);
 
   if (!poll) {
@@ -73,26 +68,51 @@ export function PollEditPage({ route, onNavigate }: PollEditPageProps) {
   };
 
   const addQuestion = async () => {
-    if (!newQuestion.trim()) return;
-    await adminRepository.addPollQuestion(route.id, {
-      sortOrder: poll.questions.length + 1,
-      question: newQuestion.trim(),
-      type: "Text",
-      answerOptions: "",
-    });
+    const questionText = newQuestion.trim();
+    const answers = newAnswers.map((answer) => answer.trim()).filter(Boolean);
+    if (!questionText) {
+      alert("Question text is required.");
+      return;
+    }
+    if (answers.length < 2) {
+      alert("Add at least two answer options.");
+      return;
+    }
+    setAddingQuestion(true);
+    try {
+      await adminRepository.addPollQuestion(route.id, {
+        sortOrder: poll.questions.length + 1,
+        question: questionText,
+        type: POLL_QUESTION_TYPE_SINGLE,
+        answerOptions: formatPollAnswerOptions(answers),
+      });
+      const refreshed = await adminRepository.getPollById(route.id);
+      if (refreshed) setPoll(refreshed);
+      setNewQuestion("");
+      setNewAnswers(["", ""]);
+      void loadResults();
+    } finally {
+      setAddingQuestion(false);
+    }
+  };
+
+  const removeQuestion = async (questionId: string) => {
+    if (!window.confirm("Remove this question?")) return;
+    await adminRepository.deletePollQuestion(questionId);
     const refreshed = await adminRepository.getPollById(route.id);
     if (refreshed) setPoll(refreshed);
-    setNewQuestion("");
+    void loadResults();
   };
 
   const addAttachment = async (file: File | null) => {
     if (!file) return;
-    if (!canAttachFile(file)) {
-      alert("Only PDF and image attachments are supported.");
+    const validationError = validateAttachmentFile(file);
+    if (validationError) {
+      alert(validationError);
       return;
     }
     const sourceUrl = await toDataUrl(file);
-    const kind = file.type === "application/pdf" ? "pdf" : "image";
+    const kind = inferAttachmentKind(file.type);
     await adminRepository.addPollAttachment(route.id, {
       name: file.name,
       mimeType: file.type,
@@ -302,12 +322,13 @@ export function PollEditPage({ route, onNavigate }: PollEditPageProps) {
                     <th className="px-4 py-2">Question</th>
                     <th className="px-4 py-2">Type</th>
                     <th className="px-4 py-2">Answer Options</th>
+                    <th className="px-4 py-2">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {poll.questions.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                      <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
                         No data available in table.
                       </td>
                     </tr>
@@ -317,29 +338,162 @@ export function PollEditPage({ route, onNavigate }: PollEditPageProps) {
                         <td className="px-4 py-2">{question.sortOrder}</td>
                         <td className="px-4 py-2">{question.question}</td>
                         <td className="px-4 py-2">{question.type}</td>
-                        <td className="px-4 py-2">{question.answerOptions}</td>
+                        <td className="px-4 py-2">
+                          {parsePollAnswerOptions(question).join(", ") || "—"}
+                        </td>
+                        <td className="px-4 py-2">
+                          <button
+                            type="button"
+                            onClick={() => void removeQuestion(question.id)}
+                            className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                          >
+                            Remove
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
                 </tbody>
               </table>
             </div>
-            <div className="mt-3 flex gap-2">
-              <input
-                type="text"
-                value={newQuestion}
-                onChange={(e) => setNewQuestion(e.target.value)}
-                placeholder="New question..."
-                className="flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm"
-              />
+            <div className="mt-4 space-y-3 rounded border border-slate-200 p-4">
+              <h4 className="text-sm font-semibold text-slate-700">Add Question</h4>
+              <label className="block text-sm">
+                Question
+                <input
+                  type="text"
+                  value={newQuestion}
+                  onChange={(e) => setNewQuestion(e.target.value)}
+                  placeholder="Enter question text..."
+                  className="mt-1 block w-full rounded border border-slate-300 px-3 py-1.5 text-sm"
+                />
+              </label>
+              <div>
+                <p className="text-sm font-medium text-slate-700">Answer options</p>
+                <div className="mt-2 space-y-2">
+                  {newAnswers.map((answer, index) => (
+                    <div key={index} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={answer}
+                        onChange={(e) =>
+                          setNewAnswers((prev) =>
+                            prev.map((value, i) => (i === index ? e.target.value : value))
+                          )
+                        }
+                        placeholder={`Answer ${index + 1}`}
+                        className="flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm"
+                      />
+                      {newAnswers.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNewAnswers((prev) => prev.filter((_, i) => i !== index))
+                          }
+                          className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNewAnswers((prev) => [...prev, ""])}
+                  className="mt-2 text-xs font-medium text-[#3476ef] hover:underline"
+                >
+                  + Add answer
+                </button>
+              </div>
               <button
                 type="button"
+                disabled={addingQuestion}
                 onClick={() => void addQuestion()}
-                className="rounded bg-[#3476ef] px-3 py-1.5 text-sm text-white"
+                className="rounded bg-[#3476ef] px-3 py-1.5 text-sm text-white disabled:opacity-50"
               >
-                Add Question
+                {addingQuestion ? "Adding..." : "Add Question"}
               </button>
             </div>
+          </section>
+
+          <section>
+            <h3 className="mb-2 font-semibold text-slate-700">Results</h3>
+            {poll.privacy === "anonymous" && (
+              <p className="mb-3 text-sm text-slate-600">
+                Residents cannot see each other&apos;s votes; this admin view includes voter names.
+              </p>
+            )}
+            {!results || results.totalResponses === 0 ? (
+              <p className="text-sm text-slate-500">No responses yet.</p>
+            ) : (
+              <div className="space-y-6">
+                <p className="text-sm text-slate-600">
+                  {results.totalResponses} response{results.totalResponses === 1 ? "" : "s"} recorded
+                </p>
+                {results.questions.map((questionResult) => (
+                  <div key={questionResult.questionId}>
+                    <h4 className="mb-2 font-medium text-slate-800">
+                      {questionResult.question}{" "}
+                      <span className="text-sm font-normal text-slate-500">
+                        ({questionResult.totalResponses} response
+                        {questionResult.totalResponses === 1 ? "" : "s"})
+                      </span>
+                    </h4>
+                    {questionResult.options.length === 0 ? (
+                      <p className="text-sm text-slate-500">No answer options configured.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {questionResult.options.map((option) => (
+                          <div key={option.label}>
+                            <div className="flex justify-between text-sm">
+                              <span>{option.label}</span>
+                              <span className="text-slate-600">
+                                {option.count} vote{option.count !== 1 ? "s" : ""} ({option.percentage}%)
+                              </span>
+                            </div>
+                            <div className="mt-1 h-2 overflow-hidden rounded bg-slate-100">
+                              <div
+                                className="h-full bg-[#3476ef]"
+                                style={{ width: `${option.percentage}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                <div>
+                  <h4 className="mb-2 font-medium text-slate-800">Who voted</h4>
+                  <div className="overflow-x-auto rounded border border-slate-200">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b bg-slate-50 text-slate-600">
+                          <th className="px-4 py-2">Question</th>
+                          <th className="px-4 py-2">Voter</th>
+                          <th className="px-4 py-2">Unit</th>
+                          <th className="px-4 py-2">Answer</th>
+                          <th className="px-4 py-2">Submitted</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {results.voters.map((voter) => (
+                          <tr key={voter.responseId} className="border-b border-slate-100">
+                            <td className="px-4 py-2">{voter.question}</td>
+                            <td className="px-4 py-2">{voter.voterName}</td>
+                            <td className="px-4 py-2">{voter.unitLabel}</td>
+                            <td className="px-4 py-2">{voter.selectedOption}</td>
+                            <td className="px-4 py-2">{voter.submittedAt.slice(0, 16).replace("T", " ")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
         </div>
       </div>
@@ -362,12 +516,29 @@ export function PollEditPage({ route, onNavigate }: PollEditPageProps) {
           {poll.questions.length === 0 ? (
             <p className="text-slate-500">No questions added yet.</p>
           ) : (
-            poll.questions.map((question) => (
-              <div key={question.id}>
-                <p className="font-medium">{question.question}</p>
-                <input type="text" disabled className="mt-1 w-full rounded border px-2 py-1" />
-              </div>
-            ))
+            poll.questions.map((question) => {
+              const options = parsePollAnswerOptions(question);
+              return (
+                <div key={question.id}>
+                  <p className="font-medium">{question.question}</p>
+                  {options.length === 0 ? (
+                    <p className="mt-1 text-slate-500">No answer choices configured.</p>
+                  ) : (
+                    <div className="mt-2 space-y-1">
+                      {options.map((option) => (
+                        <label
+                          key={option}
+                          className="flex items-center gap-2 rounded border border-slate-200 px-2 py-1.5"
+                        >
+                          <input type="radio" disabled name={`preview-${question.id}`} />
+                          <span>{option}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       </Modal>

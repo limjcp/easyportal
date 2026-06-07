@@ -18,17 +18,17 @@ import type {
   VendorSession,
 } from "../../resident/data/types";
 import { seedVendorNotifications } from "../../vendor/data/mock/notifications";
-import { seedCompanyBuildings } from "./mock/buildings";
-import { seedCompanyEmployees } from "./mock/employees";
-import { seedCompanyNotifications } from "./mock/notifications";
-import { seedCompanyUser } from "./mock/companyUser";
-import { seedManagementCompanyProfile } from "./mock/managementCompanyProfile";
-import { seedBuildingTotals } from "./mock/buildingTotals";
-import { seedMasterReports } from "./mock/masterReports";
-import { seedPurchaseOrders } from "./mock/purchaseOrders";
-import { DEFAULT_ROLE_NAMES, createDefaultPermissionsForRole } from "./mock/permissions";
-import { seedBuildingSubscriptions, seedCompanySubscriptions, seedStripePayouts } from "./mock/subscriptions";
-import { seedVendors } from "./mock/vendors";
+import { seedCompanyBuildings } from "../../company/data/mock/buildings";
+import { seedCompanyEmployees } from "../../company/data/mock/employees";
+import { seedCompanyNotifications } from "../../company/data/mock/notifications";
+import { seedCompanyUser } from "../../company/data/mock/companyUser";
+import { seedManagementCompanyProfile } from "../../company/data/mock/managementCompanyProfile";
+import { seedBuildingTotals } from "../../company/data/mock/buildingTotals";
+import { seedMasterReports } from "../../company/data/mock/masterReports";
+import { seedPurchaseOrders } from "../../company/data/mock/purchaseOrders";
+import { DEFAULT_ROLE_NAMES, createDefaultPermissionsForRole } from "../../company/data/mock/permissions";
+import { seedBuildingSubscriptions, seedCompanySubscriptions, seedStripePayouts } from "../../company/data/mock/subscriptions";
+import { seedVendors } from "../../company/data/mock/vendors";
 import type { CompanyRole } from "../../resident/data/types";
 
 export const companyStore = {

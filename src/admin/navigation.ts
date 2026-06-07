@@ -4,6 +4,7 @@ import {
   FaBell,
   FaBuilding,
   FaCalendarAlt,
+  FaCalendarCheck,
   FaCertificate,
   FaClipboardList,
   FaCommentDots,
@@ -58,6 +59,7 @@ export type AdminRoute =
   | { page: "board-election-edit"; id: string }
   | { page: "agm" }
   | { page: "fire-safety" }
+  | { page: "amenity-bookings"; tab: "current" | "past" | "cancelled" | "settings" }
   | { page: "documents"; folderId?: string }
   | {
       page: "events";
@@ -85,6 +87,7 @@ export type AdminNavItem = {
   label: string;
   icon: IconType;
   route: AdminRoute;
+  moduleKey?: string;
   dividerBefore?: boolean;
 };
 
@@ -95,40 +98,157 @@ export const adminNavItems: AdminNavItem[] = [
     label: "Consultation Leads",
     icon: FaClipboardList,
     route: { page: "consultation-leads" },
+    moduleKey: "consultation-leads",
   },
-  { id: "building", label: "Building Definition", icon: FaBuilding, route: { page: "building-definition", tab: "building" } },
+  {
+    id: "building",
+    label: "Building Definition",
+    icon: FaBuilding,
+    route: { page: "building-definition", tab: "building" },
+    moduleKey: "building-definitions",
+  },
   {
     id: "external-data",
     label: "External Data Links",
     icon: FaLink,
     route: { page: "external-data-links", tab: "stripe" },
+    moduleKey: "external-data",
   },
-  { id: "portal", label: "Portal Settings", icon: FaCog, route: { page: "portal-settings", tab: "public-settings" } },
-  { id: "admins", label: "Admins", icon: FaUserShield, route: { page: "admins" }, dividerBefore: true },
-  { id: "board", label: "Board Approvals", icon: FaClipboardList, route: { page: "board-approvals", tab: "current" } },
-  { id: "board-members", label: "Board Members", icon: FaUserTie, route: { page: "board-members", tab: "members" } },
-  { id: "board-elections", label: "Board Elections", icon: FaVoteYea, route: { page: "board-elections" } },
-  { id: "agm", label: "AGM Meetings", icon: FaCalendarAlt, route: { page: "agm" } },
-  { id: "fire-safety", label: "Fire Safety Plan", icon: FaFireExtinguisher, route: { page: "fire-safety" } },
-  { id: "documents", label: "Documents", icon: FaFileAlt, route: { page: "documents", folderId: "0" } },
-  { id: "events", label: "Events", icon: FaCalendarAlt, route: { page: "events", tab: "calendar", calendarFilter: "all" } },
-  { id: "faq", label: "FAQ", icon: FaQuestionCircle, route: { page: "faq" } },
-  { id: "galleries", label: "Galleries", icon: FaImage, route: { page: "galleries" } },
-  { id: "incidents", label: "Incident Reports", icon: FaExclamationTriangle, route: { page: "incident-reports", tab: "current" } },
-  { id: "news-notices", label: "News & Notices", icon: FaBell, route: { page: "news-notices", tab: "current" } },
-  { id: "newsletters", label: "Newsletters", icon: FaFile, route: { page: "newsletters" } },
-  { id: "service-requests", label: "Service Requests", icon: FaTools, route: { page: "service-requests", tab: "current" } },
+  {
+    id: "portal",
+    label: "Portal Settings",
+    icon: FaCog,
+    route: { page: "portal-settings", tab: "public-settings" },
+    moduleKey: "portal-settings",
+  },
+  {
+    id: "admins",
+    label: "Admins",
+    icon: FaUserShield,
+    route: { page: "admins" },
+    moduleKey: "admins",
+    dividerBefore: true,
+  },
+  {
+    id: "board",
+    label: "Board Approvals",
+    icon: FaClipboardList,
+    route: { page: "board-approvals", tab: "current" },
+    moduleKey: "board-approvals",
+  },
+  {
+    id: "board-members",
+    label: "Board Members",
+    icon: FaUserTie,
+    route: { page: "board-members", tab: "members" },
+    moduleKey: "board-members",
+  },
+  {
+    id: "board-elections",
+    label: "Board Elections",
+    icon: FaVoteYea,
+    route: { page: "board-elections" },
+    moduleKey: "board-elections",
+  },
+  { id: "agm", label: "AGM Meetings", icon: FaCalendarAlt, route: { page: "agm" }, moduleKey: "agm" },
+  {
+    id: "fire-safety",
+    label: "Fire Safety Plan",
+    icon: FaFireExtinguisher,
+    route: { page: "fire-safety" },
+    moduleKey: "fire-safety",
+  },
+  {
+    id: "amenity-bookings",
+    label: "Amenity Bookings",
+    icon: FaCalendarCheck,
+    route: { page: "amenity-bookings", tab: "current" },
+    moduleKey: "amenities",
+  },
+  {
+    id: "documents",
+    label: "Documents",
+    icon: FaFileAlt,
+    route: { page: "documents", folderId: "0" },
+    moduleKey: "documents",
+  },
+  {
+    id: "events",
+    label: "Events",
+    icon: FaCalendarAlt,
+    route: { page: "events", tab: "calendar", calendarFilter: "all" },
+    moduleKey: "events",
+  },
+  { id: "faq", label: "FAQ", icon: FaQuestionCircle, route: { page: "faq" }, moduleKey: "faq" },
+  { id: "galleries", label: "Galleries", icon: FaImage, route: { page: "galleries" }, moduleKey: "galleries" },
+  {
+    id: "incidents",
+    label: "Incident Reports",
+    icon: FaExclamationTriangle,
+    route: { page: "incident-reports", tab: "current" },
+    moduleKey: "incident-reports",
+  },
+  {
+    id: "news-notices",
+    label: "News & Notices",
+    icon: FaBell,
+    route: { page: "news-notices", tab: "current" },
+    moduleKey: "news-notices",
+  },
+  {
+    id: "newsletters",
+    label: "Newsletters",
+    icon: FaFile,
+    route: { page: "newsletters" },
+    moduleKey: "newsletters",
+  },
+  {
+    id: "service-requests",
+    label: "Service Requests",
+    icon: FaTools,
+    route: { page: "service-requests", tab: "current" },
+    moduleKey: "service-requests",
+  },
   {
     id: "status-certificates",
     label: "Status Certificates",
     icon: FaCertificate,
     route: { page: "status-certificates", tab: "current" },
+    moduleKey: "status-certificates",
   },
-  { id: "suggestions", label: "Suggestion Box", icon: FaCommentDots, route: { page: "suggestions" } },
-  { id: "chat", label: "Chat", icon: FaComments, route: { page: "chat" } },
-  { id: "polls", label: "Polls", icon: FaClipboardList, route: { page: "polls" } },
-  { id: "units-users", label: "Units & Users", icon: FaUsers, route: { page: "units-users" } },
+  {
+    id: "suggestions",
+    label: "Suggestion Box",
+    icon: FaCommentDots,
+    route: { page: "suggestions" },
+    moduleKey: "suggestions",
+  },
+  { id: "chat", label: "Chat", icon: FaComments, route: { page: "chat" }, moduleKey: "chat" },
+  { id: "polls", label: "Polls", icon: FaClipboardList, route: { page: "polls" }, moduleKey: "polls" },
+  {
+    id: "units-users",
+    label: "Units & Users",
+    icon: FaUsers,
+    route: { page: "units-users" },
+    moduleKey: "units-users",
+  },
 ];
+
+export function filterAdminNavItems(
+  items: AdminNavItem[],
+  access: Map<string, boolean> | null
+): AdminNavItem[] {
+  if (!access) return items;
+  return items.filter((item) => !item.moduleKey || access.get(item.moduleKey) === true);
+}
+
+export function isAdminRouteAllowed(route: AdminRoute, access: Map<string, boolean> | null): boolean {
+  if (!access) return true;
+  if (route.page === "dashboard") return true;
+  const navItem = adminNavItems.find((item) => isNavActive(route, item.id));
+  if (!navItem?.moduleKey) return true;
+  return access.get(navItem.moduleKey) === true;
+}
 
 export function isNavActive(route: AdminRoute, navId: string): boolean {
   switch (navId) {
@@ -152,6 +272,8 @@ export function isNavActive(route: AdminRoute, navId: string): boolean {
       return route.page === "board-elections" || route.page === "board-election-edit";
     case "fire-safety":
       return route.page === "fire-safety";
+    case "amenity-bookings":
+      return route.page === "amenity-bookings";
     case "documents":
       return route.page === "documents";
     case "events":
@@ -245,6 +367,8 @@ export function getPageTitle(route: AdminRoute): string {
       return "AGM Meetings";
     case "fire-safety":
       return "Fire Safety Plan";
+    case "amenity-bookings":
+      return "Amenity Bookings";
     case "documents":
       return "Documents";
     case "events":
@@ -363,6 +487,18 @@ export function getBreadcrumbTrail(route: AdminRoute): { label: string; route?: 
       return [{ label: "AGM Meetings", route }];
     case "fire-safety":
       return [{ label: "Fire Safety Plan", route }];
+    case "amenity-bookings": {
+      const tabLabels: Record<string, string> = {
+        current: "Current",
+        past: "Past",
+        cancelled: "Cancelled",
+        settings: "Settings",
+      };
+      return [
+        { label: "Amenity Bookings", route: { page: "amenity-bookings", tab: "current" } },
+        { label: tabLabels[route.tab] ?? "Current" },
+      ];
+    }
     case "documents":
       return [{ label: "Documents", route }];
     case "events": {

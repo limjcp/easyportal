@@ -25,7 +25,8 @@ export type ResidentRoute =
   | { page: "board-election-vote"; electionId: string }
   | { page: "polls" }
   | { page: "fire-safety-plan" }
-  | { page: "chat" };
+  | { page: "chat" }
+  | { page: "amenity-bookings" };
 
 export function getBreadcrumbs(route: ResidentRoute): { label: string; route?: ResidentRoute }[] {
   const home: ResidentRoute = { page: "home" };
@@ -91,6 +92,8 @@ export function getBreadcrumbs(route: ResidentRoute): { label: string; route?: R
       return [{ label: "Fire Safety Plan", route }];
     case "chat":
       return [{ label: "Chat", route }];
+    case "amenity-bookings":
+      return [{ label: "Amenity Bookings", route }];
     default:
       return [{ label: "Home", route: home }];
   }
@@ -122,6 +125,7 @@ export function tileLabelToRoute(label: string): ResidentRoute | null {
     "Fire Safety Plan": { page: "fire-safety-plan" },
     Chat: { page: "chat" },
     Polls: { page: "polls" },
+    "Amenity Bookings": { page: "amenity-bookings" },
   };
   return map[label] ?? null;
 }

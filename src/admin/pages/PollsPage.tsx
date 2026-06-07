@@ -82,6 +82,19 @@ export function PollsPage({ route, onNavigate, refreshKey, onRefresh }: PollsPag
           { key: "published", header: "Published", render: (row) => row.publishedAt ?? "" },
           { key: "expires", header: "Expires", render: (row) => row.expiresAt ?? "" },
           { key: "responses", header: "Responses", render: (row) => row.responseCount },
+          {
+            key: "results",
+            header: "Results",
+            render: (row) => (
+              <button
+                type="button"
+                onClick={() => onNavigate({ page: "poll-edit", id: row.id })}
+                className="text-[#3476ef] hover:underline"
+              >
+                View
+              </button>
+            ),
+          },
         ]}
       />
 

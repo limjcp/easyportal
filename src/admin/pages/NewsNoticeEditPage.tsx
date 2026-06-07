@@ -6,6 +6,13 @@ import { AdminPageActions } from "../components/AdminPageActions";
 import { EmailNoticesReportModal } from "../modals/EmailNoticesReportModal";
 import type { AdminRoute } from "../navigation";
 import type { AdminNewsItem } from "../../resident/data/types";
+import { FileUploadZone } from "../../shared/FileUploadZone";
+import {
+  sanitizeFileName,
+  toDataUrl,
+  validateAttachmentFile,
+  validateBuildingImageFile,
+} from "../../shared/attachmentUtils";
 
 const RESIDENT_TYPES = [
   "Absentee Owner",
@@ -71,6 +78,39 @@ export function NewsNoticeEditPage({ route, onNavigate, onRefresh }: NewsNoticeE
 
   const selectNone = (field: "residentTypes" | "adminCcTypes") => {
     update({ [field]: [] });
+  };
+
+  const handleImageSelect = async (file: File | null) => {
+    if (!file) return;
+    const error = validateBuildingImageFile(file);
+    if (error) {
+      alert(error);
+      return;
+    }
+    try {
+      const dataUrl = await toDataUrl(file);
+      update({ imageUrl: dataUrl });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to read image.");
+    }
+  };
+
+  const handleAttachmentSelect = async (file: File | null) => {
+    if (!file) return;
+    const error = validateAttachmentFile(file);
+    if (error) {
+      alert(error);
+      return;
+    }
+    try {
+      const dataUrl = await toDataUrl(file);
+      update({
+        attachmentName: sanitizeFileName(file.name),
+        attachmentUrl: dataUrl,
+      });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to read attachment.");
+    }
   };
 
   const handleSave = async () => {
@@ -273,17 +313,33 @@ export function NewsNoticeEditPage({ route, onNavigate, onRefresh }: NewsNoticeE
           <div className="grid gap-4 sm:grid-cols-2">
             <section className="rounded border border-slate-200 p-4">
               <h3 className="mb-2 font-semibold text-slate-700">Image</h3>
-              <p className="text-xs text-slate-500">Drag & drop or browse to upload (demo).</p>
-              <button type="button" className="mt-2 rounded border border-slate-300 px-3 py-1 text-sm">
-                Browse…
-              </button>
+              <p className="text-xs text-slate-500">JPG, PNG, or GIF — 5MB max.</p>
+              {item.imageUrl && (
+                <img
+                  src={item.imageUrl}
+                  alt="Notice"
+                  className="mb-3 mt-2 max-h-48 rounded border object-cover"
+                />
+              )}
+              <FileUploadZone
+                onFileSelect={(file) => void handleImageSelect(file)}
+                onRemove={item.imageUrl ? () => update({ imageUrl: undefined }) : undefined}
+              />
             </section>
             <section className="rounded border border-slate-200 p-4">
               <h3 className="mb-2 font-semibold text-slate-700">Attachment</h3>
-              <p className="text-xs text-slate-500">Drag & drop or browse to upload (demo).</p>
-              <button type="button" className="mt-2 rounded border border-slate-300 px-3 py-1 text-sm">
-                Browse…
-              </button>
+              <p className="text-xs text-slate-500">PDF or image — 5MB max.</p>
+              {item.attachmentName && (
+                <p className="mb-2 mt-2 text-sm font-medium text-slate-700">{item.attachmentName}</p>
+              )}
+              <FileUploadZone
+                onFileSelect={(file) => void handleAttachmentSelect(file)}
+                onRemove={
+                  item.attachmentUrl
+                    ? () => update({ attachmentName: undefined, attachmentUrl: undefined })
+                    : undefined
+                }
+              />
             </section>
           </div>
 

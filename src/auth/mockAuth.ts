@@ -1,5 +1,5 @@
 import type { LoginPortalRole, Vendor } from "../resident/data/types";
-import { companyStore } from "../company/data/companyStore";
+import { companyStore } from "../legacy/company/companyStore";
 
 const REMEMBER_KEY = "mvpcondos_remember_me";
 

@@ -1,5 +1,6 @@
 import type {
   CalendarEvent,
+  Comment,
   CreateIncidentReportInput,
   CreateServiceRequestInput,
   CreateSuggestionInput,
@@ -10,6 +11,8 @@ import type {
   GalleryAlbum,
   IncidentReport,
   IncidentReportCategory,
+  ResidentIncidentReportDetail,
+  ResidentServiceRequestDetail,
   NewsItem,
   Newsletter,
   NotificationPreference,
@@ -38,7 +41,13 @@ import type {
   ParkingRequestType,
   Poll,
   PollAttachment,
+  PollResponse,
+  SubmitPollResponseInput,
   AgmMeeting,
+  AmenityBooking,
+  BuildingAmenitySettings,
+  SubmitElevatorBookingInput,
+  SubmitPartyRoomBookingInput,
 } from "./types";
 import type { ArrangeTile } from "./portalTileLayout";
 
@@ -60,9 +69,15 @@ export interface ResidentRepository {
   getNotificationPreferences(): Promise<NotificationPreference[]>;
   updateNotificationPreference(id: string, enabled: boolean): Promise<void>;
   getServiceRequests(): Promise<ServiceRequest[]>;
+  getServiceRequestById(id: string): Promise<ResidentServiceRequestDetail | null>;
+  addServiceRequestComment(id: string, text: string): Promise<Comment>;
+  markServiceRequestRead(id: string): Promise<void>;
   getServiceCategories(): Promise<ServiceRequestCategory[]>;
   createServiceRequest(input: CreateServiceRequestInput): Promise<ServiceRequest>;
+  getPortalModuleBadgeCounts(): Promise<Record<string, number>>;
   getIncidentReports(): Promise<IncidentReport[]>;
+  getIncidentReportById(id: string): Promise<ResidentIncidentReportDetail | null>;
+  addIncidentReportComment(id: string, text: string): Promise<Comment>;
   getIncidentCategories(): Promise<IncidentReportCategory[]>;
   createIncidentReport(input: CreateIncidentReportInput): Promise<IncidentReport>;
   getSuggestions(): Promise<Suggestion[]>;
@@ -90,6 +105,8 @@ export interface ResidentRepository {
   getPollsForResident(): Promise<Poll[]>;
   getPollById(id: string): Promise<Poll | null>;
   getPollAttachments(pollId: string): Promise<PollAttachment[]>;
+  getPollResponsesForPoll(pollId: string): Promise<PollResponse[]>;
+  submitPollResponse(input: SubmitPollResponseInput): Promise<PollResponse>;
   getAgmMeetingById(id: string): Promise<AgmMeeting | null>;
   getParkingRequestsForCurrentResident(): Promise<ParkingRequest[]>;
   submitParkingRequest(
@@ -99,6 +116,13 @@ export interface ResidentRepository {
   acceptParkingRequestPayment(requestId: string): Promise<ParkingRequest>;
   declineParkingRequestOffer(requestId: string): Promise<ParkingRequest>;
   getVisitorParkingOvernightEmail(): Promise<string>;
+  getAmenityBookings(): Promise<AmenityBooking[]>;
+  getBuildingAmenitySettings(): Promise<BuildingAmenitySettings>;
+  submitElevatorBooking(input: SubmitElevatorBookingInput): Promise<AmenityBooking>;
+  submitPartyRoomBooking(input: SubmitPartyRoomBookingInput): Promise<AmenityBooking>;
+  acceptPartyRoomPayment(bookingId: string): Promise<AmenityBooking>;
+  cancelAmenityBooking(bookingId: string): Promise<AmenityBooking>;
+  markAmenityBookingRead(bookingId: string): Promise<void>;
   getPersonalTileLayout(): Promise<ArrangeTile[] | null>;
   savePersonalTileLayout(tiles: ArrangeTile[]): Promise<void>;
   resetPersonalTileLayout(): Promise<void>;

@@ -17,6 +17,7 @@ import { cn } from "../../utils/cn";
 type CertificateViewModalProps = {
   open: boolean;
   detail: CertificateDetail | null;
+  loading?: boolean;
   onClose: () => void;
 };
 
@@ -81,7 +82,7 @@ function FileTile({ file, onDelete }: { file: CertificateFile; onDelete: () => v
   );
 }
 
-export function CertificateViewModal({ open, detail, onClose }: CertificateViewModalProps) {
+export function CertificateViewModal({ open, detail, loading = false, onClose }: CertificateViewModalProps) {
   const [showExcluded, setShowExcluded] = useState(false);
 
   useEffect(() => {
@@ -100,8 +101,17 @@ export function CertificateViewModal({ open, detail, onClose }: CertificateViewM
   if (!detail) {
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
-        <div className="rounded-sm bg-white px-8 py-6 text-sm text-slate-600 shadow-2xl">
-          Loading certificate…
+        <div className="rounded-sm bg-white px-8 py-6 text-center text-sm text-slate-600 shadow-2xl">
+          <p>{loading ? "Loading certificate…" : "Certificate not found."}</p>
+          {!loading ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-4 rounded border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-50"
+            >
+              Close
+            </button>
+          ) : null}
         </div>
       </div>
     );

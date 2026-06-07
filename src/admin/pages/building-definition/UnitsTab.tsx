@@ -16,10 +16,17 @@ export function UnitsTab({ refreshKey, onRefresh }: UnitsTabProps) {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [addType, setAddType] = useState<AddUnitRangeType>("all");
-  const [viewUnit, setViewUnit] = useState<{ floor: string; unit: string } | null>(null);
+  const [viewUnit, setViewUnit] = useState<{ floor: string; unit: string; occupied: boolean } | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
-    adminRepository.getBuildingUnits().then(setGroups);
+    adminRepository
+      .getBuildingUnits()
+      .then(setGroups)
+      .catch((err) => {
+        setActionError(err instanceof Error ? err.message : "Failed to load units.");
+      });
   }, [refreshKey]);
 
   const handleAdd = async () => {
@@ -27,11 +34,30 @@ export function UnitsTab({ refreshKey, onRefresh }: UnitsTabProps) {
       alert("Floor/Area, Start, and End are required.");
       return;
     }
-    await adminRepository.addBuildingUnits({ floorArea: floor.trim(), start, end, addType });
-    setFloor("");
-    setStart("");
-    setEnd("");
-    onRefresh();
+    setAdding(true);
+    setActionError(null);
+    try {
+      const updated = await adminRepository.addBuildingUnits({
+        floorArea: floor.trim(),
+        start,
+        end,
+        addType,
+      });
+      setGroups(updated);
+      setFloor("");
+      setStart("");
+      setEnd("");
+      onRefresh();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to add units.");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const openUnit = (group: BuildingUnitGroup, unit: string) => {
+    const occupied = group.occupiedUnits?.includes(unit) ?? false;
+    setViewUnit({ floor: group.floorArea, unit, occupied });
   };
 
   return (
@@ -41,6 +67,10 @@ export function UnitsTab({ refreshKey, onRefresh }: UnitsTabProps) {
         title="Units Definition"
         subtitle="Define your units here."
       />
+
+      {actionError ? (
+        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</div>
+      ) : null}
 
       <div className="mx-auto grid max-w-4xl gap-4 sm:grid-cols-3">
         <StepCard step={1} text="Enter the first and last unit for each floor/area, we'll fill in the rest." />
@@ -71,8 +101,13 @@ export function UnitsTab({ refreshKey, onRefresh }: UnitsTabProps) {
             </select>
           </label>
         </div>
-        <button type="button" onClick={handleAdd} className="mt-4 rounded bg-[#89c64c] px-4 py-2 text-sm text-white">
-          Add Units
+        <button
+          type="button"
+          onClick={() => void handleAdd()}
+          disabled={adding}
+          className="mt-4 rounded bg-[#89c64c] px-4 py-2 text-sm text-white disabled:opacity-60"
+        >
+          {adding ? "Adding…" : "Add Units"}
         </button>
       </AdminFormPanel>
 
@@ -101,17 +136,20 @@ export function UnitsTab({ refreshKey, onRefresh }: UnitsTabProps) {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
-                    {g.units.map((u) => (
-                      <button
-                        key={u}
-                        type="button"
-                        onClick={() => setViewUnit({ floor: g.floorArea, unit: u })}
-                        className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs hover:bg-slate-50"
-                        title="Occupied Unit"
-                      >
-                        {u}
-                      </button>
-                    ))}
+                    {g.units.map((u) => {
+                      const occupied = g.occupiedUnits?.includes(u) ?? false;
+                      return (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => openUnit(g, u)}
+                          className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs hover:bg-slate-50"
+                          title={occupied ? "Occupied unit" : "Vacant unit"}
+                        >
+                          {u}
+                        </button>
+                      );
+                    })}
                   </div>
                 </td>
               </tr>
@@ -130,7 +168,7 @@ export function UnitsTab({ refreshKey, onRefresh }: UnitsTabProps) {
           <div className="space-y-2 text-sm">
             <p><strong>Floor/Area:</strong> {viewUnit.floor}</p>
             <p><strong>Unit:</strong> {viewUnit.unit}</p>
-            <p><strong>Status:</strong> Occupied</p>
+            <p><strong>Status:</strong> {viewUnit.occupied ? "Occupied" : "Vacant"}</p>
           </div>
         )}
       </Modal>

@@ -12,6 +12,11 @@ type ConsultationLeadsPageProps = {
   onRefresh: () => void;
 };
 
+function formatSurveyValue(value: string | undefined) {
+  if (!value) return "—";
+  return value.replace(/-/g, " ");
+}
+
 export function ConsultationLeadsPage({
   route,
   onNavigate,
@@ -63,35 +68,51 @@ export function ConsultationLeadsPage({
               </div>
             ),
           },
-          { key: "corporationNumber", header: "Corporation #", render: (row) => row.corporationNumber },
-          { key: "municipalAddress", header: "Municipal Address", render: (row) => row.municipalAddress },
           { key: "email", header: "Email", render: (row) => row.email },
-          { key: "phone", header: "Phone", render: (row) => row.phone },
+          { key: "phone", header: "Phone", render: (row) => row.phone || "—" },
+          {
+            key: "condoType",
+            header: "Condo Type",
+            render: (row) => formatSurveyValue(row.survey.condoType),
+          },
+          {
+            key: "unitCount",
+            header: "Units",
+            render: (row) => formatSurveyValue(row.survey.unitCount),
+          },
+          {
+            key: "yourRole",
+            header: "Role",
+            render: (row) => formatSurveyValue(row.survey.yourRole),
+          },
+          {
+            key: "region",
+            header: "Region",
+            render: (row) => formatSurveyValue(row.survey.region),
+          },
           {
             key: "condoHealth",
             header: "Condo Health",
-            render: (row) => row.survey.condoHealth,
+            render: (row) => formatSurveyValue(row.survey.condoHealth),
           },
           {
             key: "management",
             header: "Management",
-            render: (row) => row.survey.managementExperience,
+            render: (row) => formatSurveyValue(row.survey.managementExperience),
+          },
+          {
+            key: "topConcern",
+            header: "Top Concern",
+            render: (row) =>
+              formatSurveyValue(row.survey.topConcern ?? row.survey.currentPainPoint),
           },
           {
             key: "changeIntent",
             header: "Change Intent",
-            render: (row) => row.survey.consideringManagementChange,
-          },
-          {
-            key: "painPoint",
-            header: "Pain Point",
-            render: (row) => (
-              <p className="line-clamp-2 max-w-xs text-sm">{row.survey.currentPainPoint}</p>
-            ),
+            render: (row) => formatSurveyValue(row.survey.consideringManagementChange),
           },
         ]}
       />
     </>
   );
 }
-

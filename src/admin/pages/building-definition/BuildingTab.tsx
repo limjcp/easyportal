@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { FaBuilding, FaImage, FaAddressBook } from "react-icons/fa";
 import { AdminFormPanel } from "../../components/AdminFormPanel";
 import { adminRepository } from "../../data/adminRepository";
+import { companyRepository } from "../../../company/data/companyRepository";
+import { getActiveBuildingId } from "../../../data/supabase/buildingContext";
+import { formatBuildingOptionLabel } from "../../navigation";
 import {
   AMENITIES,
   BUILDING_FEATURES,
@@ -9,10 +12,10 @@ import {
   CANADIAN_PROVINCES,
   COMMON_AREAS,
   CORPORATIONS,
-  LINKED_BUILDINGS,
 } from "../../data/mock/buildingDefinitionConstants";
-import type { BuildingDefinition } from "../../../resident/data/types";
+import type { BuildingDefinition, CompanyBuilding } from "../../../resident/data/types";
 import { FileUploadZone } from "../../../shared/FileUploadZone";
+import { toDataUrl, validateBuildingImageFile } from "../../../shared/attachmentUtils";
 
 type BuildingTabProps = {
   onRefresh: () => void;
@@ -20,10 +23,16 @@ type BuildingTabProps = {
 
 export function BuildingTab({ onRefresh }: BuildingTabProps) {
   const [form, setForm] = useState<BuildingDefinition | null>(null);
+  const [linkableBuildings, setLinkableBuildings] = useState<CompanyBuilding[]>([]);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     adminRepository.getBuildingDefinition().then(setForm);
+    const activeId = getActiveBuildingId();
+    companyRepository
+      .getBuildings()
+      .then((buildings) => setLinkableBuildings(buildings.filter((b) => b.id !== activeId)))
+      .catch(() => setLinkableBuildings([]));
   }, [onRefresh]);
 
   if (!form) return <div className="py-8 text-center text-slate-500">Loading...</div>;
@@ -55,6 +64,22 @@ export function BuildingTab({ onRefresh }: BuildingTabProps) {
   const handleSave = async () => {
     await adminRepository.updateBuildingDefinition(form);
     setSaved(true);
+    onRefresh();
+  };
+
+  const handleImageSelect = async (file: File | null) => {
+    if (!file) return;
+    const error = validateBuildingImageFile(file);
+    if (error) {
+      alert(error);
+      return;
+    }
+    try {
+      const dataUrl = await toDataUrl(file);
+      update("imageUrl", dataUrl);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to read image.");
+    }
   };
 
   return (
@@ -141,8 +166,10 @@ export function BuildingTab({ onRefresh }: BuildingTabProps) {
             {form.imageUrl && (
               <img src={form.imageUrl} alt="Building" className="mb-3 h-24 rounded border object-cover" />
             )}
-            <FileUploadZone />
-            <p className="mt-2 text-xs text-slate-500">Mock upload — building images may remain in cache for several minutes.</p>
+            <FileUploadZone
+              onFileSelect={(file) => void handleImageSelect(file)}
+              onRemove={() => update("imageUrl", undefined)}
+            />
           </AdminFormPanel>
         </div>
 
@@ -156,18 +183,22 @@ export function BuildingTab({ onRefresh }: BuildingTabProps) {
 
       <AdminFormPanel title="Linked Buildings">
         <p className="mb-3 text-xs text-slate-500">Linking buildings allows residents to cross post items on resident portal(s).</p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {LINKED_BUILDINGS.map((b) => (
-            <label key={b.id} className="flex items-start gap-2 text-xs">
-              <input
-                type="checkbox"
-                checked={form.linkedBuildingIds.includes(b.id)}
-                onChange={(e) => handleLinkedChange(b.id, e.target.checked)}
-              />
-              {b.label}
-            </label>
-          ))}
-        </div>
+        {linkableBuildings.length === 0 ? (
+          <p className="text-sm text-slate-500">No other company buildings available to link.</p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {linkableBuildings.map((b) => (
+              <label key={b.id} className="flex items-start gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={form.linkedBuildingIds.includes(b.id)}
+                  onChange={(e) => handleLinkedChange(b.id, e.target.checked)}
+                />
+                {formatBuildingOptionLabel(b)}
+              </label>
+            ))}
+          </div>
+        )}
       </AdminFormPanel>
 
       <div className="flex items-center gap-3 border-t border-slate-200 pt-4">

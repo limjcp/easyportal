@@ -69,7 +69,9 @@ export function ProfileModal({ open, onClose }: ProfileModalProps) {
           {tab === "profile" && user && (
             <div className="space-y-3 text-sm">
               <Field label="Name" value={user.name} />
-              <Field label="Unit" value={user.unit} />
+              <Field label="Building" value={user.buildingName} />
+              {user.buildingAddress ? <Field label="Address" value={user.buildingAddress} /> : null}
+              <Field label="Unit" value={user.unit || "Pending assignment"} />
               <Field label="Email" value={user.email} />
               <Field label="Phone" value={user.phone} />
               <Field label="Role" value={user.role} />

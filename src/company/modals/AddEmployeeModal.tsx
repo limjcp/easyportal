@@ -24,10 +24,13 @@ export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalPro
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [role, setRole] = useState<CompanyRole>("Property Administrator");
   const [buildingIds, setBuildingIds] = useState<string[]>([]);
   const [buildings, setBuildings] = useState<CompanyBuilding[]>([]);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -35,32 +38,51 @@ export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalPro
       setFirstName("");
       setLastName("");
       setEmail("");
+      setPassword("");
+      setPasswordConfirm("");
       setRole("Property Administrator");
       setBuildingIds([]);
+      setError(null);
       companyRepository.getBuildings().then(setBuildings);
     }
   }, [open]);
 
   const handleContinue = () => {
     if (!firstName.trim() || !lastName.trim() || !email.trim()) {
-      alert("Please fill in all required fields.");
+      setError("Please fill in all required fields.");
       return;
     }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setError(null);
     setStep(2);
   };
 
   const handleSave = async () => {
     setSaving(true);
-    await companyRepository.createEmployee({
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      email: email.trim(),
-      role,
-      assignedBuildingIds: buildingIds,
-    });
-    setSaving(false);
-    onSaved();
-    onClose();
+    setError(null);
+    try {
+      await companyRepository.createEmployee({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim(),
+        role,
+        assignedBuildingIds: buildingIds,
+        password,
+      });
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create employee.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const toggleBuilding = (id: string) => {
@@ -96,14 +118,17 @@ export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalPro
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white"
+              className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white disabled:opacity-60"
             >
-              Save Employee
+              {saving ? "Saving…" : "Save Employee"}
             </button>
           )}
         </div>
       }
     >
+      {error ? (
+        <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+      ) : null}
       {step === 1 ? (
         <div className="space-y-3">
           <label className="block text-sm">
@@ -130,6 +155,26 @@ export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalPro
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+            />
+          </label>
+          <label className="block text-sm">
+            Password *
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+              className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+            />
+          </label>
+          <label className="block text-sm">
+            Confirm Password *
+            <input
+              type="password"
+              value={passwordConfirm}
+              onChange={(e) => setPasswordConfirm(e.target.value)}
+              autoComplete="new-password"
               className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
             />
           </label>

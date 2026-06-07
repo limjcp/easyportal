@@ -18,7 +18,10 @@ export function AddBuildingAdminModal({ open, onClose, onCreated }: AddBuildingA
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -26,20 +29,35 @@ export function AddBuildingAdminModal({ open, onClose, onCreated }: AddBuildingA
     setFirstName("");
     setLastName("");
     setEmail("");
+    setPassword("");
+    setPasswordConfirm("");
+    setError(null);
   }, [open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setError("Passwords do not match.");
+      return;
+    }
     setSaving(true);
+    setError(null);
     try {
       const created = await adminRepository.createBuildingAdmin({
         role,
         firstName,
         lastName,
         email,
+        password,
       });
       onCreated(created);
       onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create building admin.");
     } finally {
       setSaving(false);
     }
@@ -73,6 +91,9 @@ export function AddBuildingAdminModal({ open, onClose, onCreated }: AddBuildingA
         </div>
       }
     >
+      {error ? (
+        <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+      ) : null}
       <form id="add-building-admin-form" onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label className="text-sm font-medium text-slate-700">
@@ -123,15 +144,46 @@ export function AddBuildingAdminModal({ open, onClose, onCreated }: AddBuildingA
           </div>
         </div>
         <div>
-          <label className="text-sm font-medium text-slate-700">Email</label>
+          <label className="text-sm font-medium text-slate-700">
+            Email <span className="text-red-600">*</span>
+          </label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            required
             autoComplete="off"
             placeholder="Email"
             className={inputClass}
           />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="text-sm font-medium text-slate-700">
+              Password <span className="text-red-600">*</span>
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-slate-700">
+              Confirm Password <span className="text-red-600">*</span>
+            </label>
+            <input
+              type="password"
+              value={passwordConfirm}
+              onChange={(e) => setPasswordConfirm(e.target.value)}
+              required
+              autoComplete="new-password"
+              className={inputClass}
+            />
+          </div>
         </div>
       </form>
     </Modal>

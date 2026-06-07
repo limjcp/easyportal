@@ -1,55 +1,140 @@
+import { useEffect, useState } from "react";
 import { MvpLogo } from "../../shared/MvpLogo";
 import { MARKETING_HEADER_LINKS, MARKETING_PATHS, type MarketingPage } from "../navigation";
-import { REQUEST_PROPOSAL_URL, SITE_BANNER } from "../data/siteContent";
+import { EDITORIAL_HERO_PAGES } from "../constants";
+import { REQUEST_PROPOSAL_URL } from "../data/siteContent";
+import { pe } from "../typography";
+import { MenuIcon } from "./icons";
+import { cn } from "../../utils/cn";
+
+const HERO_TOP_PAGES = new Set<string>(EDITORIAL_HERO_PAGES);
 
 type MarketingHeaderProps = {
   currentPage: MarketingPage;
   onNavigate: (path: string) => void;
   onOpenLogin: () => void;
+  solidHeader?: boolean;
 };
 
-export function MarketingHeader({ currentPage, onNavigate, onOpenLogin }: MarketingHeaderProps) {
+export function MarketingHeader({ currentPage, onNavigate, onOpenLogin, solidHeader = false }: MarketingHeaderProps) {
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const hasHeroTop = !solidHeader && HERO_TOP_PAGES.has(currentPage);
+
+  useEffect(() => {
+    const handleScroll = () => setIsScrolled(window.scrollY > 40);
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [currentPage]);
+
+  const useLightChrome = hasHeroTop && !isScrolled;
+  const navLinkClass = cn(
+    `${pe.eyebrowSm} transition-colors duration-500 hover:opacity-100`,
+    useLightChrome ? "text-background/60 hover:text-background" : "text-muted-foreground hover:text-foreground"
+  );
+
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
-      {/* <button
-        type="button"
-        className="flex w-full items-center justify-center bg-[#1f2937] px-4 py-2 text-center text-xs font-semibold text-white hover:bg-[#111827]"
-        onClick={() => onNavigate(SITE_BANNER.href)}
-      >
-        {SITE_BANNER.text}
-      </button> */}
-      <div className="mx-auto flex w-full max-w-[1180px] flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
-        <button type="button" className="flex items-center gap-3" onClick={() => onNavigate("/")}>
-          <MvpLogo />
+    <header
+      className={cn(
+        "fixed top-0 left-0 right-0 z-50 transition-all duration-500",
+        isScrolled || !hasHeroTop ? "bg-background/95 backdrop-blur border-b border-border" : "bg-transparent"
+      )}
+    >
+      <nav className="flex items-center justify-between px-6 py-5 md:px-12 lg:px-20">
+        <button type="button" className="flex items-center" onClick={() => onNavigate("/")}>
+          <MvpLogo className={cn("h-14 md:h-16 lg:h-[4.5rem]", useLightChrome && "drop-shadow-md")} />
         </button>
-        <nav className="flex flex-wrap items-center gap-4 text-xs font-semibold uppercase tracking-wide text-slate-700 sm:gap-6">
+
+        <div className="hidden lg:flex items-center gap-10">
           {MARKETING_HEADER_LINKS.map((item) => (
             <button
               key={item.page}
               type="button"
               onClick={() => onNavigate(MARKETING_PATHS[item.page])}
-              className={
-                currentPage === item.page
-                  ? "rounded-full bg-[#ecf2ff] px-3 py-1 text-[#1f4db8]"
-                  : "rounded-full px-3 py-1 hover:bg-slate-100 hover:text-[#1f4db8]"
-              }
+              className={cn(
+                navLinkClass,
+                currentPage === item.page && (useLightChrome ? "text-background" : "text-foreground")
+              )}
             >
               {item.label}
             </button>
           ))}
-        </nav>
-        <div className="flex items-center gap-2">
+        </div>
+
+        <div className="hidden md:flex items-center gap-4">
           <button
             type="button"
             onClick={() => onNavigate(REQUEST_PROPOSAL_URL)}
-            className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className={cn(
+              `${pe.eyebrowSm} transition-colors duration-500`,
+              useLightChrome
+                ? "text-background/70 hover:text-background"
+                : "text-muted-foreground hover:text-foreground"
+            )}
           >
             Request a Proposal
           </button>
           <button
             type="button"
             onClick={onOpenLogin}
-            className="rounded-full bg-[#3476ef] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2d68cf]"
+            className={cn(
+              `${pe.eyebrowSm} px-4 py-2 border transition-colors duration-500`,
+              useLightChrome
+                ? "border-background/30 text-background hover:border-background/60"
+                : "border-border text-foreground hover:border-foreground/40"
+            )}
+          >
+            Sign In
+          </button>
+        </div>
+
+        <button
+          type="button"
+          className={cn(
+            "md:hidden transition-colors duration-500",
+            useLightChrome ? "text-background" : "text-foreground"
+          )}
+          aria-label={isMenuOpen ? "Close menu" : "Open menu"}
+          onClick={() => setIsMenuOpen((open) => !open)}
+        >
+          <MenuIcon className={pe.iconMd} />
+        </button>
+      </nav>
+
+      <div
+        className={cn(
+          "md:hidden overflow-hidden transition-all duration-500 ease-in-out bg-background",
+          isMenuOpen ? "max-h-[480px] opacity-100" : "max-h-0 opacity-0"
+        )}
+      >
+        <div className="flex flex-col px-6 py-10 gap-6">
+          {MARKETING_HEADER_LINKS.map((item, index) => (
+            <button
+              key={item.page}
+              type="button"
+              onClick={() => onNavigate(MARKETING_PATHS[item.page])}
+              className={`${pe.mobileNav} text-foreground hover:text-muted-foreground transition-colors duration-300 text-left`}
+              style={{ transitionDelay: `${index * 50}ms` }}
+            >
+              {item.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => onNavigate(REQUEST_PROPOSAL_URL)}
+            className={`${pe.mobileNav} text-foreground hover:text-muted-foreground transition-colors duration-300 text-left`}
+          >
+            Request a Proposal
+          </button>
+          <button
+            type="button"
+            onClick={onOpenLogin}
+            className={`${pe.mobileNav} text-foreground hover:text-muted-foreground transition-colors duration-300 text-left`}
           >
             Sign In
           </button>
@@ -58,4 +143,3 @@ export function MarketingHeader({ currentPage, onNavigate, onOpenLogin }: Market
     </header>
   );
 }
-

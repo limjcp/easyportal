@@ -4,6 +4,7 @@ import { Modal } from "../../shared/Modal";
 import { FileUploadZone } from "../../shared/FileUploadZone";
 import { AdminSectionHeader } from "../components/CommentSection";
 import { adminRepository } from "../data/adminRepository";
+import { validateAttachmentFile } from "../../shared/attachmentUtils";
 import type { CreateAdminServiceRequestInput, ServiceRequestCategory } from "../../resident/data/types";
 
 type AdminServiceRequestModalProps = {
@@ -30,12 +31,36 @@ export function AdminServiceRequestModal({
   const [categories, setCategories] = useState<ServiceRequestCategory[]>([]);
   const [description, setDescription] = useState("");
   const [uploadSlots, setUploadSlots] = useState([1, 2, 3]);
+  const [slotFiles, setSlotFiles] = useState<Record<number, File>>({});
+  const [residentOptions, setResidentOptions] = useState<string[]>([""]);
   const [submitting, setSubmitting] = useState(false);
 
   const derivedUnit = resident.match(/(Unit\s*\d+)/i)?.[1]?.replace(/\s+/g, " ").trim() ?? "";
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setAssignedTo("All Admins");
+      setResident("");
+      setVisibility("Only Administrators");
+      setLocation("");
+      setContact("");
+      setPermissionToEnter("");
+      setPermissionNotes("");
+      setSeverity("");
+      setCategory("");
+      setCustomCategory("");
+      setDescription("");
+      setUploadSlots([1, 2, 3]);
+      setSlotFiles({});
+      return;
+    }
+    adminRepository.getUnitsUsersCurrent().then((rows) => {
+      const options = rows
+        .map((row) => `${row.unitLabel} - ${row.name}`)
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+      setResidentOptions(["", ...options]);
+    });
     adminRepository.getServiceCategories().then((items) => {
       const active = items.filter((item) => item.status === "active");
       setCategories(active);
@@ -67,22 +92,36 @@ export function AdminServiceRequestModal({
       return;
     }
     const resolvedCategory = category === "Other" ? customCategory.trim() : category;
+    const files = Object.values(slotFiles);
+    for (const file of files) {
+      const error = validateAttachmentFile(file);
+      if (error) {
+        alert(error);
+        return;
+      }
+    }
     setSubmitting(true);
-    await onSubmit({
-      assignedTo,
-      resident,
-      unit: derivedUnit || undefined,
-      visibility,
-      contact,
-      location,
-      permissionToEnter,
-      permissionNotes,
-      severity,
-      category: resolvedCategory,
-      description,
-    });
-    setSubmitting(false);
-    onClose();
+    try {
+      await onSubmit({
+        assignedTo,
+        resident,
+        unit: derivedUnit || undefined,
+        visibility,
+        contact,
+        location,
+        permissionToEnter,
+        permissionNotes,
+        severity,
+        category: resolvedCategory,
+        description,
+        files: files.length ? files : undefined,
+      });
+      onClose();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to submit service request.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -118,7 +157,7 @@ export function AdminServiceRequestModal({
               label="Resident *"
               value={resident}
               onChange={setResident}
-              options={["", "Unit 06 - Abimbola Akinkoye", "Unit 10 - Carol Zinger", "Unit 12 - Bill Hall"]}
+              options={residentOptions}
             />
             <SelectField
               label="Show Request to *"
@@ -202,7 +241,29 @@ export function AdminServiceRequestModal({
       </p>
       <div className="grid gap-3 p-3 sm:grid-cols-3">
         {uploadSlots.map((slot) => (
-          <FileUploadZone key={slot} />
+          <FileUploadZone
+            key={slot}
+            onFileSelect={(file) => {
+              setSlotFiles((current) => {
+                const next = { ...current };
+                if (file) next[slot] = file;
+                else delete next[slot];
+                return next;
+              });
+            }}
+            onRemove={
+              uploadSlots.length > 1
+                ? () => {
+                    setUploadSlots((s) => s.filter((x) => x !== slot));
+                    setSlotFiles((current) => {
+                      const next = { ...current };
+                      delete next[slot];
+                      return next;
+                    });
+                  }
+                : undefined
+            }
+          />
         ))}
       </div>
     </Modal>

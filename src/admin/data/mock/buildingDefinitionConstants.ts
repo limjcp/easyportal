@@ -75,15 +75,6 @@ export const CORPORATIONS = [
   { value: "YCC", label: "YCC - York Condominium Corporation" },
 ] as const;
 
-export const LINKED_BUILDINGS = [
-  { id: "2125709458", label: "WNCC47 - (WNCC 47) 49 Cedar... - Kitchener" },
-  { id: "2125709461", label: "WNCC127 - (WNCC 127) 54 Gre... - Kitchener" },
-  { id: "2125709897", label: "WNCC112 - (WNCC 112) 476 Ki... - Waterloo" },
-  { id: "2125710005", label: "WNCC147 - (WNCC 147) 10 Ell... - Kitchener" },
-  { id: "2125709952", label: "WNCC 150 - (WNCC 150) 49 McI... - Kitchener" },
-  { id: "2125709582", label: "WCC75 - (WCC75) 31 Greeng... - Guelph" },
-] as const;
-
 export const CANADIAN_PROVINCES = [
   "Alberta",
   "British Columbia",

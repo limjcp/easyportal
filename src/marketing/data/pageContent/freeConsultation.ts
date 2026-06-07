@@ -1,15 +1,16 @@
 import type { MarketingPageContent } from "./types";
 
 export const freeConsultationPageContent: MarketingPageContent = {
-  pageTitle: "Free Consultation",
-  pageIntro: "A confidential conversation for boards evaluating management performance, transition risk, or operational challenges.",
+  pageTitle: "Free Condo Second Opinion",
+  pageIntro:
+    "A confidential, no-pressure review for boards evaluating management performance, transition risk, or operational challenges.",
   blocks: [
     {
       kind: "hero",
       eyebrow: "We Hear You",
-      title: "Discuss your community's situation with a team that listens first.",
+      title: "Get a free second opinion on your condominium management.",
       subtitle:
-        "You do not need to have every detail solved before reaching out. We will help you frame the problem and identify your best path forward.",
+        "Answer a few quick questions below. You do not need every detail solved before reaching out — we will help you frame the problem and identify your best path forward.",
     },
     {
       kind: "section",

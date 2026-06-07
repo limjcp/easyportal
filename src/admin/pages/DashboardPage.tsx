@@ -5,6 +5,14 @@ import type { AdminRoute } from "../navigation";
 import type { BoardMember } from "../../resident/data/types";
 import { formatDisplayDate, isTermExpiringSoon } from "../../resident/data/fireSafetyUtils";
 
+type DashboardSummary = {
+  buildingName: string;
+  buildingAddress: string;
+  unitsCount: number;
+  floorCount: number;
+  usersCount: number;
+};
+
 type DashboardPageProps = {
   onNavigate: (route: AdminRoute) => void;
   unreadSuggestions: number;
@@ -21,9 +29,11 @@ export function DashboardPage({
   unreadConsultationLeads,
 }: DashboardPageProps) {
   const [boardMembers, setBoardMembers] = useState<BoardMember[]>([]);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
 
   useEffect(() => {
     adminRepository.getBoardMembers().then(setBoardMembers);
+    adminRepository.getDashboardSummary().then(setSummary);
   }, []);
 
   return (
@@ -97,13 +107,15 @@ export function DashboardPage({
         >
           <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/20 to-transparent" />
           <div className="absolute inset-x-0 bottom-4 px-4 text-center text-white">
-            <p className="text-[15px] font-semibold leading-tight">(WNCC 87) 236 Kingswood Drive</p>
+            <p className="text-[15px] font-semibold leading-tight">
+              {summary?.buildingAddress ?? "Loading building…"}
+            </p>
           </div>
         </div>
         <div className="grid grid-cols-3 divide-x divide-slate-200 text-center">
-          <StatItem label="Units" value="14" />
-          <StatItem label="Areas/ Floors" value="2" />
-          <StatItem label="Users" value="18" />
+          <StatItem label="Units" value={String(summary?.unitsCount ?? "—")} />
+          <StatItem label="Areas/ Floors" value={String(summary?.floorCount ?? "—")} />
+          <StatItem label="Users" value={String(summary?.usersCount ?? "—")} />
         </div>
       </div>
     </div>

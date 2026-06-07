@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { FaCloudUploadAlt } from "react-icons/fa";
+import { useAuth } from "../auth/AuthProvider";
+import { ensureActiveBuildingForUser, getActiveBuildingId } from "../data/supabase/buildingContext";
 import { Modal } from "../shared/Modal";
-import { PortalConfigProvider } from "./context/PortalConfigContext";
-import { getPortalConfig } from "./data/portalConfig";
+import { PortalConfigProvider, usePortalConfig } from "./context/PortalConfigContext";
 import { ResidentLayout } from "./ResidentLayout";
 import { residentRepo } from "./data/mockRepository";
 import { IncidentReportModal } from "./modals/IncidentReportModal";
@@ -31,6 +32,7 @@ import { ElectionVotePage } from "./pages/ElectionVotePage";
 import { PollsPage } from "./pages/PollsPage";
 import { FireSafetyPlanPage } from "./pages/FireSafetyPlanPage";
 import { ResidentChatPage } from "./pages/ResidentChatPage";
+import { AmenityBookingsPage } from "./pages/AmenityBookingsPage";
 import { routePageToDetailSection } from "./data/residentDetailConfig";
 
 type ResidentPortalProps = {
@@ -39,8 +41,37 @@ type ResidentPortalProps = {
 };
 
 export function ResidentPortal({ onSwitchToAdmin, onLogout }: ResidentPortalProps) {
+  const auth = useAuth();
+  const [buildingKey, setBuildingKey] = useState<string | null>(() => getActiveBuildingId());
+  const [buildingError, setBuildingError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!auth.session?.user) return;
+    let cancelled = false;
+    ensureActiveBuildingForUser(auth.session.user.id)
+      .then((id) => {
+        if (!cancelled) setBuildingKey(id);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setBuildingError(err instanceof Error ? err.message : "Failed to load building context.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.session?.user?.id]);
+
+  if (buildingError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#e7edf3] px-4 text-center text-red-700">
+        {buildingError}
+      </div>
+    );
+  }
+
   return (
-    <PortalConfigProvider>
+    <PortalConfigProvider buildingKey={buildingKey}>
       <ResidentPortalInner onSwitchToAdmin={onSwitchToAdmin} onLogout={onLogout} />
     </PortalConfigProvider>
   );
@@ -48,7 +79,8 @@ export function ResidentPortal({ onSwitchToAdmin, onLogout }: ResidentPortalProp
 
 function ResidentPortalInner({ onSwitchToAdmin, onLogout }: ResidentPortalProps) {
   const [route, setRoute] = useState<ResidentRoute>({ page: "home" });
-  const themeColor = getPortalConfig().publicPortalSettings.portalThemeColor;
+  const { publicPortalSettings } = usePortalConfig();
+  const themeColor = publicPortalSettings.portalThemeColor;
   const [profileOpen, setProfileOpen] = useState(false);
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [incidentModalOpen, setIncidentModalOpen] = useState(false);
@@ -220,7 +252,7 @@ function renderPage(
 ) {
   switch (route.page) {
     case "home":
-      return <HomePage onNavigate={onNavigate} />;
+      return <HomePage onNavigate={onNavigate} badgeRefreshKey={refreshKey} />;
     case "news":
       return <NewsPage onNavigate={onNavigate} />;
     case "news-detail":
@@ -273,6 +305,8 @@ function renderPage(
       return <FireSafetyPlanPage />;
     case "chat":
       return <ResidentChatPage />;
+    case "amenity-bookings":
+      return <AmenityBookingsPage refreshKey={refreshKey} />;
     default:
       return <HomePage onNavigate={onNavigate} />;
   }

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { FaFolderOpen, FaTimes } from "react-icons/fa";
 
 type FileUploadZoneProps = {
@@ -9,13 +9,26 @@ type FileUploadZoneProps = {
 
 export function FileUploadZone({ onFileSelect, onRemove }: FileUploadZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [selectedName, setSelectedName] = useState<string | null>(null);
+
+  const handleFileChange = (file: File | null) => {
+    setSelectedName(file?.name ?? null);
+    onFileSelect?.(file);
+  };
+
+  const handleRemove = () => {
+    setSelectedName(null);
+    if (inputRef.current) inputRef.current.value = "";
+    onFileSelect?.(null);
+    onRemove?.();
+  };
 
   return (
     <div className="relative rounded border border-dashed border-slate-300 bg-slate-50 p-4 text-center">
       {onRemove && (
         <button
           type="button"
-          onClick={onRemove}
+          onClick={handleRemove}
           className="absolute right-1 top-1 rounded p-0.5 text-slate-400 hover:text-slate-600"
           aria-label="Remove"
         >
@@ -26,8 +39,9 @@ export function FileUploadZone({ onFileSelect, onRemove }: FileUploadZoneProps) 
       <input
         ref={inputRef}
         type="file"
+        accept="image/*,application/pdf"
         className="hidden"
-        onChange={(e) => onFileSelect?.(e.target.files?.[0] ?? null)}
+        onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
       />
       <button
         type="button"
@@ -37,6 +51,9 @@ export function FileUploadZone({ onFileSelect, onRemove }: FileUploadZoneProps) 
         <FaFolderOpen />
         Browse
       </button>
+      {selectedName ? (
+        <p className="mt-2 truncate text-xs font-medium text-slate-700">Selected: {selectedName}</p>
+      ) : null}
     </div>
   );
 }

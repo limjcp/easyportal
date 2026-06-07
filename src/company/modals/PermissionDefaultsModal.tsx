@@ -22,9 +22,18 @@ export function PermissionDefaultsModal({ open, onClose, onSaved }: PermissionDe
   const [role, setRole] = useState<CompanyRole>("Company Administrator");
   const [permissions, setPermissions] = useState<PermissionModuleRow[]>([]);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) companyRepository.getRolePermissions(role).then(setPermissions);
+    if (!open) return;
+    setLoadError(null);
+    companyRepository
+      .getRolePermissions(role)
+      .then(setPermissions)
+      .catch((err) => {
+        setPermissions([]);
+        setLoadError(err instanceof Error ? err.message : "Failed to load permission defaults.");
+      });
   }, [open, role]);
 
   const toggleAll = (value: boolean) => {
@@ -90,6 +99,13 @@ export function PermissionDefaultsModal({ open, onClose, onSaved }: PermissionDe
           ))}
         </select>
       </label>
+      {loadError ? (
+        <div className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {loadError.includes("schema cache") || loadError.includes("Could not find the table")
+            ? "Permissions tables are not migrated yet. Run `bun run db:push` and reload the page."
+            : loadError}
+        </div>
+      ) : null}
       <div className="mb-2 flex gap-4 text-sm">
         <button type="button" onClick={() => toggleAll(true)} className="text-[#3476ef] hover:underline">
           Select All

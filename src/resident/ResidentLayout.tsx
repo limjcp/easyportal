@@ -1,14 +1,15 @@
+import { useEffect, useState, type ReactNode } from "react";
 import { FaFacebookF, FaInstagram, FaTwitter, FaYoutube } from "react-icons/fa";
+import { useAuth } from "../auth/AuthProvider";
+import { getActiveBuildingId } from "../data/supabase/buildingContext";
 import { MvpLogo } from "../shared/MvpLogo";
+import { normalizeExternalUrl } from "../shared/urlUtils";
 import { ResidentNav } from "./components/ResidentNav";
 import { UserMenu } from "./components/UserMenu";
 import { usePortalConfig } from "./context/PortalConfigContext";
 import { getResidentBackgroundImage } from "./data/portalConfig";
+import { residentRepo } from "./data/mockRepository";
 import type { ResidentRoute } from "./navigation";
-import type { ReactNode } from "react";
-
-const BUILDING_ADDRESS = "(WNCC 87) 236 Kingswood Drive Kitchener Ontario N2E 2K2";
-
 type ResidentLayoutProps = {
   route: ResidentRoute;
   onNavigate: (route: ResidentRoute) => void;
@@ -31,8 +32,10 @@ export function ResidentLayout({
   fullWidth,
 }: ResidentLayoutProps) {
   const { publicPortalSettings, portalTileSettings } = usePortalConfig();
+  const auth = useAuth();
   const themeColor = publicPortalSettings.portalThemeColor;
   const bg = getResidentBackgroundImage();
+  const showBuildingAdmin = auth.portalAccess?.portals.includes("building") ?? false;
 
   return (
     <div
@@ -48,6 +51,7 @@ export function ResidentLayout({
           twitterUrl={publicPortalSettings.twitterUrl}
           youTubeUrl={publicPortalSettings.youTubeUrl}
           themeColor={themeColor}
+          showBuildingAdmin={showBuildingAdmin}
         />
         <Header onOpenProfile={onOpenProfile} onLogout={onLogout} logoUrl={publicPortalSettings.buildingLogoUrl} />
         <ResidentNav route={route} onNavigate={onNavigate} rightAction={navAction} />
@@ -94,6 +98,7 @@ function UtilityBar({
   twitterUrl,
   youTubeUrl,
   themeColor,
+  showBuildingAdmin,
 }: {
   onSwitchToAdmin: () => void;
   facebookUrl: string;
@@ -101,38 +106,41 @@ function UtilityBar({
   twitterUrl: string;
   youTubeUrl: string;
   themeColor: string;
+  showBuildingAdmin: boolean;
 }) {
   return (
-    <div className="bg-[#1b1d20]/95">
+    <div className="sticky top-0 z-50 bg-[#1b1d20]/95">
       <div className="mx-auto flex max-w-[1500px] items-center justify-end gap-4 px-4 py-3 text-sm text-white/80 sm:px-6">
         {twitterUrl && (
-          <a href={twitterUrl} target="_blank" rel="noreferrer" className="transition hover:text-white" aria-label="Twitter">
+          <a href={normalizeExternalUrl(twitterUrl)} target="_blank" rel="noreferrer" className="transition hover:text-white" aria-label="Twitter">
             <FaTwitter />
           </a>
         )}
         {facebookUrl && (
-          <a href={facebookUrl} target="_blank" rel="noreferrer" className="transition hover:text-white" aria-label="Facebook">
+          <a href={normalizeExternalUrl(facebookUrl)} target="_blank" rel="noreferrer" className="transition hover:text-white" aria-label="Facebook">
             <FaFacebookF />
           </a>
         )}
         {instaUrl && (
-          <a href={instaUrl} target="_blank" rel="noreferrer" className="transition hover:text-white" aria-label="Instagram">
+          <a href={normalizeExternalUrl(instaUrl)} target="_blank" rel="noreferrer" className="transition hover:text-white" aria-label="Instagram">
             <FaInstagram />
           </a>
         )}
         {youTubeUrl && (
-          <a href={youTubeUrl} target="_blank" rel="noreferrer" className="transition hover:text-white" aria-label="YouTube">
+          <a href={normalizeExternalUrl(youTubeUrl)} target="_blank" rel="noreferrer" className="transition hover:text-white" aria-label="YouTube">
             <FaYoutube />
           </a>
         )}
-        <button
-          type="button"
-          onClick={onSwitchToAdmin}
-          className="inline-flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:opacity-90 sm:text-sm"
-          style={{ backgroundColor: themeColor }}
-        >
-          Building Admin
-        </button>
+        {showBuildingAdmin ? (
+          <button
+            type="button"
+            onClick={onSwitchToAdmin}
+            className="inline-flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:opacity-90 sm:text-sm"
+            style={{ backgroundColor: themeColor }}
+          >
+            Building Admin
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -147,6 +155,35 @@ function Header({
   onLogout: () => void;
   logoUrl?: string;
 }) {
+  const auth = useAuth();
+  const activeBuildingId = getActiveBuildingId();
+  const [userName, setUserName] = useState("…");
+  const [unit, setUnit] = useState("…");
+  const [buildingName, setBuildingName] = useState("Loading…");
+  const [buildingAddress, setBuildingAddress] = useState("");
+
+  useEffect(() => {
+    if (!auth.session?.user || !activeBuildingId) return;
+    residentRepo
+      .getUser()
+      .then((user) => {
+        setUserName(user.name);
+        setUnit(user.unit || "—");
+        setBuildingName(user.buildingName || "Building");
+        setBuildingAddress(user.buildingAddress ?? "");
+      })
+      .catch(() => {
+        setUserName("Resident");
+        setUnit("—");
+        setBuildingName("Building");
+        setBuildingAddress("");
+      });
+  }, [auth.session?.user?.id, activeBuildingId]);
+
+  const headerSubtitle = buildingAddress
+    ? `${buildingName} — ${buildingAddress}`
+    : buildingName;
+
   return (
     <div className="bg-white/95 shadow-[0_1px_0_rgba(0,0,0,0.08)]">
       <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4 px-4 py-4 sm:px-6">
@@ -157,15 +194,24 @@ function Header({
             <MvpLogo featured />
           )}
         </div>
-        <div className="hidden flex-1 px-4 text-center text-sm text-slate-500 md:block md:text-base">
-          {BUILDING_ADDRESS}
+        <div className="hidden flex-1 flex-col px-4 text-center md:block">
+          <div className="text-base font-semibold text-slate-700">{buildingName}</div>
+          {buildingAddress ? (
+            <div className="text-sm text-slate-500">{buildingAddress}</div>
+          ) : null}
         </div>
         <div className="shrink-0">
-          <UserMenu userName="Claudio" unit="102" onProfile={onOpenProfile} onLogout={onLogout} />
+          <UserMenu
+            userName={userName}
+            buildingName={buildingName}
+            unit={unit}
+            onProfile={onOpenProfile}
+            onLogout={onLogout}
+          />
         </div>
       </div>
-      <div className="border-t border-slate-100 px-4 pb-3 text-center text-sm text-slate-500 md:hidden">
-        {BUILDING_ADDRESS}
+      <div className="border-t border-slate-100 px-4 pb-3 text-center md:hidden">
+        <div className="text-sm font-semibold text-slate-700">{headerSubtitle}</div>
       </div>
     </div>
   );

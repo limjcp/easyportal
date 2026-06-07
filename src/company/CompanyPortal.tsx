@@ -17,6 +17,7 @@ type CompanyPortalProps = {
   activeBuilding: CompanyBuilding | null;
   onOpenBuilding: (building: CompanyBuilding) => void;
   onCloseBuilding: () => void;
+  onOpenResidentPortal?: () => void;
   onLogout: () => void;
 };
 
@@ -24,6 +25,7 @@ export function CompanyPortal({
   activeBuilding,
   onOpenBuilding,
   onCloseBuilding,
+  onOpenResidentPortal,
   onLogout,
 }: CompanyPortalProps) {
   const [route, setRoute] = useState<CompanyRoute>({ page: "buildings" });
@@ -47,7 +49,13 @@ export function CompanyPortal({
   }, []);
 
   const handleOpenResidentPortal = () => {
-    window.open("https://mvpcondos.com/demo-resident", "_blank", "noopener,noreferrer");
+    if (onOpenResidentPortal) {
+      onOpenResidentPortal();
+      return;
+    }
+    if (activeBuilding) {
+      onOpenBuilding(activeBuilding);
+    }
   };
 
   if (!user) {
@@ -90,7 +98,7 @@ export function CompanyPortal({
           {route.page === "purchase-orders" && (
             <PurchaseOrdersPage route={route} onNavigate={setRoute} onRefresh={bumpRefresh} />
           )}
-          {route.page === "chat" && <CompanyChatPage user={user} />}
+          {route.page === "chat" && <CompanyChatPage user={user} buildings={buildings} />}
           {route.page === "account" && <AccountPage route={route} onNavigate={setRoute} />}
         </>
       )}

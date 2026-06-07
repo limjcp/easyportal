@@ -1,0 +1,23 @@
+export const pe = {
+  eyebrow: "text-xs tracking-[0.3em] uppercase",
+  eyebrowSm: "text-xs tracking-[0.15em] uppercase",
+  eyebrowWide: "text-xs tracking-[0.2em] uppercase",
+  caption: "text-sm tracking-[0.1em]",
+  body: "text-base leading-[1.75]",
+  bodySm: "text-sm leading-[1.75]",
+  link: "text-base tracking-wide",
+  linkAction: "text-xs tracking-[0.2em] uppercase",
+  heroTitle:
+    "text-[clamp(2.75rem,7vw,6.25rem)] font-extralight leading-[1.05] tracking-[-0.03em] text-balance",
+  pageTitle: "text-4xl md:text-[3.25rem] lg:text-[3.75rem] font-extralight tracking-tight text-balance",
+  sectionTitle: "text-4xl md:text-[3.25rem] font-extralight tracking-tight",
+  sectionTitleLg: "text-4xl md:text-5xl lg:text-[3.25rem] font-extralight leading-[1.15] tracking-tight text-balance",
+  cardTitle: "text-xl md:text-2xl font-light tracking-tight",
+  cardTitleLg: "text-2xl md:text-3xl font-extralight tracking-tight",
+  quote: "text-2xl md:text-3xl lg:text-[2rem] font-extralight leading-[1.35] tracking-tight text-balance",
+  listTitle: "text-lg md:text-xl font-light tracking-tight",
+  stat: "text-4xl md:text-5xl font-extralight tracking-tight",
+  mobileNav: "text-3xl font-light tracking-tight",
+  iconSm: "h-4 w-4",
+  iconMd: "h-5 w-5",
+} as const;

@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { residentRepo } from "../data/mockRepository";
-import type { AgmMeeting, Poll, PollAttachment } from "../data/types";
+import type { AgmMeeting, Poll, PollAttachment, PollResponse } from "../data/types";
+import { parsePollAnswerOptions } from "../../shared/pollUtils";
 
 function PollAttachmentViewer({ attachment }: { attachment: PollAttachment }) {
   return (
@@ -32,8 +33,18 @@ export function PollsPage() {
   const [activePollId, setActivePollId] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<PollAttachment[]>([]);
   const [agmMeeting, setAgmMeeting] = useState<AgmMeeting | null>(null);
+  const [responses, setResponses] = useState<PollResponse[]>([]);
+  const [selectedByQuestion, setSelectedByQuestion] = useState<Record<string, string>>({});
+  const [submittingQuestionId, setSubmittingQuestionId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const activePoll = polls.find((poll) => poll.id === activePollId) ?? null;
+  const responseByQuestion = Object.fromEntries(responses.map((response) => [response.questionId, response]));
+
+  const loadResponses = useCallback(async (pollId: string) => {
+    const items = await residentRepo.getPollResponsesForPoll(pollId);
+    setResponses(items);
+  }, []);
 
   useEffect(() => {
     residentRepo.getPollsForResident().then((items) => {
@@ -45,10 +56,14 @@ export function PollsPage() {
   useEffect(() => {
     if (!activePollId) {
       setAttachments([]);
+      setResponses([]);
       return;
     }
     residentRepo.getPollAttachments(activePollId).then(setAttachments);
-  }, [activePollId]);
+    void loadResponses(activePollId);
+    setSelectedByQuestion({});
+    setError(null);
+  }, [activePollId, loadResponses]);
 
   useEffect(() => {
     if (!activePoll?.agmMeetingId) {
@@ -57,6 +72,34 @@ export function PollsPage() {
     }
     residentRepo.getAgmMeetingById(activePoll.agmMeetingId).then(setAgmMeeting);
   }, [activePoll?.agmMeetingId]);
+
+  const handleSubmitAnswer = async (questionId: string) => {
+    if (!activePoll) return;
+    const selectedOption = selectedByQuestion[questionId];
+    if (!selectedOption) {
+      setError("Please select an answer.");
+      return;
+    }
+    setSubmittingQuestionId(questionId);
+    setError(null);
+    try {
+      await residentRepo.submitPollResponse({
+        pollId: activePoll.id,
+        questionId,
+        selectedOption,
+      });
+      await loadResponses(activePoll.id);
+      setSelectedByQuestion((prev) => {
+        const next = { ...prev };
+        delete next[questionId];
+        return next;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to submit answer.");
+    } finally {
+      setSubmittingQuestionId(null);
+    }
+  };
 
   if (polls.length === 0) {
     return (
@@ -105,6 +148,10 @@ export function PollsPage() {
                 </p>
               </header>
 
+              {error && (
+                <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+              )}
+
               {agmMeeting && (
                 <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-slate-700">
                   <p className="font-medium">Linked AGM: {agmMeeting.title}</p>
@@ -121,16 +168,72 @@ export function PollsPage() {
                 {activePoll.questions.length === 0 ? (
                   <p className="text-sm text-slate-500">No questions available yet.</p>
                 ) : (
-                  <ol className="space-y-2 text-sm text-slate-700">
+                  <div className="space-y-4">
                     {activePoll.questions
                       .slice()
                       .sort((a, b) => a.sortOrder - b.sortOrder)
-                      .map((question) => (
-                        <li key={question.id} className="rounded border border-slate-200 px-3 py-2">
-                          {question.sortOrder}. {question.question}
-                        </li>
-                      ))}
-                  </ol>
+                      .map((question) => {
+                        const options = parsePollAnswerOptions(question);
+                        const existing = responseByQuestion[question.id];
+
+                        return (
+                          <div
+                            key={question.id}
+                            className="rounded border border-slate-200 px-4 py-3"
+                          >
+                            <p className="font-medium text-slate-800">
+                              {question.sortOrder}. {question.question}
+                            </p>
+
+                            {existing ? (
+                              <p className="mt-3 text-sm text-slate-700">
+                                You selected: <strong>{existing.selectedOption}</strong>
+                              </p>
+                            ) : options.length === 0 ? (
+                              <p className="mt-3 text-sm text-slate-500">
+                                This question has no answer choices yet.
+                              </p>
+                            ) : (
+                              <div className="mt-3 space-y-2">
+                                {options.map((option) => (
+                                  <label
+                                    key={option}
+                                    className="flex cursor-pointer items-center gap-3 rounded border border-slate-200 px-3 py-2 hover:bg-slate-50"
+                                  >
+                                    <input
+                                      type="radio"
+                                      name={`poll-question-${question.id}`}
+                                      value={option}
+                                      checked={selectedByQuestion[question.id] === option}
+                                      onChange={() =>
+                                        setSelectedByQuestion((prev) => ({
+                                          ...prev,
+                                          [question.id]: option,
+                                        }))
+                                      }
+                                    />
+                                    <span className="text-sm text-slate-800">{option}</span>
+                                  </label>
+                                ))}
+                                <button
+                                  type="button"
+                                  disabled={
+                                    submittingQuestionId === question.id ||
+                                    !selectedByQuestion[question.id]
+                                  }
+                                  onClick={() => void handleSubmitAnswer(question.id)}
+                                  className="mt-2 rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                                >
+                                  {submittingQuestionId === question.id
+                                    ? "Submitting..."
+                                    : "Submit answer"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
                 )}
               </section>
 

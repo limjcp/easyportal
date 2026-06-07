@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FaChevronDown, FaSignOutAlt, FaUser, FaUserCircle } from "react-icons/fa";
 import { MvpLogo } from "../shared/MvpLogo";
 import { Modal } from "../shared/Modal";
 import { cn } from "../utils/cn";
 import { AdminProfileModal } from "./modals/AdminProfileModal";
-import { adminNavItems, formatBuildingOptionLabel, isNavActive } from "./navigation";
+import { adminNavItems, filterAdminNavItems, formatBuildingOptionLabel, isNavActive } from "./navigation";
+import { adminRepository } from "./data/adminRepository";
 import type { AdminUser, CompanyBuilding } from "../resident/data/types";
 import type { AdminRoute } from "./navigation";
 
@@ -21,6 +22,7 @@ type AdminLayoutProps = {
   onBackToCompany?: () => void;
   onCloseBuilding?: () => void;
   embedded?: boolean;
+  navAccess?: Map<string, boolean> | null;
   children: ReactNode;
 };
 
@@ -37,15 +39,21 @@ export function AdminLayout({
   onBackToCompany,
   onCloseBuilding,
   embedded = false,
+  navAccess = null,
   children,
 }: AdminLayoutProps) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileUser, setProfileUser] = useState<Pick<AdminUser, "displayName" | "title">>({
-    displayName: "Claudio Owner - Board Member",
-    title: "Board Member",
+    displayName: "Loading…",
+    title: "",
   });
+  const [resolvedBuildingLabel, setResolvedBuildingLabel] = useState<string | null>(null);
+  const visibleNavItems = useMemo(
+    () => filterAdminNavItems(adminNavItems, navAccess),
+    [navAccess]
+  );
   const menuRef = useRef<HTMLDivElement>(null);
 
   const closeBuilding = onCloseBuilding ?? onBackToCompany;
@@ -61,12 +69,35 @@ export function AdminLayout({
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [menuOpen]);
 
+  useEffect(() => {
+    adminRepository
+      .getAdminUser()
+      .then((user) => setProfileUser({ displayName: user.displayName, title: user.title }))
+      .catch(() => setProfileUser({ displayName: "Admin", title: "" }));
+  }, []);
+
+  useEffect(() => {
+    if (buildingLabel) {
+      setResolvedBuildingLabel(null);
+      return;
+    }
+    adminRepository
+      .getBuildingDefinition()
+      .then((definition) => {
+        const line = [definition.condoName, definition.address, definition.city].filter(Boolean).join(" — ");
+        setResolvedBuildingLabel(line || "Building");
+      })
+      .catch(() => setResolvedBuildingLabel("Building"));
+  }, [buildingLabel]);
+
+  const displayBuildingLabel = buildingLabel ?? resolvedBuildingLabel ?? "Loading…";
+
   const openProfile = () => {
     setMenuOpen(false);
     setProfileOpen(true);
   };
 
-  const showBuildingSelect = embedded && buildings && buildings.length > 0 && onSwitchBuilding;
+  const showBuildingSelect = Boolean(buildings && buildings.length > 0 && onSwitchBuilding);
   const residentPortalAction = embedded ? onOpenResidentPortal : onSwitchToResident;
 
   const buildingBar = (
@@ -90,9 +121,7 @@ export function AdminLayout({
           </select>
         ) : (
           <div className="flex min-w-[200px] flex-1 items-center justify-between rounded border border-black/20 bg-white px-3 py-1.5 text-[#424242] shadow-inner">
-            <span className="truncate text-sm">
-              {buildingLabel ?? "(WNCC 87) 236 Kingswood Drive - WNCC87"}
-            </span>
+            <span className="truncate text-sm">{displayBuildingLabel}</span>
             <FaChevronDown className="shrink-0 text-[10px] text-slate-400" />
           </div>
         )}
@@ -132,7 +161,7 @@ export function AdminLayout({
   const sidebarAndContent = (
     <div className="flex min-w-0 flex-col lg:flex-row lg:items-start">
       <aside className="h-fit w-full shrink-0 self-start border-r border-slate-300 bg-[#8d8d8d] lg:w-[182px]">
-        {adminNavItems.map(({ id, label, icon: Icon, route: navRoute, dividerBefore }) => (
+        {visibleNavItems.map(({ id, label, icon: Icon, route: navRoute, dividerBefore }) => (
           <div key={id}>
             {dividerBefore && <hr className="border-0 border-t border-white/25" />}
             <button

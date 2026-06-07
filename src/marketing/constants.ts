@@ -1,0 +1,26 @@
+export const DEFAULT_HERO_IMAGE =
+  "https://images.unsplash.com/photo-1487958449943-2429e8be8625?w=1920&q=80";
+
+export const EDITORIAL_HERO_PAGES = [
+  "home",
+  "home-1",
+  "inside-mvp",
+  "contact-us",
+  "free-consultation",
+  "better-bookkeeping",
+  "ebook",
+  "the-common-element",
+] as const;
+
+export const EDITORIAL_FULL_BLEED_PAGES = [
+  "home",
+  "home-1",
+  "inside-mvp",
+  "contact-us",
+  "faq",
+  "free-consultation",
+  "better-bookkeeping",
+  "privacy-policy",
+  "ebook",
+  "the-common-element",
+] as const;

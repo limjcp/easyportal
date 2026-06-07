@@ -11,7 +11,6 @@ import {
 } from "react-icons/fa";
 import type {
   PortalModuleConfig,
-  ProfileFieldOption,
   ResidentDetailSection,
 } from "./types";
 
@@ -174,14 +173,8 @@ export function getDetailSectionConfig(section: ResidentDetailSection): DetailSe
   return config;
 }
 
-export function isDetailTileVisible(
-  module: PortalModuleConfig,
-  profileFields: ProfileFieldOption[]
-): boolean {
-  if (!module.enabled || !module.tileLabel) return false;
-  const fieldKey = DETAIL_TILE_LABEL_TO_FIELD[module.tileLabel];
-  if (!fieldKey) return true;
-  return profileFields.find((f) => f.fieldKey === fieldKey)?.show ?? false;
+export function isDetailTileVisible(module: PortalModuleConfig): boolean {
+  return Boolean(module.enabled && module.tileLabel);
 }
 
 export function routePageToDetailSection(page: string): ResidentDetailSection | null {

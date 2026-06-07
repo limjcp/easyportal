@@ -1,19 +1,27 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatActor, ChatContact, ChatMessage } from "../../resident/data/types";
 import { chatRepository } from "../data/chatRepository";
+import { formatChatTime } from "../utils/formatChatTime";
 
 type ChatThreadProps = {
   conversationId: string;
   actor: ChatActor;
   participants: ChatContact[];
   onMessageSent: () => void;
+  onIncomingMessage?: () => void;
 };
 
-export function ChatThread({ conversationId, actor, participants, onMessageSent }: ChatThreadProps) {
+export function ChatThread({
+  conversationId,
+  actor,
+  participants,
+  onMessageSent,
+  onIncomingMessage,
+}: ChatThreadProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
 
   const load = () => {
     chatRepository.getMessages(conversationId, actor).then(setMessages);
@@ -22,10 +30,20 @@ export function ChatThread({ conversationId, actor, participants, onMessageSent 
 
   useEffect(() => {
     load();
-  }, [conversationId, actor.contactId]);
+    const unsubscribe =
+      typeof chatRepository.subscribeToMessages === "function"
+        ? chatRepository.subscribeToMessages(conversationId, (message) => {
+            setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
+            onIncomingMessage?.();
+          })
+        : undefined;
+    return () => unsubscribe?.();
+  }, [conversationId, actor.contactId, onIncomingMessage]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = messagesRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
   const handleSend = async (e: React.FormEvent) => {
@@ -47,8 +65,8 @@ export function ChatThread({ conversationId, actor, participants, onMessageSent 
     (senderId === actor.contactId ? actor.name : "Unknown");
 
   return (
-    <div className="flex h-full min-h-[320px] flex-col">
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+    <div className="flex max-h-[480px] min-h-[320px] flex-col">
+      <div ref={messagesRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         {messages.length === 0 && (
           <p className="text-center text-sm text-slate-500">No messages yet. Say hello!</p>
         )}
@@ -66,13 +84,12 @@ export function ChatThread({ conversationId, actor, participants, onMessageSent 
                 )}
                 <p className="whitespace-pre-wrap">{m.body}</p>
                 <p className={`mt-1 text-[10px] ${mine ? "text-white/70" : "text-slate-400"}`}>
-                  {m.createdAt}
+                  {formatChatTime(m.createdAt)}
                 </p>
               </div>
             </div>
           );
         })}
-        <div ref={bottomRef} />
       </div>
       <form onSubmit={handleSend} className="flex gap-2 border-t border-slate-200 p-3">
         <input
@@ -80,7 +97,7 @@ export function ChatThread({ conversationId, actor, participants, onMessageSent 
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Type a message…"
-          className="flex-1 rounded border border-slate-300 px-3 py-2 text-sm"
+          className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 text-sm text-black"
         />
         <button
           type="submit"

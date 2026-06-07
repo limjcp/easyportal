@@ -52,12 +52,11 @@ import type {
   ElectionBallot,
   ParkingRequest,
   ConsultationSubmission,
-} from "./types";
+} from "../../resident/data/types";
 import { seedAdminNews } from "../../admin/data/mock/adminNews";
 import { seedAdminNewsletters } from "../../admin/data/mock/adminNewsletters";
 import { seedAdminServiceRequests } from "../../admin/data/mock/adminServiceRequests";
 import { seedAdminSuggestions } from "../../admin/data/mock/adminSuggestions";
-import { seedAdminIncidentReports } from "../../admin/data/mock/adminIncidentReports";
 import { seedBoardApprovals } from "../../admin/data/mock/boardApprovals";
 import { seedBuildingDefinition } from "../../admin/data/mock/buildingDefinition";
 import { seedBuildingLockers } from "../../admin/data/mock/buildingLockers";
@@ -67,8 +66,6 @@ import { seedBuildingTaxSettings } from "../../admin/data/mock/buildingTaxSettin
 import { seedBuildingUnitGroups } from "../../admin/data/mock/buildingUnitGroups";
 import { seedBuildingUnits } from "../../admin/data/mock/buildingUnits";
 import { seedGalleryAlbums } from "../../admin/data/mock/galleryAlbums";
-import { seedIncidentCategories } from "../../admin/data/mock/incidentCategories";
-import { seedIncidentContactEmails } from "../../admin/data/mock/incidentContactEmails";
 import { seedCustomPortalTiles, seedPortalModules, seedPortalTileSettings } from "../../admin/data/mock/portalModules";
 import { seedPortalImages } from "../../admin/data/mock/portalImages";
 import { seedBuildingAdmins } from "../../admin/data/mock/buildingAdmins";
@@ -89,21 +86,21 @@ import {
   seedElectionCandidates,
   seedElectionPositions,
 } from "../../admin/data/mock/boardElections";
-import { seedStatusCertificates } from "./mock/statusCertificates";
+import { seedStatusCertificates } from "../../resident/data/mock/statusCertificates";
 import { seedAdminDocuments } from "../../admin/data/mock/adminDocuments";
 import { seedDocumentFolders } from "../../admin/data/mock/documentFolders";
 import { seedAdminEvents } from "../../admin/data/mock/adminEvents";
-import { seedRsvps } from "./mock/events";
-import { seedResidentDetails } from "./mock/residentDetails";
-import { seedBoardMembers } from "./mock/boardMembers";
-import { seedBoardMemberApplications } from "./mock/boardMemberApplications";
-import { seedBoardFaqs } from "./mock/boardFaqs";
-import { seedFireSafetySubmissions } from "./mock/fireSafetySubmissions";
-import { seedNotificationPreferences, seedUser } from "./mock/user";
+import { seedRsvps } from "../../resident/data/mock/events";
+import { seedResidentDetails } from "../../resident/data/mock/residentDetails";
+import { seedBoardMembers } from "../../resident/data/mock/boardMembers";
+import { seedBoardMemberApplications } from "../../resident/data/mock/boardMemberApplications";
+import { seedBoardFaqs } from "../../resident/data/mock/boardFaqs";
+import { seedFireSafetySubmissions } from "../../resident/data/mock/fireSafetySubmissions";
+import { seedNotificationPreferences, seedUser } from "../../resident/data/mock/user";
 import { seedAdminNotificationPreferences, seedAdminUser } from "../../admin/data/mock/adminUser";
-import { seedParkingRequests } from "./mock/parkingRequests";
-import type { ArrangeTile } from "./portalTileLayout";
-import { DEFAULT_PRIMARY_TILE_LIMIT, normalizePortalLayout } from "./portalTileLayout";
+import { seedParkingRequests } from "../../resident/data/mock/parkingRequests";
+import type { ArrangeTile } from "../../resident/data/portalTileLayout";
+import { DEFAULT_PRIMARY_TILE_LIMIT, normalizePortalLayout } from "../../resident/data/portalTileLayout";
 
 export const seedFaqs: FaqItem[] = [
   {
@@ -131,9 +128,9 @@ export const store = {
 Please ensure all contact information is accurate. Requests submitted outside business hours will be reviewed on the next business day.`,
   suggestions: [...seedAdminSuggestions] as AdminSuggestion[],
   statusCertificates: [...seedStatusCertificates] as StatusCertificate[],
-  incidentReports: [...seedAdminIncidentReports] as AdminIncidentReport[],
-  incidentCategories: [...seedIncidentCategories] as IncidentReportCategory[],
-  incidentContactEmails: [...seedIncidentContactEmails] as IncidentContactEmail[],
+  incidentReports: [] as AdminIncidentReport[],
+  incidentCategories: [] as IncidentReportCategory[],
+  incidentContactEmails: [] as IncidentContactEmail[],
   notificationPrefs: [...seedNotificationPreferences] as NotificationPreference[],
   residentUser: { ...seedUser },
   adminNotificationPrefs: [...seedAdminNotificationPreferences] as NotificationPreference[],

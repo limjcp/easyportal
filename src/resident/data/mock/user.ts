@@ -3,6 +3,9 @@ import type { EmailRecord, NotificationPreference, ResidentUser } from "../types
 export const seedUser: ResidentUser = {
   id: "1",
   name: "Claudio",
+  buildingId: "2125709897",
+  buildingName: "Westmount North Condos",
+  buildingAddress: "123 Main St Toronto ON M5V 1A1",
   unit: "102",
   email: "claudio.owner@example.com",
   phone: "(519) 555-0102",

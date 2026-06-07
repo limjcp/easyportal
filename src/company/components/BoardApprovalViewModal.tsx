@@ -13,6 +13,7 @@ import { StatusBadge } from "../../admin/components/AdminBadges";
 type BoardApprovalViewModalProps = {
   open: boolean;
   detail: BoardApprovalDetail | null;
+  loading?: boolean;
   onClose: () => void;
 };
 
@@ -49,7 +50,7 @@ function VoteIcon({ kind }: { kind: BoardApprovalVote["kind"] }) {
   return <span className="text-slate-400">—</span>;
 }
 
-export function BoardApprovalViewModal({ open, detail, onClose }: BoardApprovalViewModalProps) {
+export function BoardApprovalViewModal({ open, detail, loading = false, onClose }: BoardApprovalViewModalProps) {
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -62,8 +63,17 @@ export function BoardApprovalViewModal({ open, detail, onClose }: BoardApprovalV
   if (!detail) {
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
-        <div className="rounded-sm bg-white px-8 py-6 text-sm text-slate-600 shadow-2xl">
-          Loading board approval…
+        <div className="rounded-sm bg-white px-8 py-6 text-center text-sm text-slate-600 shadow-2xl">
+          <p>{loading ? "Loading board approval…" : "Board approval not found."}</p>
+          {!loading ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-4 rounded border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-50"
+            >
+              Close
+            </button>
+          ) : null}
         </div>
       </div>
     );

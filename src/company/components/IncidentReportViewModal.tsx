@@ -1,10 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { FaExclamationTriangle, FaPrint, FaSearch, FaTimes } from "react-icons/fa";
-import type { IncidentReportAttachment, IncidentReportDetail } from "../../resident/data/types";
+import { useEffect, type ReactNode } from "react";
+import { FaExclamationTriangle, FaPrint, FaTimes } from "react-icons/fa";
+import { IncidentReportAttachmentThumb } from "../../shared/IncidentReportAttachmentThumb";
+import type { IncidentReportDetail } from "../../resident/data/types";
 
 type IncidentReportViewModalProps = {
   open: boolean;
   detail: IncidentReportDetail | null;
+  loading?: boolean;
   onClose: () => void;
   onViewRelated?: (unit: string, owner: string) => void;
 };
@@ -68,76 +70,10 @@ function DefaultPanel({
   );
 }
 
-function AttachmentThumb({ att }: { att: IncidentReportAttachment }) {
-  const [previewOpen, setPreviewOpen] = useState(false);
-
-  return (
-    <>
-      <div className="text-center">
-        <div className="group relative mx-auto inline-block overflow-hidden rounded border border-slate-200 bg-slate-50">
-          {att.previewUrl ? (
-            <img
-              src={att.previewUrl}
-              alt={att.fileName}
-              className="h-24 w-28 object-cover"
-            />
-          ) : (
-            <div className="flex h-24 w-28 items-center justify-center text-xs text-slate-500">
-              {att.kind === "pdf" ? "PDF" : "File"}
-            </div>
-          )}
-          <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition group-hover:opacity-100">
-            <button
-              type="button"
-              onClick={() => setPreviewOpen(true)}
-              className="rounded border border-white/80 bg-white/90 px-2 py-1 text-slate-700"
-              aria-label={`View ${att.fileName}`}
-            >
-              <FaSearch />
-            </button>
-          </div>
-        </div>
-        <p className="mt-2 text-xs text-slate-800">
-          {att.fileName}
-          <br />
-          {att.uploadedBy} - {att.uploadedDate}
-        </p>
-      </div>
-
-      {previewOpen && att.previewUrl && (
-        <div
-          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setPreviewOpen(false)}
-          role="presentation"
-        >
-          <div
-            className="relative max-h-[90vh] max-w-4xl"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-          >
-            <button
-              type="button"
-              onClick={() => setPreviewOpen(false)}
-              className="absolute -right-2 -top-2 rounded-full bg-white p-2 shadow"
-              aria-label="Close preview"
-            >
-              <FaTimes />
-            </button>
-            <img
-              src={att.previewUrl.replace("/200/150", "/800/600")}
-              alt={att.fileName}
-              className="max-h-[85vh] rounded border border-white shadow-lg"
-            />
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
 export function IncidentReportViewModal({
   open,
   detail,
+  loading = false,
   onClose,
   onViewRelated,
 }: IncidentReportViewModalProps) {
@@ -162,8 +98,17 @@ export function IncidentReportViewModal({
   if (!detail) {
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
-        <div className="rounded-sm bg-white px-8 py-6 text-sm text-slate-600 shadow-2xl">
-          Loading incident report…
+        <div className="rounded-sm bg-white px-8 py-6 text-center text-sm text-slate-600 shadow-2xl">
+          <p>{loading ? "Loading incident report…" : "Incident report not found."}</p>
+          {!loading ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-4 rounded border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-50"
+            >
+              Close
+            </button>
+          ) : null}
         </div>
       </div>
     );
@@ -297,7 +242,7 @@ export function IncidentReportViewModal({
             ) : (
               <div className="grid gap-4 sm:grid-cols-3">
                 {detail.attachments.map((att) => (
-                  <AttachmentThumb key={att.id} att={att} />
+                  <IncidentReportAttachmentThumb key={att.id} attachment={att} />
                 ))}
               </div>
             )}

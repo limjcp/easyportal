@@ -1,18 +1,45 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { getPortalConfig } from "../data/portalConfig";
+import { getPortalConfig, loadPortalConfig, setCachedPortalConfig } from "../data/portalConfig";
 import type { PortalConfig } from "../data/types";
 
 const PortalConfigContext = createContext<PortalConfig | null>(null);
 
-export function PortalConfigProvider({ children }: { children: ReactNode }) {
+type PortalConfigProviderProps = {
+  children: ReactNode;
+  buildingKey?: string | null;
+};
+
+export function PortalConfigProvider({ children, buildingKey }: PortalConfigProviderProps) {
   const [config, setConfig] = useState<PortalConfig | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setConfig(getPortalConfig());
-  }, []);
+    if (!buildingKey) return;
+    setConfig(null);
+    setError(null);
+    loadPortalConfig()
+      .then((loaded) => {
+        setCachedPortalConfig(loaded);
+        setConfig(loaded);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to load portal configuration");
+        setConfig(getPortalConfig());
+      });
+  }, [buildingKey]);
+
+  if (!buildingKey) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-slate-500">Loading building…</div>
+    );
+  }
 
   if (!config) {
-    return <div className="flex min-h-screen items-center justify-center text-slate-500">Loading portal...</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center text-slate-500">
+        {error ? `Portal error: ${error}` : "Loading portal..."}
+      </div>
+    );
   }
 
   return <PortalConfigContext.Provider value={config}>{children}</PortalConfigContext.Provider>;

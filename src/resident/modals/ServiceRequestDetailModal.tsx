@@ -1,0 +1,202 @@
+import { useEffect, useState } from "react";
+import { FaWrench } from "react-icons/fa";
+import { Modal } from "../../shared/Modal";
+import { IncidentReportAttachmentGrid } from "../../shared/IncidentReportAttachmentThumb";
+import { residentRepo } from "../data/mockRepository";
+import type { ResidentServiceRequestDetail } from "../data/types";
+
+type ServiceRequestDetailModalProps = {
+  open: boolean;
+  requestId: string | null;
+  onClose: () => void;
+  onUpdated: () => void;
+};
+
+function statusClass(status: string): string {
+  if (status === "Resolved") return "bg-[#5cb85c] text-white";
+  if (status === "Pending") return "bg-amber-500 text-white";
+  return "bg-slate-500 text-white";
+}
+
+export function ServiceRequestDetailModal({
+  open,
+  requestId,
+  onClose,
+  onUpdated,
+}: ServiceRequestDetailModalProps) {
+  const [request, setRequest] = useState<ResidentServiceRequestDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [addingComment, setAddingComment] = useState(false);
+  const [showCommentForm, setShowCommentForm] = useState(false);
+
+  useEffect(() => {
+    if (!open || !requestId) {
+      setRequest(null);
+      setCommentText("");
+      setShowCommentForm(false);
+      return;
+    }
+    setLoading(true);
+    residentRepo
+      .getServiceRequestById(requestId)
+      .then(setRequest)
+      .catch((err) => {
+        alert(err instanceof Error ? err.message : "Failed to load service request.");
+        onClose();
+      })
+      .finally(() => setLoading(false));
+  }, [open, requestId]);
+
+  const refresh = async () => {
+    if (!requestId) return;
+    const updated = await residentRepo.getServiceRequestById(requestId);
+    if (updated) setRequest(updated);
+    onUpdated();
+  };
+
+  const handleAddComment = async () => {
+    if (!requestId || !commentText.trim()) return;
+    setAddingComment(true);
+    try {
+      await residentRepo.addServiceRequestComment(requestId, commentText.trim());
+      setCommentText("");
+      setShowCommentForm(false);
+      await refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to add comment.");
+    } finally {
+      setAddingComment(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Service Request"
+      icon={<FaWrench className="text-[#3476ef]" />}
+      size="lg"
+      footer={
+        <button type="button" onClick={onClose} className="rounded border border-slate-300 px-4 py-2 text-sm text-black">
+          Close
+        </button>
+      }
+    >
+      {loading || !request ? (
+        <p className="text-sm text-slate-500">{loading ? "Loading…" : "Service request not found."}</p>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`rounded px-2 py-0.5 text-xs font-medium ${statusClass(request.status)}`}>
+              {request.status}
+            </span>
+            <span className="text-xs text-slate-500">{request.severity} severity</span>
+            <span className="text-xs text-slate-500">{request.category}</span>
+          </div>
+
+          {request.status === "Resolved" && request.resolvedBy ? (
+            <p className="rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+              Resolved by {request.resolvedBy}
+              {request.resolvedAt ? ` on ${new Date(request.resolvedAt).toLocaleDateString()}` : ""}
+            </p>
+          ) : null}
+
+          <div className="grid gap-3 sm:grid-cols-2 text-sm">
+            <DetailField label="Location" value={request.location} />
+            <DetailField label="Contact" value={request.contact} />
+            <DetailField label="Visibility" value={request.visibility} />
+            <DetailField label="Permission to Enter" value={request.permissionToEnter} />
+            {request.permissionNotes ? (
+              <DetailField label="Permission Notes" value={request.permissionNotes} />
+            ) : null}
+            {request.submittedAt ? (
+              <DetailField label="Submitted" value={new Date(request.submittedAt).toLocaleString()} />
+            ) : null}
+          </div>
+
+          <div>
+            <p className="text-xs font-medium uppercase text-slate-500">Description</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{request.description}</p>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium uppercase text-slate-500">File Attachments</p>
+            <div className="mt-2 rounded border border-slate-200 bg-white p-3">
+              <IncidentReportAttachmentGrid attachments={request.attachments} />
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded border border-slate-300">
+            <div className="flex items-center justify-between bg-slate-500 px-3 py-2 text-sm font-medium text-white">
+              <span>Comments</span>
+              <button
+                type="button"
+                onClick={() => setShowCommentForm((value) => !value)}
+                className="rounded bg-white/20 px-2 py-0.5 text-xs hover:bg-white/30"
+              >
+                + Add
+              </button>
+            </div>
+            <div className="max-h-48 overflow-y-auto bg-white p-3 text-sm">
+              {showCommentForm ? (
+                <div className="mb-3 space-y-2">
+                  <textarea
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    rows={3}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-black"
+                    placeholder="Enter comment..."
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAddComment}
+                      disabled={addingComment}
+                      className="rounded bg-[#3476ef] px-3 py-1 text-xs text-white disabled:opacity-50"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCommentForm(false);
+                        setCommentText("");
+                      }}
+                      className="rounded border border-slate-300 px-3 py-1 text-xs text-black"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {request.publicComments.length === 0 ? (
+                <p className="text-slate-500">No comments yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {request.publicComments.map((comment) => (
+                    <div key={comment.id} className="border-b border-slate-100 pb-2 last:border-0">
+                      <p className="text-xs text-slate-500">
+                        {new Date(comment.createdAt).toLocaleString()}: {comment.author}
+                      </p>
+                      <p className="mt-1 text-slate-700">{comment.text}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function DetailField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className="text-slate-800">{value || "—"}</p>
+    </div>
+  );
+}

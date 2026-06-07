@@ -1,4 +1,4 @@
-import { companyStore, nextCompanyId } from "../../company/data/companyStore";
+import { companyStore, nextCompanyId } from "../../legacy/company/companyStore";
 import type { VendorNotification } from "../../resident/data/types";
 
 export function pushVendorNotification(

@@ -1,5 +1,4 @@
 import type { BoardElection, BoardElectionStatus } from "../../resident/data/types";
-import { store } from "../../resident/data/sharedStore";
 
 export function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
@@ -32,16 +31,14 @@ export function withResolvedStatus(election: BoardElection): BoardElection {
   return { ...election, status: resolveElectionStatus(election) };
 }
 
-export function getEligibleUnitCount(): number {
-  return store.buildingUnits.reduce((sum, g) => sum + g.units.length, 0);
-}
-
 const RESIDENT_TYPE_MAP: Record<string, string[]> = {
   Owner: ["Owners"],
   "Owner - Board Member": ["Owners", "Board Members"],
   Tenant: ["Tenants"],
   Occupant: ["Occupants"],
   "Board Member": ["Board Members"],
+  "Absentee Owner": ["Absentee Owner"],
+  "Unit Manager": ["Unit Managers"],
 };
 
 export function isResidentEligibleForElection(

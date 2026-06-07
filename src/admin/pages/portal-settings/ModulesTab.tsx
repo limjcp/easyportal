@@ -25,6 +25,11 @@ export function ModulesTab() {
     setBgUrl(getResidentBackgroundImage()?.url);
   }, []);
 
+  const arrangeTiles = useMemo(
+    () => toArrangeTiles(modules, customTiles, tileSettings?.primaryTileLimit ?? 8),
+    [modules, customTiles, tileSettings?.primaryTileLimit]
+  );
+
   if (!tileSettings) return <div className="py-8 text-center text-slate-500">Loading...</div>;
 
   const opacity = tileSettings.portalTileOpacity;
@@ -42,11 +47,6 @@ export function ModulesTab() {
     setSaving(false);
     setSaved(true);
   };
-
-  const arrangeTiles = useMemo(
-    () => toArrangeTiles(modules, customTiles, tileSettings.primaryTileLimit),
-    [modules, customTiles, tileSettings.primaryTileLimit]
-  );
 
   const updateArrangement = (nextTiles: ReturnType<typeof toArrangeTiles>) => {
     const nextLayout = applyArrangeTiles(nextTiles, modules, customTiles, tileSettings.primaryTileLimit);

@@ -3,6 +3,7 @@ import { FaPlus } from "react-icons/fa";
 import { EmptyState } from "../../shared/EmptyState";
 import type { ChatActor, ChatContact, ChatConversation } from "../../resident/data/types";
 import { chatRepository } from "../data/chatRepository";
+import { formatChatTime } from "../utils/formatChatTime";
 import { ChatThread } from "./ChatThread";
 import { NewChatModal } from "./NewChatModal";
 
@@ -175,7 +176,7 @@ export function ChatInbox({ actor, showBuildingFilter = false }: ChatInboxProps)
                   {conv.lastMessagePreview && (
                     <p className="mt-0.5 truncate text-xs text-slate-500">{conv.lastMessagePreview}</p>
                   )}
-                  <p className="mt-0.5 text-[10px] text-slate-400">{conv.lastMessageAt}</p>
+                  <p className="mt-0.5 text-[10px] text-slate-400">{formatChatTime(conv.lastMessageAt)}</p>
                   {showBuildingFilter && actor.canMessageAnyBuilding && (
                     <p className="mt-0.5 text-[10px] text-slate-400">
                       {contactMap.get(conv.participantIds.find((id) => id !== actor.contactId) ?? "")
@@ -200,6 +201,7 @@ export function ChatInbox({ actor, showBuildingFilter = false }: ChatInboxProps)
                 </p>
               </div>
               <ChatThread
+                key={selected.id}
                 conversationId={selected.id}
                 actor={actor}
                 participants={[
@@ -215,6 +217,7 @@ export function ChatInbox({ actor, showBuildingFilter = false }: ChatInboxProps)
                   },
                 ]}
                 onMessageSent={refresh}
+                onIncomingMessage={refresh}
               />
             </div>
           ) : (

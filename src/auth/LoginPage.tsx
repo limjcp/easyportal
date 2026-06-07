@@ -1,13 +1,17 @@
 import { useState, type FormEvent } from "react";
-import { FaKey, FaUser } from "react-icons/fa";
+import {
+  ensureActiveBuildingForUser,
+  setActiveBuildingId,
+} from "../data/supabase/buildingContext";
 import {
   getRememberMe,
-  resolveLoginPortal,
+  resolvePortalAccess,
   setRememberMe,
-  validateMockLogin,
-  validateVendorLogin,
-} from "./mockAuth";
+  signInWithPassword,
+} from "./supabaseAuth";
 import { LoginLayout } from "./LoginLayout";
+import { ArrowUpRightIcon } from "../marketing/components/icons";
+import { pe } from "../marketing/typography";
 import type { LoginPortalRole } from "../resident/data/types";
 
 type LoginPageProps = {
@@ -15,121 +19,139 @@ type LoginPageProps = {
   onOpenMarketing: (path?: string) => void;
 };
 
+const inputClassName =
+  "w-full border-0 border-b border-border bg-transparent px-0 py-3 text-base text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-foreground transition-colors duration-300";
+
 export function LoginPage({ onLogin, onOpenMarketing }: LoginPageProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMeState] = useState(getRememberMe);
+  const [rememberMe, setRememberMeState] = useState(getRememberMe());
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!validateMockLogin(username, password)) {
-      setError("Please enter your username/email and password.");
+    setError("");
+
+    if (!username.trim() || !password.trim()) {
+      setError("Please enter your email and password.");
       return;
     }
-    const portal = resolveLoginPortal(username);
-    if (portal === "vendor") {
-      const vendorError = validateVendorLogin(username);
-      if (vendorError) {
-        setError(vendorError);
+    setSubmitting(true);
+    try {
+      const { user } = await signInWithPassword(username.trim(), password);
+      if (!user) throw new Error("Login failed");
+      const access = await resolvePortalAccess(user.id);
+      if (!access.portals.length) {
+        setError("Your account has no portal access assigned yet.");
         return;
       }
+      if (access.buildingIds[0]) {
+        setActiveBuildingId(access.buildingIds[0]);
+      }
+      if (access.defaultPortal === "resident" || access.portals.includes("resident")) {
+        await ensureActiveBuildingForUser(user.id);
+      }
+      setRememberMe(rememberMe);
+      onLogin(access.defaultPortal, username.trim());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign in failed.");
+    } finally {
+      setSubmitting(false);
     }
-    setError("");
-    setRememberMe(rememberMe);
-    onLogin(portal, username);
   };
 
   return (
     <LoginLayout onOpenMarketing={onOpenMarketing}>
-      <div className="w-full max-w-[400px] rounded-sm bg-white p-8 shadow-lg">
-        <h1 className="mb-6 text-center text-xl font-semibold text-slate-800">Account Login</h1>
+      <div className="w-full max-w-md">
+        <p className={`${pe.eyebrow} text-muted-foreground mb-3`}>Resident & Board Portal</p>
+        <h1 className={`${pe.sectionTitleLg} text-foreground`}>Sign In</h1>
+        <p className={`mt-4 ${pe.bodySm} text-muted-foreground`}>
+          Access your community portal with the credentials provided by your property manager.
+        </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="mt-10 space-y-8">
           <div>
-            <div className="flex items-center rounded border border-slate-300 bg-white focus-within:border-[#3476ef] focus-within:ring-1 focus-within:ring-[#3476ef]">
-              <span className="pl-3 text-slate-400">
-                <FaUser />
-              </span>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Username / Email"
-                className="w-full border-0 bg-transparent px-3 py-2.5 text-sm outline-none"
-                autoComplete="username"
-              />
-            </div>
+            <label htmlFor="login-username" className={`${pe.eyebrowSm} text-muted-foreground`}>
+              Username / Email
+            </label>
+            <input
+              id="login-username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="name@example.com"
+              className={`${inputClassName} mt-2`}
+              autoComplete="username"
+            />
           </div>
 
           <div>
-            <div className="flex items-center rounded border border-slate-300 bg-white focus-within:border-[#3476ef] focus-within:ring-1 focus-within:ring-[#3476ef]">
-              <span className="pl-3 text-slate-400">
-                <FaKey />
-              </span>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password"
-                className="w-full border-0 bg-transparent px-3 py-2.5 text-sm outline-none"
-                autoComplete="current-password"
-              />
-            </div>
+            <label htmlFor="login-password" className={`${pe.eyebrowSm} text-muted-foreground`}>
+              Password
+            </label>
+            <input
+              id="login-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              className={`${inputClassName} mt-2`}
+              autoComplete="current-password"
+            />
           </div>
 
-          {error && <p className="text-center text-sm text-red-600">{error}</p>}
+          {error && <p className={`${pe.bodySm} text-red-600`}>{error}</p>}
 
           <button
             type="submit"
-            className="w-full rounded bg-[#3476ef] py-2.5 text-sm font-medium text-white transition hover:bg-[#2d68cf]"
+            disabled={submitting}
+            className={`group inline-flex items-center gap-3 ${pe.linkAction} text-foreground hover:text-muted-foreground disabled:opacity-40 transition-colors duration-500`}
           >
-            Sign in
+            <span className="border-b border-foreground/20 pb-0.5 group-hover:border-foreground/60 transition-colors duration-500">
+              {submitting ? "Signing in…" : "Sign in"}
+            </span>
+            <ArrowUpRightIcon className={`${pe.iconSm} group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-300`} />
           </button>
 
-          <div className="pt-1">
-            <label className="flex cursor-pointer items-start gap-2">
+          <div className="border-t border-border pt-8">
+            <label className="flex cursor-pointer items-start gap-3">
               <input
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMeState(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-[#3476ef]"
+                className="mt-0.5 h-4 w-4 rounded border-border accent-foreground"
               />
-              <span className="text-sm text-slate-700">
+              <span className={`${pe.bodySm} text-muted-foreground`}>
                 Remember me on this device
-                <span className="mt-0.5 block text-xs text-slate-400">(do not use on shared device)</span>
+                <span className={`mt-1 block ${pe.caption} text-muted-foreground/70`}>Do not use on shared devices.</span>
               </span>
             </label>
           </div>
 
-          <p className="text-center text-sm">
-            <button
-              type="button"
-              className="text-[#3476ef] hover:underline"
-              onClick={() => alert("Forgot password — coming soon.")}
-            >
-              Forgot password?
-            </button>
-            <span className="text-slate-400"> | </span>
-            <button
-              type="button"
-              className="text-[#3476ef] hover:underline"
-              onClick={() => alert("Sign up for free — coming soon.")}
-            >
-              Sign up for free
-            </button>
-          </p>
-
-          <p className="text-center text-sm text-slate-600">
-            Having trouble?{" "}
-            <button
-              type="button"
-              className="text-[#3476ef] hover:underline"
-              onClick={() => alert("Contact support at support@mvpcondos.com — demo.")}
-            >
-              We can help.
-            </button>
-          </p>
+          <div className={`space-y-3 ${pe.bodySm} text-muted-foreground`}>
+            <p>
+              <button
+                type="button"
+                className="text-foreground border-b border-foreground/20 pb-0.5 hover:border-foreground/60 transition-colors duration-300"
+                onClick={() =>
+                  alert("Use Supabase Auth password reset from the dashboard or contact your administrator.")
+                }
+              >
+                Forgot password?
+              </button>
+            </p>
+            <p>
+              Having trouble?{" "}
+              <button
+                type="button"
+                className="text-foreground border-b border-foreground/20 pb-0.5 hover:border-foreground/60 transition-colors duration-300"
+                onClick={() => alert("Contact support at support@mvpcondos.com")}
+              >
+                We can help.
+              </button>
+            </p>
+          </div>
         </form>
       </div>
     </LoginLayout>

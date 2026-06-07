@@ -8,6 +8,7 @@ import {
   FaFile,
   FaCommentDots,
   FaCalendarAlt,
+  FaCalendarCheck,
   FaImages,
   FaQuestionCircle,
   FaCertificate,
@@ -32,6 +33,7 @@ const iconMap: Record<string, IconType> = {
   "board-elections": FaVoteYea,
   "board-election-vote": FaVoteYea,
   chat: FaComments,
+  "amenity-bookings": FaCalendarCheck,
 };
 
 type ResidentNavProps = {

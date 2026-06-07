@@ -24,10 +24,13 @@ export const BUILDING_PERMISSION_MODULES: { moduleKey: string; label: string }[]
   { moduleKey: "company-employees", label: "Company: Employees" },
   { moduleKey: "company-subscriptions", label: "Company: Subscriptions" },
   { moduleKey: "company-master-reports", label: "Company: Master Reports" },
+  { moduleKey: "consultation-leads", label: "Consultation Leads" },
   { moduleKey: "admins", label: "Admins" },
   { moduleKey: "board-approvals", label: "Board Approvals" },
+  { moduleKey: "board-members", label: "Board Members" },
   { moduleKey: "board-elections", label: "Board Elections" },
   { moduleKey: "agm", label: "AGM Meetings" },
+  { moduleKey: "fire-safety", label: "Fire Safety Plan" },
   { moduleKey: "building-definitions", label: "Building Definitions" },
   { moduleKey: "documents", label: "Documents" },
   { moduleKey: "events", label: "Events" },
@@ -42,8 +45,14 @@ export const BUILDING_PERMISSION_MODULES: { moduleKey: string; label: string }[]
   { moduleKey: "status-certificates", label: "Status Certificates" },
   { moduleKey: "suggestions", label: "Suggestion" },
   { moduleKey: "polls", label: "Polls" },
+  { moduleKey: "amenities", label: "Amenities" },
+  { moduleKey: "chat", label: "Chat" },
   { moduleKey: "units-users", label: "Units & Users" },
 ];
+
+export const BUILDING_SIDEBAR_MODULES = BUILDING_PERMISSION_MODULES.filter(
+  (module) => !module.moduleKey.startsWith("company-")
+);
 
 function moduleRow(
   label: string,
@@ -93,9 +102,11 @@ export function createDefaultBuildingPermissionsForRole(role: string): Permissio
       moduleRow(m.label, m.moduleKey, {
         view:
           m.moduleKey === "board-approvals" ||
+          m.moduleKey === "board-members" ||
           m.moduleKey === "board-elections" ||
           m.moduleKey === "documents" ||
-          m.moduleKey === "incident-reports",
+          m.moduleKey === "incident-reports" ||
+          m.moduleKey === "agm",
         edit: m.moduleKey === "board-approvals" || m.moduleKey === "board-elections",
       })
     );

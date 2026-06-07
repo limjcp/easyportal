@@ -8,7 +8,7 @@ import { viteSingleFile } from "vite-plugin-singlefile";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const NGROK_HOST = "screen-smuggler-sincerity.ngrok-free.dev";
+const ngrokHost = process.env.VITE_NGROK_HOST;
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -20,11 +20,28 @@ export default defineConfig({
   },
   server: {
     host: true,
-    allowedHosts: [NGROK_HOST, ".ngrok-free.app"],
-    hmr: {
-      host: NGROK_HOST,
-      protocol: "wss",
-      clientPort: 443,
+    proxy: {
+      "/api/instagram": {
+        target: "https://www.instagram.com",
+        changeOrigin: true,
+        rewrite: (requestPath) => requestPath.replace(/^\/api\/instagram/, "/api/v1"),
+        headers: {
+          "X-IG-App-ID": "936619743392459",
+          "User-Agent": "Instagram 219.0.0.12.117 Android",
+        },
+      },
     },
+    ...(ngrokHost
+      ? {
+          allowedHosts: [ngrokHost, ".ngrok-free.app"],
+          hmr: {
+            host: ngrokHost,
+            protocol: "wss",
+            clientPort: 443,
+          },
+        }
+      : {
+          hmr: true,
+        }),
   },
 });

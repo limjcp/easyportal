@@ -3,6 +3,9 @@ export type EmailStatus = "delivered" | "bounced" | "pending";
 export interface ResidentUser {
   id: string;
   name: string;
+  buildingId: string;
+  buildingName: string;
+  buildingAddress?: string;
   unit: string;
   email: string;
   phone: string;
@@ -14,12 +17,34 @@ export interface ResidentUser {
 export type ConsultationCondoHealth = "excellent" | "good" | "fair" | "poor";
 export type ConsultationManagementExperience = "very-good" | "good" | "needs-improvement" | "poor";
 export type ConsultationChangeIntent = "yes" | "no" | "not-sure";
+export type ConsultationCondoType = "high-rise" | "townhouse" | "mixed-use" | "commercial-residential" | "other";
+export type ConsultationUnitCount = "under-50" | "50-100" | "100-250" | "250-plus";
+export type ConsultationYourRole =
+  | "board-president"
+  | "board-director"
+  | "treasurer"
+  | "owner"
+  | "other";
+export type ConsultationRegion = "gta" | "kitchener-waterloo" | "southwestern-ontario" | "other-ontario";
+export type ConsultationTopConcern =
+  | "communication"
+  | "financial-reporting"
+  | "vendor-execution"
+  | "compliance"
+  | "fees"
+  | "other";
 
 export interface ConsultationSurveyAnswers {
+  condoType: ConsultationCondoType;
+  unitCount: ConsultationUnitCount;
+  yourRole: ConsultationYourRole;
+  region: ConsultationRegion;
   condoHealth: ConsultationCondoHealth;
   managementExperience: ConsultationManagementExperience;
-  currentPainPoint: string;
+  topConcern: ConsultationTopConcern;
   consideringManagementChange: ConsultationChangeIntent;
+  /** @deprecated Legacy submissions only */
+  currentPainPoint?: string;
 }
 
 export interface ConsultationSubmission {
@@ -75,6 +100,9 @@ export interface NewsItem {
   title: string;
   date: string;
   body: string;
+  imageUrl?: string;
+  attachmentName?: string;
+  attachmentUrl?: string;
 }
 
 export interface Newsletter {
@@ -176,6 +204,19 @@ export interface ServiceRequest {
   category: string;
   description: string;
   status: string;
+  unread?: boolean;
+  pendingReply?: boolean;
+}
+
+export interface ResidentServiceRequestDetail extends ServiceRequest {
+  visibility: string;
+  permissionToEnter: string;
+  permissionNotes: string;
+  submittedAt?: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  publicComments: Comment[];
+  attachments: IncidentReportAttachment[];
 }
 
 export type CreateServiceRequestInput = {
@@ -187,6 +228,7 @@ export type CreateServiceRequestInput = {
   severity: string;
   category: string;
   description: string;
+  files?: File[];
 };
 
 export interface IncidentReport {
@@ -198,6 +240,16 @@ export interface IncidentReport {
   location: string;
   description: string;
   status: string;
+  archived?: boolean;
+}
+
+export interface ResidentIncidentReportDetail extends IncidentReport {
+  submittedAt?: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  pendingReplyLabel?: string;
+  publicComments: Comment[];
+  attachments: IncidentReportAttachment[];
 }
 
 export type CreateIncidentReportInput = {
@@ -208,6 +260,7 @@ export type CreateIncidentReportInput = {
   visibility: string;
   location: string;
   description: string;
+  files?: File[];
 };
 
 export interface Suggestion {
@@ -348,7 +401,7 @@ export interface AdminServiceRequest extends ServiceRequest {
   resolvedAt?: string;
   adminComments: Comment[];
   publicComments: Comment[];
-  attachments: string[];
+  attachments: IncidentReportAttachment[];
 }
 
 export type CreateAdminServiceRequestInput = {
@@ -363,6 +416,7 @@ export type CreateAdminServiceRequestInput = {
   severity: string;
   category: string;
   description: string;
+  files?: File[];
 };
 
 export interface ServiceRequestCategory {
@@ -389,7 +443,7 @@ export interface AdminIncidentReport extends IncidentReport {
   resolvedAt?: string;
   adminComments: Comment[];
   publicComments: Comment[];
-  attachments: string[];
+  attachments: IncidentReportAttachment[];
 }
 
 export type CreateAdminIncidentReportInput = {
@@ -491,6 +545,52 @@ export interface Poll {
 
 export type CreatePollInput = {
   title: string;
+};
+
+export type SubmitPollResponseInput = {
+  pollId: string;
+  questionId: string;
+  selectedOption: string;
+};
+
+export interface PollResponse {
+  id: string;
+  pollId: string;
+  questionId: string;
+  selectedOption: string;
+  createdAt: string;
+}
+
+export type PollOptionResult = {
+  label: string;
+  count: number;
+  percentage: number;
+};
+
+export type PollQuestionResult = {
+  questionId: string;
+  question: string;
+  sortOrder: number;
+  totalResponses: number;
+  options: PollOptionResult[];
+};
+
+export type PollResponseVoter = {
+  responseId: string;
+  questionId: string;
+  question: string;
+  voterName: string;
+  unitLabel: string;
+  selectedOption: string;
+  submittedAt: string;
+};
+
+export type PollResults = {
+  pollId: string;
+  privacy: string;
+  totalResponses: number;
+  questions: PollQuestionResult[];
+  voters: PollResponseVoter[];
 };
 
 // Backwards compatibility while Survey UI is being renamed to Polls.
@@ -595,6 +695,7 @@ export interface BuildingDefinition {
   amenities: string[];
   commonAreas: string[];
   linkedBuildingIds: string[];
+  imageUrl?: string;
 }
 
 export interface BuildingTaxSettings {
@@ -607,6 +708,7 @@ export interface BuildingUnitGroup {
   id: string;
   floorArea: string;
   units: string[];
+  occupiedUnits?: string[];
 }
 
 export interface BuildingUnitGroupDefinition {
@@ -714,6 +816,10 @@ export interface UnitsUsersUnitDetail {
   documents: string[];
   purchaseDateMaintFees?: string;
   notes: string[];
+  primaryOccupancyId?: string;
+  profileDetails?: ResidentProfileDetails;
+  occupancyProfiles?: ResidentProfileDetails[];
+  occupancyProfileOccupancyIds?: string[];
 }
 
 export interface UnitsUsersUserDetail {
@@ -761,6 +867,19 @@ export interface UnitsUsersUserDetail {
   documents?: string[];
   purchaseDateMaintFees?: string;
   notes?: string[];
+  profileDetails?: ResidentProfileDetails;
+  portalModules?: Array<{
+    moduleId: string;
+    name: string;
+    tileLabel: string;
+    enabled: boolean;
+    buildingEnabled?: boolean;
+  }>;
+  canAccessResidentPortal?: boolean;
+  canAccessBuildingAdmin?: boolean;
+  buildingAdminRoleLabel?: string;
+  buildingMembershipId?: string;
+  buildingAdminModules?: Array<{ moduleKey: string; label: string; enabled: boolean }>;
   quickBooksLinkedAccounts?: Array<{
     id: string;
     name: string;
@@ -983,6 +1102,55 @@ export type ParkingRequestStatus =
   | "paidAccepted"
   | "declined";
 
+export type AmenityBookingType = "elevator" | "party_room";
+export type AmenityBookingStatus =
+  | "pending"
+  | "approvedAwaitingPayment"
+  | "confirmed"
+  | "declined"
+  | "cancelled";
+
+export interface BuildingAmenitySettings {
+  partyRoomFee: string;
+  elevatorInstructions: string;
+  partyRoomInstructions: string;
+}
+
+export interface AmenityBooking {
+  id: string;
+  residentId: string;
+  residentName: string;
+  unit: string;
+  bookingType: AmenityBookingType;
+  bookingDate: string;
+  startTime: string;
+  endTime: string;
+  guestCount?: number;
+  notes: string;
+  status: AmenityBookingStatus;
+  paymentAmount?: string;
+  paymentAt?: string;
+  adminNotes: string;
+  unread: boolean;
+  requestedAt: string;
+  updatedAt: string;
+}
+
+export interface SubmitElevatorBookingInput {
+  bookingDate: string;
+  startTime: string;
+  endTime: string;
+  notes?: string;
+}
+
+export interface SubmitPartyRoomBookingInput {
+  bookingDate: string;
+  startTime: string;
+  endTime: string;
+  guestCount?: number;
+  notes?: string;
+}
+
 export const PARKING_PAYMENT_AMOUNTS: Record<ParkingRequestType, string> = {
   parking: "$120.00",
   visitor: "$30.00",
@@ -1194,6 +1362,7 @@ export interface BuildingTotalRow {
 
 export interface CompanyEmployee {
   id: string;
+  membershipId: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -1247,6 +1416,7 @@ export type CreateBuildingAdminInput = {
   firstName: string;
   lastName: string;
   email?: string;
+  password: string;
 };
 
 export type UpdateBuildingAdminInput = {
@@ -1599,6 +1769,7 @@ export type CreateEmployeeInput = {
   email: string;
   role: CompanyRole;
   assignedBuildingIds: string[];
+  password: string;
 };
 
 export type CreateBuildingInput = {

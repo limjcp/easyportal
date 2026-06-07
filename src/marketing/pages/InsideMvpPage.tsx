@@ -1,4 +1,4 @@
-import { MarketingContentPage } from "./MarketingContentPage";
+import { EditorialContentPage } from "./EditorialContentPage";
 import { insideMvpPageContent } from "../data/pageContent/insideMvp";
 
 type InsideMvpPageProps = {
@@ -6,6 +6,5 @@ type InsideMvpPageProps = {
 };
 
 export function InsideMvpPage({ onNavigate }: InsideMvpPageProps) {
-  return <MarketingContentPage content={insideMvpPageContent} onNavigate={onNavigate} />;
+  return <EditorialContentPage content={insideMvpPageContent} onNavigate={onNavigate} />;
 }
-

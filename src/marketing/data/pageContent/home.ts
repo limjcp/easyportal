@@ -8,12 +8,13 @@ export const homePageContent: MarketingPageContent = {
     {
       kind: "hero",
       eyebrow: "Modern Condo Management",
-      title: "Build a stronger, calmer, more connected condo community.",
+      title: "Build a stronger, centralized, more connected condo community.",
       subtitle:
-        "From board governance and bookkeeping to vendor coordination and resident communication, MVP Condos gives your community one trusted operating partner.",
+        "From board governance and bookkeeping to vendor coordination and resident communication, trusted and one easy portal to use.",
       actions: [
         { label: "Request a Proposal", href: "/free-consultation", variant: "primary" },
         { label: "Explore Services", href: "/inside-mvp", variant: "secondary" },
+        { label: "Sign In to EasyPortal", href: "/login", variant: "secondary" },
       ],
       imageUrl: "https://img1.wsimg.com/isteam/getty/2186781582/:/rs=h:1000,cg:true,m",
       imageAlt: "Condo community lifestyle",
@@ -76,8 +77,8 @@ export const homePageContent: MarketingPageContent = {
     {
       kind: "cta-band",
       title: "Ready for a management partner that executes?",
-      text: "Book a confidential consultation and get a practical roadmap tailored to your community.",
-      action: { label: "Book Free Consultation", href: "/free-consultation", variant: "primary" },
+      text: "Request a free second opinion and get a practical roadmap tailored to your community.",
+      action: { label: "Free Condo Second Opinion", href: "/free-consultation", variant: "primary" },
     },
   ],
 };

@@ -56,6 +56,7 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
   const [createPoOpen, setCreatePoOpen] = useState(false);
   const [poPrefill, setPoPrefill] = useState<PurchaseOrderPrefill | undefined>();
   const [relatedServiceRequestPOs, setRelatedServiceRequestPOs] = useState<PurchaseOrder[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const tab = route.tab ?? "current";
   const isCertificates = route.reportType === "certificates";
@@ -98,11 +99,21 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
       setRows([]);
       return;
     }
-    const archived = tab === "archived" || tab === "past" || tab === "cancelled";
-    companyRepository.getMasterReports(route.reportType, archived, buildingId).then(setRows);
+    companyRepository
+      .getMasterReports(route.reportType, {
+        buildingId: buildingId !== "all" ? buildingId : undefined,
+        tab,
+      })
+      .then((result) => setRows(result.rows))
+      .catch(() => setRows([]));
   }, [route.reportType, tab, buildingId, isSettingsTab]);
 
   const filtered = rows.filter((r) => {
+    if (hasArchived || isCertificates) {
+      const wantArchived = tab === "archived" || tab === "past" || tab === "cancelled";
+      if (wantArchived && !r.archived) return false;
+      if (!wantArchived && r.archived) return false;
+    }
     if (isAmenity) {
       if (tab === "cancelled" && r.status !== "Cancelled") return false;
       if (tab !== "cancelled" && r.status === "Cancelled") return false;
@@ -133,7 +144,11 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
     setCertificateDetail(null);
     setBoardApprovalDetail(null);
     setIncidentDetail(null);
-    companyRepository.getCertificateDetail(row.id).then((d) => setCertificateDetail(d ?? null));
+    setDetailLoading(true);
+    companyRepository
+      .getCertificateDetail(row.id)
+      .then((d) => setCertificateDetail(d ?? null))
+      .finally(() => setDetailLoading(false));
   }, []);
 
   const openBoardApprovalView = useCallback((row: MasterReportRow) => {
@@ -141,7 +156,11 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
     setCertificateDetail(null);
     setBoardApprovalDetail(null);
     setIncidentDetail(null);
-    companyRepository.getBoardApprovalDetail(row.id).then((d) => setBoardApprovalDetail(d ?? null));
+    setDetailLoading(true);
+    companyRepository
+      .getBoardApprovalDetail(row.id)
+      .then((d) => setBoardApprovalDetail(d ?? null))
+      .finally(() => setDetailLoading(false));
   }, []);
 
   const openIncidentReportView = useCallback((row: MasterReportRow) => {
@@ -149,7 +168,11 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
     setCertificateDetail(null);
     setBoardApprovalDetail(null);
     setIncidentDetail(null);
-    companyRepository.getIncidentReportDetail(row.id).then((d) => setIncidentDetail(d ?? null));
+    setDetailLoading(true);
+    companyRepository
+      .getIncidentReportDetail(row.id)
+      .then((d) => setIncidentDetail(d ?? null))
+      .finally(() => setDetailLoading(false));
   }, []);
 
   const openServiceRequestView = useCallback((row: MasterReportRow) => {
@@ -201,6 +224,7 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
     setCertificateDetail(null);
     setBoardApprovalDetail(null);
     setIncidentDetail(null);
+    setDetailLoading(false);
   };
 
   const columns = useMemo(() => {
@@ -435,17 +459,24 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
       )}
 
       {isCertificates ? (
-        <CertificateViewModal open={!!detailRow} detail={certificateDetail} onClose={closeDetail} />
+        <CertificateViewModal
+          open={!!detailRow}
+          detail={certificateDetail}
+          loading={detailLoading}
+          onClose={closeDetail}
+        />
       ) : isBoardApprovals ? (
         <BoardApprovalViewModal
           open={!!detailRow}
           detail={boardApprovalDetail}
+          loading={detailLoading}
           onClose={closeDetail}
         />
       ) : isIncidentReports ? (
         <IncidentReportViewModal
           open={!!detailRow}
           detail={incidentDetail}
+          loading={detailLoading}
           onClose={closeDetail}
           onViewRelated={(selectedUnit, selectedOwner) => {
             setUnit(selectedUnit);

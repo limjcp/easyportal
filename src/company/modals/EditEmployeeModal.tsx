@@ -115,7 +115,7 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
       setBuildingIds([...employee.assignedBuildingIds]);
       setNotifications(defaultNotificationRows());
       companyRepository.getBuildings().then(setBuildings);
-      companyRepository.getRolePermissions(employee.role).then(setPermissions);
+      companyRepository.getEmployeePermissions(employee.membershipId ?? employee.id).then(setPermissions);
     }
   }, [open, employee]);
 
@@ -174,6 +174,7 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
       role,
       assignedBuildingIds: buildingIds,
     });
+    await companyRepository.saveEmployeePermissions(employee.membershipId ?? employee.id, permissions);
     setSaving(false);
     onSaved();
     onClose();
@@ -398,7 +399,11 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
                   <span className="text-xs uppercase text-slate-500">Select Role *</span>
                   <select
                     value={role}
-                    onChange={(e) => setRole(e.target.value as CompanyRole)}
+                    onChange={(e) => {
+                      const nextRole = e.target.value as CompanyRole;
+                      setRole(nextRole);
+                      companyRepository.getRolePermissions(nextRole).then(setPermissions);
+                    }}
                     className="w-full rounded border border-slate-300 px-2 py-2"
                   >
                     {ROLE_OPTIONS.map((option) => (
