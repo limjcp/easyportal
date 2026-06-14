@@ -90,165 +90,276 @@ export type AdminNavItem = {
   icon: IconType;
   route: AdminRoute;
   moduleKey?: string;
-  dividerBefore?: boolean;
 };
 
-export const adminNavItems: AdminNavItem[] = [
-  { id: "dashboard", label: "Dashboard", icon: FaTachometerAlt, route: { page: "dashboard" } },
-  {
+export type AdminNavGroup = {
+  id: string;
+  label: string;
+  items: AdminNavItem[];
+};
+
+export const adminDashboardNavItem: AdminNavItem = {
+  id: "dashboard",
+  label: "Dashboard",
+  icon: FaTachometerAlt,
+  route: { page: "dashboard" },
+};
+
+const adminNavItemsById = {
+  "consultation-leads": {
     id: "consultation-leads",
     label: "Consultation Leads",
     icon: FaClipboardList,
     route: { page: "consultation-leads" },
     moduleKey: "consultation-leads",
   },
-  {
+  building: {
     id: "building",
     label: "Building Definition",
     icon: FaBuilding,
     route: { page: "building-definition", tab: "building" },
     moduleKey: "building-definitions",
   },
-  {
+  "external-data": {
     id: "external-data",
     label: "External Data Links",
     icon: FaLink,
     route: { page: "external-data-links", tab: "stripe" },
     moduleKey: "external-data",
   },
-  {
+  portal: {
     id: "portal",
     label: "Portal Settings",
     icon: FaCog,
     route: { page: "portal-settings", tab: "public-settings" },
     moduleKey: "portal-settings",
   },
-  {
+  admins: {
     id: "admins",
     label: "Admins",
     icon: FaUserShield,
     route: { page: "admins" },
     moduleKey: "admins",
-    dividerBefore: true,
   },
-  {
+  board: {
     id: "board",
     label: "Board Approvals",
     icon: FaClipboardList,
     route: { page: "board-approvals", tab: "current" },
     moduleKey: "board-approvals",
   },
-  {
+  "board-members": {
     id: "board-members",
     label: "Board Members",
     icon: FaUserTie,
     route: { page: "board-members", tab: "members" },
     moduleKey: "board-members",
   },
-  {
+  "board-elections": {
     id: "board-elections",
     label: "Board Elections",
     icon: FaVoteYea,
     route: { page: "board-elections" },
     moduleKey: "board-elections",
   },
-  { id: "agm", label: "AGM Meetings", icon: FaCalendarAlt, route: { page: "agm" }, moduleKey: "agm" },
-  {
+  agm: {
+    id: "agm",
+    label: "AGM Meetings",
+    icon: FaCalendarAlt,
+    route: { page: "agm" },
+    moduleKey: "agm",
+  },
+  "compliance-dashboard": {
     id: "compliance-dashboard",
     label: "Compliance Dashboard",
     icon: FaClipboardCheck,
     route: { page: "compliance-dashboard" },
     moduleKey: "compliance-dashboard",
   },
-  {
+  "fire-safety": {
     id: "fire-safety",
     label: "Fire Safety Plan",
     icon: FaFireExtinguisher,
     route: { page: "fire-safety" },
     moduleKey: "fire-safety",
   },
-  {
+  "amenity-bookings": {
     id: "amenity-bookings",
     label: "Amenity Bookings",
     icon: FaCalendarCheck,
     route: { page: "amenity-bookings", tab: "current" },
     moduleKey: "amenities",
   },
-  {
+  documents: {
     id: "documents",
     label: "Documents",
     icon: FaFileAlt,
     route: { page: "documents", folderId: "0" },
     moduleKey: "documents",
   },
-  {
+  events: {
     id: "events",
     label: "Events",
     icon: FaCalendarAlt,
     route: { page: "events", tab: "calendar", calendarFilter: "all" },
     moduleKey: "events",
   },
-  { id: "faq", label: "FAQ", icon: FaQuestionCircle, route: { page: "faq" }, moduleKey: "faq" },
-  { id: "galleries", label: "Galleries", icon: FaImage, route: { page: "galleries" }, moduleKey: "galleries" },
-  {
+  faq: {
+    id: "faq",
+    label: "FAQ",
+    icon: FaQuestionCircle,
+    route: { page: "faq" },
+    moduleKey: "faq",
+  },
+  galleries: {
+    id: "galleries",
+    label: "Galleries",
+    icon: FaImage,
+    route: { page: "galleries" },
+    moduleKey: "galleries",
+  },
+  incidents: {
     id: "incidents",
     label: "Incident Reports",
     icon: FaExclamationTriangle,
     route: { page: "incident-reports", tab: "current" },
     moduleKey: "incident-reports",
   },
-  {
+  "news-notices": {
     id: "news-notices",
     label: "News & Notices",
     icon: FaBell,
     route: { page: "news-notices", tab: "current" },
     moduleKey: "news-notices",
   },
-  {
+  newsletters: {
     id: "newsletters",
     label: "Newsletters",
     icon: FaFile,
     route: { page: "newsletters" },
     moduleKey: "newsletters",
   },
-  {
+  "service-requests": {
     id: "service-requests",
     label: "Service Requests",
     icon: FaTools,
     route: { page: "service-requests", tab: "current" },
     moduleKey: "service-requests",
   },
-  {
+  "status-certificates": {
     id: "status-certificates",
     label: "Status Certificates",
     icon: FaCertificate,
     route: { page: "status-certificates", tab: "current" },
     moduleKey: "status-certificates",
   },
-  {
+  suggestions: {
     id: "suggestions",
     label: "Suggestion Box",
     icon: FaCommentDots,
     route: { page: "suggestions" },
     moduleKey: "suggestions",
   },
-  { id: "chat", label: "Chat", icon: FaComments, route: { page: "chat" }, moduleKey: "chat" },
-  { id: "polls", label: "Polls", icon: FaClipboardList, route: { page: "polls" }, moduleKey: "polls" },
-  {
+  chat: {
+    id: "chat",
+    label: "Chat",
+    icon: FaComments,
+    route: { page: "chat" },
+    moduleKey: "chat",
+  },
+  polls: {
+    id: "polls",
+    label: "Polls",
+    icon: FaClipboardList,
+    route: { page: "polls" },
+    moduleKey: "polls",
+  },
+  "units-users": {
     id: "units-users",
     label: "Units & Users",
     icon: FaUsers,
     route: { page: "units-users" },
     moduleKey: "units-users",
   },
+} as const satisfies Record<string, AdminNavItem>;
+
+function navItems(ids: (keyof typeof adminNavItemsById)[]): AdminNavItem[] {
+  return ids.map((id) => adminNavItemsById[id]);
+}
+
+export const adminNavGroups: AdminNavGroup[] = [
+  {
+    id: "property-operations",
+    label: "Property Operations",
+    items: navItems(["amenity-bookings", "service-requests", "status-certificates", "incidents"]),
+  },
+  {
+    id: "governance",
+    label: "Governance",
+    items: navItems(["board-members", "board", "board-elections", "agm"]),
+  },
+  {
+    id: "compliance-safety",
+    label: "Compliance & Safety",
+    items: navItems(["compliance-dashboard", "fire-safety"]),
+  },
+  {
+    id: "communications-content",
+    label: "Communications & Content",
+    items: navItems(["news-notices", "newsletters", "events", "documents", "faq", "galleries"]),
+  },
+  {
+    id: "community-engagement",
+    label: "Community & Engagement",
+    items: navItems(["consultation-leads", "suggestions", "chat", "polls"]),
+  },
+  {
+    id: "people-access",
+    label: "People & Access",
+    items: navItems(["units-users", "admins"]),
+  },
+  {
+    id: "system-configuration",
+    label: "System Configuration",
+    items: navItems(["building", "portal", "external-data"]),
+  },
 ];
 
-export function filterAdminNavItems(
+export const adminNavItems: AdminNavItem[] = [
+  adminDashboardNavItem,
+  ...adminNavGroups.flatMap((group) => group.items),
+];
+
+function filterAdminNavItemsList(
   items: AdminNavItem[],
   access: Map<string, boolean> | null
 ): AdminNavItem[] {
   if (!access) return items;
   return items.filter((item) => !item.moduleKey || access.get(item.moduleKey) === true);
+}
+
+export function filterAdminNavGroups(
+  groups: AdminNavGroup[],
+  access: Map<string, boolean> | null
+): AdminNavGroup[] {
+  return groups
+    .map((group) => ({
+      ...group,
+      items: filterAdminNavItemsList(group.items, access),
+    }))
+    .filter((group) => group.items.length > 0);
+}
+
+/** @deprecated Use filterAdminNavGroups */
+export function filterAdminNavItems(
+  items: AdminNavItem[],
+  access: Map<string, boolean> | null
+): AdminNavItem[] {
+  return filterAdminNavItemsList(items, access);
+}
+
+export function isAdminNavGroupActive(route: AdminRoute, group: AdminNavGroup): boolean {
+  return group.items.some((item) => isNavActive(route, item.id));
 }
 
 export function isAdminRouteAllowed(route: AdminRoute, access: Map<string, boolean> | null): boolean {

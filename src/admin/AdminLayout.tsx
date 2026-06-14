@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FaChevronDown, FaSignOutAlt, FaUser, FaUserCircle } from "react-icons/fa";
 import { MvpLogo } from "../shared/MvpLogo";
 import { Modal } from "../shared/Modal";
-import { cn } from "../utils/cn";
 import { AdminProfileModal } from "./modals/AdminProfileModal";
-import { adminNavItems, filterAdminNavItems, formatBuildingOptionLabel, isNavActive } from "./navigation";
+import { AdminSidebarNav } from "./components/AdminSidebarNav";
+import { adminNavGroups, filterAdminNavGroups, formatBuildingOptionLabel } from "./navigation";
 import { adminRepository } from "./data/adminRepository";
 import type { AdminUser, CompanyBuilding } from "../resident/data/types";
 import type { AdminRoute } from "./navigation";
@@ -50,8 +50,8 @@ export function AdminLayout({
     title: "",
   });
   const [resolvedBuildingLabel, setResolvedBuildingLabel] = useState<string | null>(null);
-  const visibleNavItems = useMemo(
-    () => filterAdminNavItems(adminNavItems, navAccess),
+  const visibleNavGroups = useMemo(
+    () => filterAdminNavGroups(adminNavGroups, navAccess),
     [navAccess]
   );
   const menuRef = useRef<HTMLDivElement>(null);
@@ -160,27 +160,14 @@ export function AdminLayout({
 
   const sidebarAndContent = (
     <div className="flex min-w-0 flex-col lg:flex-row lg:items-start">
-      <aside className="h-fit w-full shrink-0 self-start border-r border-slate-300 bg-[#8d8d8d] lg:w-[182px]">
-        {visibleNavItems.map(({ id, label, icon: Icon, route: navRoute, dividerBefore }) => (
-          <div key={id}>
-            {dividerBefore && <hr className="border-0 border-t border-white/25" />}
-            <button
-              type="button"
-              onClick={() => onNavigate(navRoute)}
-              className={cn(
-                "flex w-full items-center gap-3 border-b border-white/10 px-3 py-3 text-left text-sm text-white transition",
-                isNavActive(route, id)
-                  ? embedded
-                    ? "bg-[#7D5DA7]"
-                    : "bg-[#3476ef]"
-                  : "hover:bg-[#818181]"
-              )}
-            >
-              <Icon className="shrink-0 text-sm text-white/90" />
-              <span>{label}</span>
-            </button>
-          </div>
-        ))}
+      <aside className="h-fit w-full shrink-0 self-start border-r border-slate-300 bg-[#8d8d8d] lg:w-[220px]">
+        <AdminSidebarNav
+          route={route}
+          groups={visibleNavGroups}
+          embedded={embedded}
+          buildingId={activeBuildingId}
+          onNavigate={onNavigate}
+        />
         <div className="border-t border-white/10 p-2">
           <label className="flex items-center gap-2 rounded border border-black/10 bg-white px-2 py-1.5 text-sm text-slate-600">
             <span aria-hidden="true">🇺🇸</span>
