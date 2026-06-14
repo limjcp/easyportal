@@ -1,4 +1,4 @@
-import { MarketingContentPage } from "./MarketingContentPage";
+import { EditorialContentPage } from "./EditorialContentPage";
 import { ownerAndBoardTipsPageContent } from "../data/pageContent/ownerAndBoardTips";
 
 type OwnerBoardTipsPageProps = {
@@ -6,6 +6,5 @@ type OwnerBoardTipsPageProps = {
 };
 
 export function OwnerBoardTipsPage({ onNavigate }: OwnerBoardTipsPageProps) {
-  return <MarketingContentPage content={ownerAndBoardTipsPageContent} onNavigate={onNavigate} />;
+  return <EditorialContentPage content={ownerAndBoardTipsPageContent} onNavigate={onNavigate} />;
 }
-

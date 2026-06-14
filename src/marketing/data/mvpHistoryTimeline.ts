@@ -31,36 +31,15 @@ export const MVP_HISTORY_TIMELINE: MvpHistoryTimelineEntry[] = [
     imageAlt: "Residential property services",
   },
   {
-    id: "olcm-licensed",
-    dateLabel: "Jul 2021",
-    year: 2021,
-    title: "Scott earns OLCM designation",
-    description:
-      "Scott Hundey earns his Ontario Licensed Condominium Manager (OLCM) credential through the Condominium Management Regulatory Authority of Ontario (CMRAO).",
-    imageUrl:
-      "https://img1.wsimg.com/isteam/getty/2157709105/:/cr=t:0%25,l:18.75%25,w:62.5%25,h:100%25/rs=w:365,h:365,cg:true",
-    imageAlt: "MVP team collaboration",
-  },
-  {
     id: "mvp-condos-incorporated",
     dateLabel: "Jan 2024",
     year: 2024,
-    title: "MVP Condos incorporated",
+    title: "MVP Condos born",
     description:
-      "MVP Condominium Property Management is incorporated as a licensed full-service management firm, serving condominium corporations across Ontario with governance, bookkeeping, and operations support.",
+      "MVP Condominium Property Management launches as a licensed full-service management firm, serving condominium corporations across Ontario with governance, bookkeeping, and operations support.",
     imageUrl:
       "https://img1.wsimg.com/isteam/getty/2204309551/:/cr=t:0%25,l:23.63%25,w:52.73%25,h:100%25/rs=w:365,h:365,cg:true",
     imageAlt: "Condominium financial operations",
-  },
-  {
-    id: "bbb-accredited",
-    dateLabel: "Dec 2024",
-    year: 2024,
-    title: "BBB Accredited",
-    description:
-      "MVP Condos earns Better Business Bureau accreditation, recognized for reliable service, strong community relationships, and hands-on support when it matters most.",
-    imageUrl: "https://img1.wsimg.com/isteam/getty/2186781582/:/rs=h:1000,cg:true,m",
-    imageAlt: "Strong condominium community",
   },
   {
     id: "scott-leadership",

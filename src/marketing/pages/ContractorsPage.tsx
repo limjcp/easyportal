@@ -1,4 +1,4 @@
-import { MarketingContentPage } from "./MarketingContentPage";
+import { EditorialContentPage } from "./EditorialContentPage";
 import { contractorsPageContent } from "../data/pageContent/contractors";
 
 type ContractorsPageProps = {
@@ -6,6 +6,5 @@ type ContractorsPageProps = {
 };
 
 export function ContractorsPage({ onNavigate }: ContractorsPageProps) {
-  return <MarketingContentPage content={contractorsPageContent} onNavigate={onNavigate} />;
+  return <EditorialContentPage content={contractorsPageContent} onNavigate={onNavigate} />;
 }
-

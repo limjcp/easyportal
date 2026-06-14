@@ -9,8 +9,12 @@ type FreeConsultationPageProps = {
 export function FreeConsultationPage({ onNavigate }: FreeConsultationPageProps) {
   return (
     <>
-      <EditorialContentPage content={freeConsultationPageContent} onNavigate={onNavigate} />
-      <ConsultationIntakeSection onNavigate={onNavigate} />
+      <ConsultationIntakeSection leading onNavigate={onNavigate} />
+      <EditorialContentPage
+        content={freeConsultationPageContent}
+        hidePageHeader
+        onNavigate={onNavigate}
+      />
     </>
   );
 }

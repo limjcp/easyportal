@@ -2,6 +2,9 @@ export type InstagramReel = {
   shortcode: string;
   permalink: string;
   caption?: string;
+  videoUrl?: string;
+  thumbnailUrl?: string;
+  takenAt?: number;
 };
 
 export const INSTAGRAM_USERNAME = "mvpcondos";

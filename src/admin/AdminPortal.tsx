@@ -37,6 +37,7 @@ import { ExternalDataLinksPage } from "./pages/ExternalDataLinksPage";
 import { AdminsPage } from "./pages/AdminsPage";
 import { AdminStatusCertificatesPage } from "./pages/AdminStatusCertificatesPage";
 import { AgmMeetingsPage } from "./pages/AgmMeetingsPage";
+import { ComplianceDashboardPage } from "./pages/ComplianceDashboardPage";
 import { ConsultationLeadsPage } from "./pages/ConsultationLeadsPage";
 import type { CompanyBuilding } from "../resident/data/types";
 import { ToastProvider } from "../shared/Toast";
@@ -205,6 +206,7 @@ export function AdminPortal({
           onRefresh={bumpRefresh}
         />
       )}
+      {route.page === "compliance-dashboard" && <ComplianceDashboardPage />}
       {route.page === "fire-safety" && (
         <FireSafetySubmissionsPage route={route} onNavigate={navigate} refreshKey={refreshKey} />
       )}

@@ -30,6 +30,7 @@ export const BUILDING_PERMISSION_MODULES: { moduleKey: string; label: string }[]
   { moduleKey: "board-members", label: "Board Members" },
   { moduleKey: "board-elections", label: "Board Elections" },
   { moduleKey: "agm", label: "AGM Meetings" },
+  { moduleKey: "compliance-dashboard", label: "Compliance Dashboard" },
   { moduleKey: "fire-safety", label: "Fire Safety Plan" },
   { moduleKey: "building-definitions", label: "Building Definitions" },
   { moduleKey: "documents", label: "Documents" },
@@ -106,7 +107,8 @@ export function createDefaultBuildingPermissionsForRole(role: string): Permissio
           m.moduleKey === "board-elections" ||
           m.moduleKey === "documents" ||
           m.moduleKey === "incident-reports" ||
-          m.moduleKey === "agm",
+          m.moduleKey === "agm" ||
+          m.moduleKey === "compliance-dashboard",
         edit: m.moduleKey === "board-approvals" || m.moduleKey === "board-elections",
       })
     );

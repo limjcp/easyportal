@@ -1,4 +1,7 @@
 import type { MarketingAction } from "../../data/pageContent/types";
+import { EDITORIAL_CONTAINER, EDITORIAL_PROSE, EDITORIAL_SECTION_PY } from "../../editorialLayout";
+import { EditorialRichText } from "../EditorialRichText";
+import { ScrollReveal } from "../ScrollReveal";
 import { pe } from "../../typography";
 import { ArrowUpRightIcon } from "../icons";
 
@@ -13,18 +16,20 @@ const isExternal = (href: string) => href.startsWith("http");
 
 export function CtaBandSection({ title, text, action, onNavigate }: CtaBandSectionProps) {
   return (
-    <section className="px-6 py-28 md:px-12 lg:px-20 md:py-36 bg-foreground text-background">
-      <div className="max-w-3xl">
-        <p className={`${pe.eyebrow} text-background/40 mb-8`}>Next Step</p>
-        <h2 className={`${pe.sectionTitleLg} text-balance`}>{title}</h2>
-        <p className={`mt-6 ${pe.body} text-background/55 max-w-lg`}>{text}</p>
+    <section className={`${EDITORIAL_SECTION_PY} bg-foreground text-background`}>
+      <ScrollReveal className={`${EDITORIAL_CONTAINER} text-center`}>
+        <p className={`${pe.eyebrow} text-background/40 mb-6`}>Next Step</p>
+        <h2 className={`${pe.editorialSectionTitle} text-balance mx-auto max-w-4xl`}>{title}</h2>
+        <p className={`mt-8 ${EDITORIAL_PROSE} ${pe.editorialBody} text-background/60`}>
+          <EditorialRichText text={text} />
+        </p>
         <div className="mt-10">
           {isExternal(action.href) ? (
             <a
               href={action.href}
               target="_blank"
               rel="noreferrer"
-              className={`group inline-flex items-center gap-3 ${pe.link} text-background/60 hover:text-background transition-colors duration-500`}
+              className={`group inline-flex items-center gap-3 ${pe.link} text-background/70 hover:text-background transition-colors duration-500`}
             >
               <span className="border-b border-background/20 pb-0.5 group-hover:border-background/60 transition-colors duration-500">
                 {action.label}
@@ -35,7 +40,7 @@ export function CtaBandSection({ title, text, action, onNavigate }: CtaBandSecti
             <button
               type="button"
               onClick={() => onNavigate(action.href)}
-              className={`group inline-flex items-center gap-3 ${pe.link} text-background/60 hover:text-background transition-colors duration-500`}
+              className={`group inline-flex items-center gap-3 ${pe.link} text-background/70 hover:text-background transition-colors duration-500`}
             >
               <span className="border-b border-background/20 pb-0.5 group-hover:border-background/60 transition-colors duration-500">
                 {action.label}
@@ -44,7 +49,7 @@ export function CtaBandSection({ title, text, action, onNavigate }: CtaBandSecti
             </button>
           )}
         </div>
-      </div>
+      </ScrollReveal>
     </section>
   );
 }

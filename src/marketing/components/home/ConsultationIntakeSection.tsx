@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { consultationRepository } from "../../data/consultationRepository";
+import { EDITORIAL_CONTAINER, EDITORIAL_PROSE, EDITORIAL_SECTION_PY } from "../../editorialLayout";
+import { ScrollReveal } from "../ScrollReveal";
 import { pe } from "../../typography";
 import { ArrowUpRightIcon } from "../icons";
 import { EditorialSectionHeader } from "./EditorialSectionHeader";
@@ -17,6 +19,7 @@ import type {
 
 type ConsultationIntakeSectionProps = {
   onNavigate: (path: string) => void;
+  leading?: boolean;
 };
 
 type ChoiceStepId =
@@ -172,7 +175,7 @@ const emptyForm = (): IntakeFormState => ({
   phone: "",
 });
 
-export function ConsultationIntakeSection({ onNavigate }: ConsultationIntakeSectionProps) {
+export function ConsultationIntakeSection({ onNavigate, leading = false }: ConsultationIntakeSectionProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [form, setForm] = useState<IntakeFormState>(emptyForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -239,20 +242,28 @@ export function ConsultationIntakeSection({ onNavigate }: ConsultationIntakeSect
   };
 
   return (
-    <section className="px-6 py-28 md:px-12 lg:px-20 md:py-36 border-t border-border">
-      <EditorialSectionHeader
-        eyebrow="Answer a few quick questions. Once complete, our team will follow up with a free second opinion."
-        title="Free Condo Second Opinion"
-        count={`(${String(INTAKE_STEPS.length).padStart(2, "0")}) Steps`}
-      />
+    <section
+      className={`${EDITORIAL_SECTION_PY} ${
+        leading ? "border-b border-border" : "border-t border-border"
+      }`}
+    >
+      <div className={EDITORIAL_CONTAINER}>
+        <ScrollReveal>
+          <EditorialSectionHeader
+            variant="editorial"
+            eyebrow="Answer a few quick questions. Once complete, our team will follow up with a free second opinion."
+            title="Free Condo Second Opinion"
+            count={`(${String(INTAKE_STEPS.length).padStart(2, "0")}) Steps`}
+          />
+        </ScrollReveal>
 
       {isSubmitted ? (
-        <div className="max-w-2xl border border-border p-8 md:p-12">
+        <ScrollReveal className={`${EDITORIAL_PROSE} border border-border p-8 md:p-12 mx-auto text-center`}>
           <p className={`${pe.eyebrow} text-muted-foreground mb-6`}>Submitted</p>
-          <h3 className={`${pe.cardTitleLg} text-foreground`}>
+          <h3 className={`${pe.editorialCardTitle} text-foreground`}>
             Thank you. Your second opinion request is submitted.
           </h3>
-          <p className={`mt-4 ${pe.bodySm} text-muted-foreground`}>
+          <p className={`mt-4 ${pe.editorialBodySm} text-muted-foreground`}>
             We will contact you shortly using the information you provided.
           </p>
           <button
@@ -265,9 +276,9 @@ export function ConsultationIntakeSection({ onNavigate }: ConsultationIntakeSect
             </span>
             <ArrowUpRightIcon className={`${pe.iconSm} group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-300`} />
           </button>
-        </div>
+        </ScrollReveal>
       ) : (
-        <div className="max-w-2xl">
+        <ScrollReveal className={EDITORIAL_PROSE}>
           <div className="mb-10">
             <div className={`mb-3 flex items-center justify-between ${pe.eyebrowSm} text-muted-foreground`}>
               <span>
@@ -280,7 +291,7 @@ export function ConsultationIntakeSection({ onNavigate }: ConsultationIntakeSect
             </div>
           </div>
 
-          <h3 className={`${pe.cardTitleLg} text-foreground`}>{activeStep.prompt}</h3>
+          <h3 className={`${pe.editorialCardTitle} text-foreground text-center md:text-left`}>{activeStep.prompt}</h3>
 
           {activeStep.type === "choice" ? (
             <div className="mt-8 space-y-3">
@@ -296,7 +307,7 @@ export function ConsultationIntakeSection({ onNavigate }: ConsultationIntakeSect
                       <span className={`${pe.eyebrowSm} text-muted-foreground/50 tabular-nums w-8`}>
                         {String(index + 1).padStart(2, "0")}
                       </span>
-                      <span className={`${pe.listTitle} text-foreground`}>{option.label}</span>
+                      <span className={`${pe.editorialListTitle} text-foreground`}>{option.label}</span>
                     </div>
                     <ArrowUpRightIcon className={`${pe.iconSm} text-muted-foreground/30 group-hover:text-foreground group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all duration-300`} />
                   </button>
@@ -361,8 +372,9 @@ export function ConsultationIntakeSection({ onNavigate }: ConsultationIntakeSect
           )}
 
           {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
-        </div>
+        </ScrollReveal>
       )}
+      </div>
     </section>
   );
 }

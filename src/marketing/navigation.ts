@@ -4,6 +4,7 @@ export type MarketingPage =
   | "contact-us"
   | "faq"
   | "better-bookkeeping"
+  | "compliance-dashboard"
   | "contractors"
   | "privacy-policy"
   | "owner-and-board-tips"
@@ -19,6 +20,7 @@ export const MARKETING_PATHS: Record<MarketingPage, string> = {
   "contact-us": "/contact-us",
   faq: "/faq",
   "better-bookkeeping": "/better-bookkeeping",
+  "compliance-dashboard": "/compliance-dashboard",
   contractors: "/contractors",
   "privacy-policy": "/privacy-policy",
   "owner-and-board-tips": "/owner-and-board-tips",
@@ -45,6 +47,52 @@ export type MarketingNavItem = {
   page: MarketingPage;
 };
 
+export type MarketingNavGroup = {
+  label: string;
+  items: MarketingNavItem[];
+};
+
+export const MARKETING_TOP_LEVEL_LINKS: MarketingNavItem[] = [{ label: "Home", page: "home" }];
+
+export const MARKETING_NAV_GROUPS: MarketingNavGroup[] = [
+  {
+    label: "About",
+    items: [
+      { label: "Inside MVP", page: "inside-mvp" },
+      { label: "The Common Element", page: "the-common-element" },
+    ],
+  },
+  {
+    label: "Services",
+    items: [
+      { label: "Better Bookkeeping", page: "better-bookkeeping" },
+      { label: "Compliance Dashboard", page: "compliance-dashboard" },
+      { label: "Qualified Contractors", page: "contractors" },
+      { label: "Vendors", page: "vendors" },
+    ],
+  },
+  {
+    label: "Resources",
+    items: [
+      { label: "FAQ", page: "faq" },
+      { label: "Free eBook", page: "ebook" },
+      { label: "Owner and Board Tips", page: "owner-and-board-tips" },
+    ],
+  },
+  {
+    label: "Contact",
+    items: [
+      { label: "Contact Us", page: "contact-us" },
+      { label: "Free Second Opinion", page: "free-consultation" },
+    ],
+  },
+  {
+    label: "Legal",
+    items: [{ label: "Privacy Policy", page: "privacy-policy" }],
+  },
+];
+
+/** @deprecated Use MARKETING_TOP_LEVEL_LINKS and MARKETING_NAV_GROUPS instead */
 export const MARKETING_HEADER_LINKS: MarketingNavItem[] = [
   { label: "Home", page: "home" },
   { label: "Inside MVP", page: "inside-mvp" },

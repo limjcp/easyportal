@@ -12,6 +12,7 @@ import { FreeConsultationPage } from "./pages/FreeConsultationPage";
 import { VendorsPage } from "./pages/VendorsPage";
 import { EbookPage } from "./pages/EbookPage";
 import { CommonElementPage } from "./pages/CommonElementPage";
+import { ComplianceDashboardPage } from "./pages/ComplianceDashboardPage";
 
 type MarketingPortalProps = {
   pathname: string;
@@ -29,6 +30,7 @@ export function MarketingPortal({ pathname, onNavigate, onOpenLogin }: Marketing
       {page === "contact-us" && <ContactUsPage onNavigate={onNavigate} />}
       {page === "faq" && <FaqPage onNavigate={onNavigate} />}
       {page === "better-bookkeeping" && <BetterBookkeepingPage onNavigate={onNavigate} />}
+      {page === "compliance-dashboard" && <ComplianceDashboardPage onNavigate={onNavigate} />}
       {page === "contractors" && <ContractorsPage onNavigate={onNavigate} />}
       {page === "privacy-policy" && <PrivacyPolicyPage onNavigate={onNavigate} />}
       {page === "owner-and-board-tips" && <OwnerBoardTipsPage onNavigate={onNavigate} />}

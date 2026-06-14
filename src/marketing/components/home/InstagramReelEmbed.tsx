@@ -1,45 +1,75 @@
 import type { InstagramReel } from "../../data/instagramReels";
-import { pe } from "../../typography";
+import { cn } from "../../../utils/cn";
 
 type InstagramReelEmbedProps = {
   reel: InstagramReel;
-  index: number;
+  align?: "start" | "end" | "center";
 };
 
-export function InstagramReelEmbed({ reel, index }: InstagramReelEmbedProps) {
+function PlayIcon() {
   return (
-    <article className="bg-background border border-border overflow-hidden">
-      <div className="px-6 py-4 border-b border-border flex items-start justify-between gap-4">
-        <span className={`${pe.eyebrowSm} text-muted-foreground/50 tabular-nums shrink-0`}>
-          {String(index + 1).padStart(2, "0")}
-        </span>
-        {reel.caption && (
-          <p className={`${pe.bodySm} text-muted-foreground line-clamp-2`}>{reel.caption}</p>
-        )}
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className="h-10 w-10 text-background"
+      aria-hidden="true"
+    >
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  );
+}
+
+const frameClass = (align: InstagramReelEmbedProps["align"]) =>
+  cn(
+    "w-full max-w-sm aspect-[9/16] overflow-hidden bg-foreground/5",
+    align === "end" ? "mx-auto md:ml-auto md:mr-0" : align === "start" ? "mx-auto md:ml-0 md:mr-auto" : "mx-auto"
+  );
+
+export function InstagramReelEmbed({ reel, align = "center" }: InstagramReelEmbedProps) {
+  const label = reel.caption ?? `Instagram reel by MVP Condos`;
+
+  if (reel.videoUrl) {
+    return (
+      <div className={frameClass(align)}>
+        <video
+          src={reel.videoUrl}
+          poster={reel.thumbnailUrl}
+          controls
+          playsInline
+          preload="metadata"
+          className="h-full w-full object-cover"
+          aria-label={label}
+        />
       </div>
-      <div className="px-6 py-6 flex justify-center bg-foreground/5">
-        <div className="relative w-full max-w-[340px] aspect-[9/16]">
-          <iframe
-            src={`https://www.instagram.com/reel/${reel.shortcode}/embed`}
-            title={reel.caption ?? `Instagram reel ${reel.shortcode}`}
-            className="absolute inset-0 h-full w-full border-0"
-            scrolling="no"
-            allow="encrypted-media; autoplay; clipboard-write"
-            allowFullScreen
-            loading="lazy"
-          />
+    );
+  }
+
+  return (
+    <a
+      href={reel.permalink}
+      target="_blank"
+      rel="noreferrer"
+      className={cn("group relative block", frameClass(align))}
+      aria-label={`${label} — watch on Instagram`}
+    >
+      {reel.thumbnailUrl ? (
+        <img
+          src={reel.thumbnailUrl}
+          alt=""
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+          loading="lazy"
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-muted">
+          <span className="text-sm text-muted-foreground">Video unavailable</span>
+        </div>
+      )}
+      <div className="absolute inset-0 flex items-center justify-center bg-foreground/20 transition-colors duration-300 group-hover:bg-foreground/30">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-foreground/60 backdrop-blur-sm transition-transform duration-300 group-hover:scale-105">
+          <PlayIcon />
         </div>
       </div>
-      <div className="px-6 py-4 border-t border-border">
-        <a
-          href={reel.permalink}
-          target="_blank"
-          rel="noreferrer"
-          className={`${pe.eyebrowSm} text-foreground/70 hover:text-foreground transition-colors duration-300`}
-        >
-          Watch on Instagram
-        </a>
-      </div>
-    </article>
+    </a>
   );
 }

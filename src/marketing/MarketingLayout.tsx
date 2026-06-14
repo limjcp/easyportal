@@ -3,7 +3,7 @@ import { CookieNotice } from "./components/CookieNotice";
 import { MarketingFooter } from "./components/MarketingFooter";
 import { MarketingHeader } from "./components/MarketingHeader";
 import type { MarketingPage } from "./navigation";
-import { EDITORIAL_FULL_BLEED_PAGES } from "./constants";
+import { EDITORIAL_FULL_BLEED_PAGES, MARKETING_HEADER_OFFSET } from "./constants";
 import { cn } from "../utils/cn";
 
 type MarketingLayoutProps = {
@@ -21,7 +21,13 @@ export function MarketingLayout({ currentPage, onNavigate, onOpenLogin, children
   return (
     <div className="min-h-screen bg-background text-foreground font-sans antialiased">
       <MarketingHeader currentPage={currentPage} onNavigate={onNavigate} onOpenLogin={onOpenLogin} />
-      <main className={cn(isFullBleed ? "w-full" : "mx-auto w-full max-w-[1180px] px-6 py-28 md:px-12 lg:px-20 md:py-36")}>
+      <main
+        className={cn(
+          "w-full",
+          MARKETING_HEADER_OFFSET,
+          !isFullBleed && "mx-auto max-w-[1180px] px-6 py-28 md:px-12 lg:px-20 md:py-36"
+        )}
+      >
         {children}
       </main>
       <MarketingFooter onNavigate={onNavigate} />

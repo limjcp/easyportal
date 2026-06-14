@@ -10,7 +10,7 @@ export const SITE_CONTACT = {
 export const SITE_SOCIAL = {
   facebook: "https://www.facebook.com/mvpcondo",
   instagram: "https://www.instagram.com/mvpcondos",
-  linkedin: "https://www.linkedin.com/company/mvp-condos",
+  linkedin: "https://www.linkedin.com/company/mvpcondo",
 };
 
 export const SITE_FOOTER_LINKS = [
@@ -38,7 +38,6 @@ export const SITE_TRUST_POINTS = [
 ];
 
 export const SITE_HIGHLIGHT_METRICS = [
-  { label: "Average onboarding timeline", value: "14 days" },
   { label: "emergency hotline", value: "24/7" },
   { label: "board reporting", value: "Monthly" },
 ];

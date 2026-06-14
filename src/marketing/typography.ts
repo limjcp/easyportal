@@ -20,4 +20,12 @@ export const pe = {
   mobileNav: "text-3xl font-light tracking-tight",
   iconSm: "h-4 w-4",
   iconMd: "h-5 w-5",
+  editorialPageTitle:
+    "text-[clamp(2rem,5vw,4rem)] font-extralight tracking-tight text-balance leading-[1.08]",
+  editorialLead: "text-xl md:text-2xl leading-relaxed",
+  editorialBody: "text-lg md:text-xl leading-[1.8]",
+  editorialBodySm: "text-base md:text-lg leading-[1.75]",
+  editorialSectionTitle: "text-[2rem] md:text-[2.75rem] lg:text-[3rem] font-extralight tracking-tight text-balance",
+  editorialCardTitle: "text-2xl md:text-3xl font-light tracking-tight",
+  editorialListTitle: "text-xl md:text-2xl font-light tracking-tight",
 } as const;

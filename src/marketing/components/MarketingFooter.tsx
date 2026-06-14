@@ -1,6 +1,6 @@
 import { MvpLogo } from "../../shared/MvpLogo";
+import { FooterCredits } from "./FooterCredits";
 import {
-  REQUEST_PROPOSAL_URL,
   SITE_CONTACT,
   SITE_FOOTER_LINKS,
   SITE_HIGHLIGHT_METRICS,
@@ -30,13 +30,6 @@ export function MarketingFooter({ onNavigate }: MarketingFooterProps) {
           <p className={`${pe.bodySm} text-muted-foreground mt-4`}>{SITE_CONTACT.email}</p>
           <p className={`${pe.bodySm} text-muted-foreground`}>Call us TOLL FREE: {SITE_CONTACT.tollFree}</p>
           <p className={`${pe.bodySm} text-muted-foreground mt-2`}>{SITE_CONTACT.headquarters}</p>
-          <button
-            type="button"
-            className={`mt-6 ${pe.eyebrowSm} text-foreground border-b border-foreground/20 pb-0.5 hover:border-foreground/60 transition-colors duration-300`}
-            onClick={() => onNavigate(REQUEST_PROPOSAL_URL)}
-          >
-            Book a Free Second Opinion
-          </button>
         </div>
 
         <div className="md:col-span-3 md:col-start-7">
@@ -112,6 +105,8 @@ export function MarketingFooter({ onNavigate }: MarketingFooterProps) {
           </div>
         </div>
       </div>
+
+      <FooterCredits />
 
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between pt-8 border-t border-border gap-4">
         <p className={`${pe.caption} text-muted-foreground/50`}>

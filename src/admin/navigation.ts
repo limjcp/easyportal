@@ -6,6 +6,7 @@ import {
   FaCalendarAlt,
   FaCalendarCheck,
   FaCertificate,
+  FaClipboardCheck,
   FaClipboardList,
   FaCommentDots,
   FaExclamationTriangle,
@@ -58,6 +59,7 @@ export type AdminRoute =
   | { page: "board-elections" }
   | { page: "board-election-edit"; id: string }
   | { page: "agm" }
+  | { page: "compliance-dashboard" }
   | { page: "fire-safety" }
   | { page: "amenity-bookings"; tab: "current" | "past" | "cancelled" | "settings" }
   | { page: "documents"; folderId?: string }
@@ -151,6 +153,13 @@ export const adminNavItems: AdminNavItem[] = [
     moduleKey: "board-elections",
   },
   { id: "agm", label: "AGM Meetings", icon: FaCalendarAlt, route: { page: "agm" }, moduleKey: "agm" },
+  {
+    id: "compliance-dashboard",
+    label: "Compliance Dashboard",
+    icon: FaClipboardCheck,
+    route: { page: "compliance-dashboard" },
+    moduleKey: "compliance-dashboard",
+  },
   {
     id: "fire-safety",
     label: "Fire Safety Plan",
@@ -298,6 +307,8 @@ export function isNavActive(route: AdminRoute, navId: string): boolean {
       return route.page === "chat";
     case "agm":
       return route.page === "agm";
+    case "compliance-dashboard":
+      return route.page === "compliance-dashboard";
     case "polls":
       return route.page === "polls" || route.page === "poll-edit";
     case "units-users":
@@ -365,6 +376,8 @@ export function getPageTitle(route: AdminRoute): string {
       return "Edit Election";
     case "agm":
       return "AGM Meetings";
+    case "compliance-dashboard":
+      return "Compliance Dashboard";
     case "fire-safety":
       return "Fire Safety Plan";
     case "amenity-bookings":
@@ -485,6 +498,8 @@ export function getBreadcrumbTrail(route: AdminRoute): { label: string; route?: 
       return [{ label: "Board Elections", route: { page: "board-elections" } }, { label: "Edit" }];
     case "agm":
       return [{ label: "AGM Meetings", route }];
+    case "compliance-dashboard":
+      return [{ label: "Compliance Dashboard", route }];
     case "fire-safety":
       return [{ label: "Fire Safety Plan", route }];
     case "amenity-bookings": {

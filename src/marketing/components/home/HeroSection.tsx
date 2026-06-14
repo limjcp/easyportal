@@ -24,7 +24,7 @@ export function HeroSection({
   onNavigate,
 }: HeroSectionProps) {
   return (
-    <section className="relative h-screen flex flex-col justify-end overflow-hidden">
+    <section className="relative min-h-[calc(100dvh-var(--marketing-header-height))] flex flex-col justify-end overflow-x-hidden">
       <div className="absolute inset-0 z-0">
         {imageUrl && (
           <img
@@ -79,11 +79,6 @@ export function HeroSection({
               )}
             </div>
           )}
-        </div>
-
-        <div className="mt-16 md:mt-20 flex items-center gap-6">
-          <div className="w-12 h-px bg-background/30" />
-          <span className={`${pe.eyebrowWide} text-background/40`}>Scroll to explore</span>
         </div>
       </div>
     </section>

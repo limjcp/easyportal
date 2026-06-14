@@ -40,3 +40,9 @@ enable_confirmations = false
 
 [functions.provision-user]
 verify_jwt = true
+
+[functions.onboarding-lookup]
+verify_jwt = false
+
+[functions.onboarding-register]
+verify_jwt = false

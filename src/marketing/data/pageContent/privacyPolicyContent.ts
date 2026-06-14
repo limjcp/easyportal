@@ -16,9 +16,9 @@ export const privacyPolicyMeta = {
   title: "MVP Condominium Property Management (MVP Condos) Privacy Policy",
   lastUpdated: "January 17, 2026",
   intro: [
-    "This Privacy Policy describes Our policies and procedures on the collection, use and disclosure of Your information when You use the Service and tells You about Your privacy rights and how the law protects You.",
-    "We use Your Personal Data to provide and improve the Service. By using the Service, You agree to the collection and use of information in accordance with this Privacy Policy.",
-    "This Privacy Policy is intended to comply with applicable Canadian privacy legislation, including the Personal Information Protection and Electronic Documents Act (PIPEDA) and applicable provincial privacy laws.",
+    "This Privacy Policy describes Our policies and procedures on the collection, use and disclosure of Your information when You use the Service and tells You about **Your privacy rights** and how the law protects You.",
+    "We use Your **Personal Data** to provide and improve the Service. By using the Service, You agree to the collection and use of information in accordance with this Privacy Policy.",
+    "This Privacy Policy is intended to comply with applicable **Canadian privacy legislation**, including the Personal Information Protection and Electronic Documents Act (PIPEDA) and applicable provincial privacy laws.",
   ],
 };
 

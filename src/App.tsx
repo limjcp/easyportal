@@ -223,7 +223,15 @@ export default function App() {
         />
       )}
       {view === "login" && (
-        <LoginPage onLogin={handleLogin} onOpenMarketing={(path) => navigatePublic(path ?? "/")} />
+        <LoginPage
+          initialMode={
+            typeof window !== "undefined" && new URLSearchParams(window.location.search).get("signup") === "1"
+              ? "signup"
+              : "signin"
+          }
+          onLogin={handleLogin}
+          onOpenMarketing={(path) => navigatePublic(path ?? "/")}
+        />
       )}
       {view === "resident" && (
         <ResidentPortal onSwitchToAdmin={handleSwitchToAdmin} onLogout={handleLogout} />

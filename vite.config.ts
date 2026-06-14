@@ -30,6 +30,11 @@ export default defineConfig({
           "User-Agent": "Instagram 219.0.0.12.117 Android",
         },
       },
+      "/api/instagram-oembed": {
+        target: "https://api.instagram.com",
+        changeOrigin: true,
+        rewrite: (requestPath) => requestPath.replace(/^\/api\/instagram-oembed/, ""),
+      },
     },
     ...(ngrokHost
       ? {

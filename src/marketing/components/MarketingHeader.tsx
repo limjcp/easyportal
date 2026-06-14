@@ -1,93 +1,84 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MvpLogo } from "../../shared/MvpLogo";
-import { MARKETING_HEADER_LINKS, MARKETING_PATHS, type MarketingPage } from "../navigation";
-import { EDITORIAL_HERO_PAGES } from "../constants";
+import {
+  MARKETING_NAV_GROUPS,
+  MARKETING_PATHS,
+  MARKETING_TOP_LEVEL_LINKS,
+  type MarketingPage,
+} from "../navigation";
 import { REQUEST_PROPOSAL_URL } from "../data/siteContent";
+import { useMarketingHeaderHeight } from "../hooks/useMarketingHeaderHeight";
 import { pe } from "../typography";
 import { MenuIcon } from "./icons";
+import { MarketingNavDropdown } from "./MarketingNavDropdown";
 import { cn } from "../../utils/cn";
-
-const HERO_TOP_PAGES = new Set<string>(EDITORIAL_HERO_PAGES);
 
 type MarketingHeaderProps = {
   currentPage: MarketingPage;
   onNavigate: (path: string) => void;
   onOpenLogin: () => void;
-  solidHeader?: boolean;
 };
 
-export function MarketingHeader({ currentPage, onNavigate, onOpenLogin, solidHeader = false }: MarketingHeaderProps) {
-  const [isScrolled, setIsScrolled] = useState(false);
+export function MarketingHeader({ currentPage, onNavigate, onOpenLogin }: MarketingHeaderProps) {
+  const headerRef = useRef<HTMLElement>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const hasHeroTop = !solidHeader && HERO_TOP_PAGES.has(currentPage);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
-  useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 40);
-    handleScroll();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  useMarketingHeaderHeight(headerRef, isMenuOpen);
 
   useEffect(() => {
     setIsMenuOpen(false);
+    setExpandedGroup(null);
   }, [currentPage]);
 
-  const useLightChrome = hasHeroTop && !isScrolled;
-  const navLinkClass = cn(
-    `${pe.eyebrowSm} transition-colors duration-500 hover:opacity-100`,
-    useLightChrome ? "text-background/60 hover:text-background" : "text-muted-foreground hover:text-foreground"
-  );
+  const closeMobileMenu = () => {
+    setIsMenuOpen(false);
+    setExpandedGroup(null);
+  };
+
+  const navLinkClass = `${pe.eyebrowSm} text-muted-foreground hover:text-foreground transition-colors duration-300`;
 
   return (
-    <header
-      className={cn(
-        "fixed top-0 left-0 right-0 z-50 transition-all duration-500",
-        isScrolled || !hasHeroTop ? "bg-background/95 backdrop-blur border-b border-border" : "bg-transparent"
-      )}
-    >
-      <nav className="flex items-center justify-between px-6 py-5 md:px-12 lg:px-20">
-        <button type="button" className="flex items-center" onClick={() => onNavigate("/")}>
-          <MvpLogo className={cn("h-14 md:h-16 lg:h-[4.5rem]", useLightChrome && "drop-shadow-md")} />
+    <header ref={headerRef} className="fixed top-0 left-0 right-0 z-50 bg-background border-b border-border">
+      <nav className="flex min-w-0 items-center justify-between gap-2 px-6 py-4 md:px-12 md:py-5 lg:px-20">
+        <button type="button" className="flex min-w-0 shrink items-center" onClick={() => onNavigate("/")}>
+          <MvpLogo className="h-[clamp(2.75rem,6vw,4.5rem)]" />
         </button>
 
-        <div className="hidden lg:flex items-center gap-10">
-          {MARKETING_HEADER_LINKS.map((item) => (
+        <div className="hidden xl:flex min-w-0 items-center gap-8 2xl:gap-10">
+          {MARKETING_TOP_LEVEL_LINKS.map((item) => (
             <button
               key={item.page}
               type="button"
               onClick={() => onNavigate(MARKETING_PATHS[item.page])}
-              className={cn(
-                navLinkClass,
-                currentPage === item.page && (useLightChrome ? "text-background" : "text-foreground")
-              )}
+              className={cn(navLinkClass, currentPage === item.page && "text-foreground")}
             >
               {item.label}
             </button>
           ))}
+          {MARKETING_NAV_GROUPS.map((group) => (
+            <MarketingNavDropdown
+              key={group.label}
+              group={group}
+              currentPage={currentPage}
+              onNavigate={onNavigate}
+              variant="desktop"
+            />
+          ))}
         </div>
 
-        <div className="hidden md:flex items-center gap-4">
+        <div className="hidden xl:flex items-center gap-4 shrink-0">
           <button
             type="button"
             onClick={() => onNavigate(REQUEST_PROPOSAL_URL)}
-            className={cn(
-              `${pe.eyebrowSm} transition-colors duration-500`,
-              useLightChrome
-                ? "text-background/70 hover:text-background"
-                : "text-muted-foreground hover:text-foreground"
-            )}
+            className={`${pe.eyebrowSm} text-muted-foreground hover:text-foreground transition-colors duration-300`}
           >
             Request a Proposal
           </button>
           <button
             type="button"
             onClick={onOpenLogin}
-            className={cn(
-              `${pe.eyebrowSm} px-4 py-2 border transition-colors duration-500`,
-              useLightChrome
-                ? "border-background/30 text-background hover:border-background/60"
-                : "border-border text-foreground hover:border-foreground/40"
-            )}
+            className={`${pe.eyebrowSm} px-4 py-2 border border-border text-foreground hover:border-foreground/40 transition-colors duration-300`}
           >
             Sign In
           </button>
@@ -95,10 +86,7 @@ export function MarketingHeader({ currentPage, onNavigate, onOpenLogin, solidHea
 
         <button
           type="button"
-          className={cn(
-            "md:hidden transition-colors duration-500",
-            useLightChrome ? "text-background" : "text-foreground"
-          )}
+          className="xl:hidden shrink-0 text-foreground"
           aria-label={isMenuOpen ? "Close menu" : "Open menu"}
           onClick={() => setIsMenuOpen((open) => !open)}
         >
@@ -108,33 +96,58 @@ export function MarketingHeader({ currentPage, onNavigate, onOpenLogin, solidHea
 
       <div
         className={cn(
-          "md:hidden overflow-hidden transition-all duration-500 ease-in-out bg-background",
-          isMenuOpen ? "max-h-[480px] opacity-100" : "max-h-0 opacity-0"
+          "xl:hidden overflow-hidden transition-all duration-500 ease-in-out bg-background border-t border-border",
+          isMenuOpen ? "max-h-[85vh] opacity-100 overflow-y-auto" : "max-h-0 opacity-0"
         )}
       >
-        <div className="flex flex-col px-6 py-10 gap-6">
-          {MARKETING_HEADER_LINKS.map((item, index) => (
+        <div className="flex flex-col px-6 py-6">
+          {MARKETING_TOP_LEVEL_LINKS.map((item) => (
             <button
               key={item.page}
               type="button"
-              onClick={() => onNavigate(MARKETING_PATHS[item.page])}
-              className={`${pe.mobileNav} text-foreground hover:text-muted-foreground transition-colors duration-300 text-left`}
-              style={{ transitionDelay: `${index * 50}ms` }}
+              onClick={() => {
+                onNavigate(MARKETING_PATHS[item.page]);
+                closeMobileMenu();
+              }}
+              className={cn(
+                `${pe.mobileNav} py-4 text-left transition-colors duration-300 border-b border-border/60`,
+                currentPage === item.page ? "text-foreground" : "text-foreground/80 hover:text-foreground"
+              )}
             >
               {item.label}
             </button>
           ))}
+
+          {MARKETING_NAV_GROUPS.map((group) => (
+            <MarketingNavDropdown
+              key={group.label}
+              group={group}
+              currentPage={currentPage}
+              onNavigate={onNavigate}
+              variant="mobile"
+              isExpanded={expandedGroup === group.label}
+              onToggle={() => setExpandedGroup((current) => (current === group.label ? null : group.label))}
+              onItemClick={closeMobileMenu}
+            />
+          ))}
+
           <button
             type="button"
-            onClick={() => onNavigate(REQUEST_PROPOSAL_URL)}
-            className={`${pe.mobileNav} text-foreground hover:text-muted-foreground transition-colors duration-300 text-left`}
+            onClick={() => {
+              onNavigate(REQUEST_PROPOSAL_URL);
+              closeMobileMenu();
+            }}
+            className={`${pe.mobileNav} py-4 text-left text-foreground/80 hover:text-foreground transition-colors duration-300 border-t border-border/60 mt-2`}
           >
             Request a Proposal
           </button>
           <button
             type="button"
-            onClick={onOpenLogin}
-            className={`${pe.mobileNav} text-foreground hover:text-muted-foreground transition-colors duration-300 text-left`}
+            onClick={() => {
+              onOpenLogin();
+              closeMobileMenu();
+            }}
+            className={`${pe.mobileNav} py-4 text-left text-foreground/80 hover:text-foreground transition-colors duration-300`}
           >
             Sign In
           </button>

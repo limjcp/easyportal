@@ -1,4 +1,4 @@
-import { MarketingContentPage } from "./MarketingContentPage";
+import { EditorialContentPage } from "./EditorialContentPage";
 import { vendorsPageContent } from "../data/pageContent/vendors";
 
 type VendorsPageProps = {
@@ -6,6 +6,5 @@ type VendorsPageProps = {
 };
 
 export function VendorsPage({ onNavigate }: VendorsPageProps) {
-  return <MarketingContentPage content={vendorsPageContent} onNavigate={onNavigate} />;
+  return <EditorialContentPage content={vendorsPageContent} onNavigate={onNavigate} />;
 }
-

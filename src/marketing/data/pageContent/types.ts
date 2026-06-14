@@ -66,6 +66,8 @@ export type MarketingPageBlock =
 export type MarketingPageContent = {
   pageTitle: string;
   pageIntro?: string;
+  pageEyebrow?: string;
+  pageActions?: MarketingAction[];
   blocks: MarketingPageBlock[];
 };
 
