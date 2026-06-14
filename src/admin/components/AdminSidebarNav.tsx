@@ -140,21 +140,24 @@ export function AdminSidebarNav({
               />
             </button>
 
-            {isOpen &&
-              group.items.map(({ id, label, icon: Icon, route: navRoute }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => onNavigate(navRoute)}
-                  className={cn(
-                    "flex w-full items-center gap-2.5 border-b border-white/10 py-2.5 pl-5 pr-3 text-left text-sm text-white transition",
-                    isNavActive(route, id) ? activeColor : "hover:bg-[#818181]"
-                  )}
-                >
-                  <Icon className="shrink-0 text-xs text-white/90" />
-                  <span className="leading-snug">{label}</span>
-                </button>
-              ))}
+            {isOpen && (
+              <div className="bg-[#6e6e6e]">
+                {group.items.map(({ id, label, icon: Icon, route: navRoute }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => onNavigate(navRoute)}
+                    className={cn(
+                      "flex w-full items-center gap-2.5 border-b border-black/10 py-2.5 pl-5 pr-3 text-left text-sm text-white/95 transition",
+                      isNavActive(route, id) ? activeColor : "hover:bg-[#626262]"
+                    )}
+                  >
+                    <Icon className="shrink-0 text-xs text-white/85" />
+                    <span className="leading-snug">{label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         );
       })}
