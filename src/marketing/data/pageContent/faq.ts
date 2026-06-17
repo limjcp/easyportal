@@ -39,7 +39,7 @@ export const faqPageContent: MarketingPageContent = {
     {
       kind: "cta-band",
       title: "Have a specific question about your corporation?",
-      text: "Reach out directly and we will provide a **clear answer tailored to your building**.",
+      text: "Reach out directly and we will provide a **clear answer tailored to your community**.",
       action: { label: "Contact Us", href: "/contact-us", variant: "secondary" },
     },
   ],

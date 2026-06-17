@@ -1,3 +1,4 @@
+import { requireSupabase } from "../../../lib/supabaseClient";
 import type {
   AddUnitRangeType,
   BuildingDefinition,
@@ -395,6 +396,25 @@ export const buildingRepository = {
   },
 
   async importQuickBooksUsers() {
-    return { imported: 0, skipped: 0 };
+    const buildingId = await bid();
+    const { data, error } = await requireSupabase().functions.invoke("qbo-sync", {
+      body: { buildingId },
+    });
+    if (error) throw new Error(error.message || "QuickBooks sync failed.");
+    const body = data as { error?: string; customers?: number; invoices?: number };
+    if (body?.error) throw new Error(body.error);
+    return { imported: body.customers ?? 0, skipped: 0, invoices: body.invoices ?? 0 };
+  },
+
+  async getQuickBooksOAuthUrl() {
+    const buildingId = await bid();
+    const { data, error } = await requireSupabase().functions.invoke("qbo-oauth-start", {
+      body: { buildingId },
+    });
+    if (error) throw new Error(error.message || "QuickBooks connect failed.");
+    const body = data as { error?: string; url?: string };
+    if (body?.error) throw new Error(body.error);
+    if (!body?.url) throw new Error("Invalid response from QuickBooks connect.");
+    return body.url;
   },
 };

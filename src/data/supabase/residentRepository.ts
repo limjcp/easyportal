@@ -42,7 +42,9 @@ import {
   mapPollQuestion,
   mapPollResponse,
 } from "./admin/mappers";
+import { ensureDefaultDocumentFolders } from "./admin/documentFolders";
 import { buildingIdOrThrow, mapDbError, nowIso, sb, todayIsoDate } from "./base";
+import { getBuildingDocumentSignedUrl } from "./storage";
 import { supabaseChatRepository } from "./chatRepository";
 import { ensureActiveBuildingForUser } from "./buildingContext";
 import { ensureIncidentCategory, insertComment, insertIncidentReportAttachment, insertServiceRequestAttachment, loadIncidentReportAttachments, loadServiceRequestAttachments } from "./admin/shared";
@@ -236,6 +238,44 @@ export const supabaseResidentRepository: ResidentRepository = {
       : null;
   },
 
+  async getQuickBooksAccountSnapshot() {
+    const buildingId = await bid();
+    const occ = await currentOccupancy();
+    if (!occ) return { connected: false, invoices: [] as any[] };
+    const unitId = (occ.units as { id: string } | null)?.id ?? (occ.unit_id as string | undefined);
+    if (!unitId) return { connected: false, invoices: [] as any[] };
+
+    const { data: link, error: linkError } = await sb()
+      .from("quickbooks_unit_customers")
+      .select("customer_id")
+      .eq("building_id", buildingId)
+      .eq("unit_id", unitId)
+      .maybeSingle();
+    mapDbError(linkError);
+    const customerId = link?.customer_id as string | undefined;
+    if (!customerId) return { connected: false, invoices: [] as any[] };
+
+    const { data: invoices, error: invError } = await sb()
+      .from("quickbooks_invoices")
+      .select("invoice_id, doc_number, txn_date, due_date, total_amt, balance")
+      .eq("building_id", buildingId)
+      .eq("customer_id", customerId)
+      .order("txn_date", { ascending: false });
+    mapDbError(invError);
+
+    return {
+      connected: true,
+      invoices: (invoices ?? []).map((r) => ({
+        id: r.invoice_id as string,
+        docNumber: (r.doc_number as string) ?? "",
+        txnDate: r.txn_date ? String(r.txn_date) : "",
+        dueDate: r.due_date ? String(r.due_date) : "",
+        total: Number(r.total_amt ?? 0),
+        balance: Number(r.balance ?? 0),
+      })),
+    };
+  },
+
   async getNewsletters() {
     const buildingId = await bid();
     const { data, error } = await sb().from("newsletters").select("*").eq("building_id", buildingId);
@@ -265,6 +305,7 @@ export const supabaseResidentRepository: ResidentRepository = {
 
   async getDocumentFolders() {
     const buildingId = await bid();
+    await ensureDefaultDocumentFolders(buildingId);
     const { data, error } = await sb()
       .from("document_folders")
       .select("*")
@@ -278,20 +319,43 @@ export const supabaseResidentRepository: ResidentRepository = {
     }));
   },
 
-  async getDocuments(folderId) {
-    const { data, error } = await sb().from("document_files").select("*").eq("folder_id", folderId);
+  async getDocuments(folderId: string) {
+    const buildingId = await bid();
+    const { data, error } = await sb()
+      .from("document_files")
+      .select("*")
+      .eq("folder_id", folderId)
+      .eq("building_id", buildingId);
     mapDbError(error);
-    return (data ?? []).map((d) => ({
-      id: d.id as string,
-      folderId: d.folder_id as string,
-      fileType: d.file_type as string,
-      title: d.title as string,
-      date: String(d.file_date),
-      filename: d.filename as string,
-      size: d.size_label as string,
-      shownTo: d.shown_to as string,
-      downloadCount: d.download_count as number,
-    }));
+    return (data ?? [])
+      .filter((d) => String(d.shown_to ?? "") !== "Admin Only")
+      .map((d) => ({
+        id: d.id as string,
+        folderId: d.folder_id as string,
+        fileType: d.file_type as string,
+        title: d.title as string,
+        date: String(d.file_date),
+        filename: d.filename as string,
+        size: d.size_label as string,
+        shownTo: d.shown_to as string,
+        downloadCount: d.download_count as number,
+      }));
+  },
+
+  async getDocumentDownloadUrl(id: string): Promise<string> {
+    const buildingId = await bid();
+    const { data, error } = await sb()
+      .from("document_files")
+      .select("storage_path, shown_to")
+      .eq("id", id)
+      .eq("building_id", buildingId)
+      .maybeSingle();
+    mapDbError(error);
+    if (!data?.storage_path) throw new Error("Document file is not available for download.");
+    if (String(data.shown_to ?? "") === "Admin Only") {
+      throw new Error("This document is not available to residents.");
+    }
+    return getBuildingDocumentSignedUrl(String(data.storage_path));
   },
 
   async getFaqs() {

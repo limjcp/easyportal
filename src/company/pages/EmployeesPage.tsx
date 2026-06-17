@@ -56,10 +56,18 @@ export function EmployeesPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<CompanyEmployee | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    companyRepository.getEmployees().then(setEmployees);
-    companyRepository.getBuildings().then(setBuildings);
+    setLoadError(null);
+    void companyRepository
+      .getEmployees()
+      .then(setEmployees)
+      .catch((err) => {
+        setEmployees([]);
+        setLoadError(err instanceof Error ? err.message : "Failed to load employees.");
+      });
+    void companyRepository.getBuildings().then(setBuildings).catch(() => setBuildings([]));
   }, []);
 
   useEffect(() => {
@@ -126,6 +134,11 @@ export function EmployeesPage() {
 
   return (
     <div>
+      {loadError && (
+        <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {loadError}
+        </div>
+      )}
       <div className="mb-4 flex flex-wrap gap-2">
         <button
           type="button"

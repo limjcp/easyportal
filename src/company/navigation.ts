@@ -5,6 +5,7 @@ import {
   FaCog,
   FaFileInvoice,
   FaTruck,
+  FaUserPlus,
   FaUsers,
   FaComments,
 } from "react-icons/fa";
@@ -75,6 +76,7 @@ export const MASTER_REPORT_TILES: {
   { id: "chargebacks", label: "Chargebacks", color: "bg-[#333333]" },
   { id: "service-requests", label: "Service Requests", color: "bg-[#e8913a]" },
   { id: "users-pending", label: "Users Pending", color: "bg-[#5bc0de]" },
+  { id: "portal-signups", label: "Portal Registrations", color: "bg-[#5bc0de]" },
 ];
 
 export function getMasterReportTitle(reportType: MasterReportType): string {

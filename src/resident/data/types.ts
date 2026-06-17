@@ -1524,9 +1524,26 @@ export type MasterReportType =
   | "incident-reports"
   | "chargebacks"
   | "service-requests"
-  | "users-pending";
+  | "users-pending"
+  | "portal-signups";
 
 export type MasterReportTab = "current" | "past" | "cancelled" | "archived" | "settings";
+
+export interface PortalSignupRequest {
+  id: string;
+  buildingId: string;
+  buildingLabel: string;
+  unitNumber: string;
+  firstName: string;
+  corpNumber: string;
+  city: string;
+  email: string;
+  residentType: string;
+  quickbooksMatched: boolean;
+  quickbooksBalance: string | null;
+  status: string;
+  submittedAt: string;
+}
 
 export interface MasterReportRow {
   id: string;
@@ -1560,6 +1577,7 @@ export interface MasterReportRow {
   location?: string;
   resolutionTime?: string;
   pendingReplyLabel?: "Yes" | "No" | "N/A";
+  residentType?: string;
 }
 
 export interface IncidentReportComment {

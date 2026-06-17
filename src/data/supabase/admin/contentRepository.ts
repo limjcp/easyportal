@@ -30,7 +30,15 @@ import {
   mapPollAttachment,
   mapPollQuestion,
 } from "./mappers";
+import { ensureDefaultDocumentFolders } from "./documentFolders";
 import { bid } from "./shared";
+import {
+  formatFileSize,
+  getBuildingDocumentSignedUrl,
+  inferDocumentFileType,
+  removeBuildingDocument,
+  uploadBuildingDocument,
+} from "../storage";
 
 async function loadPollQuestions(pollIds: string[]): Promise<Map<string, PollQuestion[]>> {
   if (pollIds.length === 0) return new Map();
@@ -492,6 +500,7 @@ export const contentRepository = {
 
   async getDocumentFolders() {
     const buildingId = await bid();
+    await ensureDefaultDocumentFolders(buildingId);
     const { data, error } = await sb().from("document_folders").select("*").eq("building_id", buildingId);
     mapDbError(error);
     return (data ?? []).map((f) => ({
@@ -529,29 +538,60 @@ export const contentRepository = {
     return (data ?? []).map((d) => mapDocumentFile(d as Record<string, unknown>));
   },
 
-  async createDocument(doc: CreateDocumentInput) {
+  async createDocument(
+    file: File,
+    input: Pick<CreateDocumentInput, "folderId" | "title" | "shownTo"> & { date?: string }
+  ) {
     const buildingId = await bid();
+    const storagePath = await uploadBuildingDocument(buildingId, file);
     const { data, error } = await sb()
       .from("document_files")
       .insert({
         building_id: buildingId,
-        folder_id: doc.folderId,
-        file_type: doc.fileType,
-        title: doc.title,
-        file_date: doc.date || todayIsoDate(),
-        filename: doc.filename,
-        size_label: doc.size,
-        shown_to: doc.shownTo,
-        download_count: doc.downloadCount ?? 0,
+        folder_id: input.folderId,
+        file_type: inferDocumentFileType(file.name, file.type),
+        title: input.title,
+        file_date: input.date || todayIsoDate(),
+        filename: file.name,
+        storage_path: storagePath,
+        size_label: formatFileSize(file.size),
+        shown_to: input.shownTo,
+        download_count: 0,
       })
       .select("*")
       .single();
-    mapDbError(error);
+    if (error) {
+      await removeBuildingDocument(storagePath).catch(() => undefined);
+      mapDbError(error);
+    }
     return mapDocumentFile(data as Record<string, unknown>);
   },
 
+  async getDocumentDownloadUrl(id: string): Promise<string> {
+    const buildingId = await bid();
+    const { data, error } = await sb()
+      .from("document_files")
+      .select("storage_path")
+      .eq("id", id)
+      .eq("building_id", buildingId)
+      .maybeSingle();
+    mapDbError(error);
+    if (!data?.storage_path) throw new Error("Document file is not available for download.");
+    return getBuildingDocumentSignedUrl(String(data.storage_path));
+  },
+
   async deleteDocument(id: string) {
-    await sb().from("document_files").delete().eq("id", id);
+    const buildingId = await bid();
+    const { data, error } = await sb()
+      .from("document_files")
+      .select("storage_path")
+      .eq("id", id)
+      .eq("building_id", buildingId)
+      .maybeSingle();
+    mapDbError(error);
+    await removeBuildingDocument(data?.storage_path as string | undefined).catch(() => undefined);
+    const { error: deleteError } = await sb().from("document_files").delete().eq("id", id);
+    mapDbError(deleteError);
   },
 
   async getEvents(options?: { type?: CalendarEvent["eventType"]; adminOnly?: boolean }) {

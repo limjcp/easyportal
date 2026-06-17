@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FaSearch } from "react-icons/fa";
+import { FaDownload, FaSearch } from "react-icons/fa";
 import { DataTable } from "../../shared/DataTable";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { residentRepo } from "../data/mockRepository";
@@ -7,7 +7,7 @@ import type { DocumentFile, DocumentFolder } from "../data/types";
 
 export function DocumentsPage() {
   const [folders, setFolders] = useState<DocumentFolder[]>([]);
-  const [folderId, setFolderId] = useState("1012489");
+  const [folderId, setFolderId] = useState("");
   const [documents, setDocuments] = useState<DocumentFile[]>([]);
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(5);
@@ -16,18 +16,31 @@ export function DocumentsPage() {
   useEffect(() => {
     residentRepo.getDocumentFolders().then((list) => {
       setFolders(list);
-      if (list.length > 0 && !list.some((f) => f.id === folderId)) {
-        setFolderId(list[0].id);
+      if (list.length > 0) {
+        setFolderId((current) => (list.some((f) => f.id === current) ? current : list[0].id));
       }
     });
   }, []);
 
   useEffect(() => {
+    if (!folderId) {
+      setDocuments([]);
+      return;
+    }
     residentRepo.getDocuments(folderId).then((docs) => {
       setDocuments(docs);
       setPage(0);
     });
   }, [folderId]);
+
+  const handleDownload = async (doc: DocumentFile) => {
+    try {
+      const url = await residentRepo.getDocumentDownloadUrl(doc.id);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Unable to download document.");
+    }
+  };
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -99,6 +112,20 @@ export function DocumentsPage() {
           { key: "date", header: "Date", render: (r) => r.date },
           { key: "filename", header: "Filename", render: (r) => r.filename },
           { key: "size", header: "Size", render: (r) => r.size },
+          {
+            key: "download",
+            header: "",
+            render: (r) => (
+              <button
+                type="button"
+                onClick={() => void handleDownload(r)}
+                className="inline-flex items-center gap-1 text-sm text-[#3476ef] hover:underline"
+              >
+                <FaDownload className="text-xs" />
+                Download
+              </button>
+            ),
+          },
         ]}
         data={paged}
         emptyMessage="There are no files in this folder. If your property has created multiple folders, you can select a different folder from the Select Folder menu above."

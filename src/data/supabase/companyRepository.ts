@@ -43,6 +43,7 @@ import {
   setActiveBuildingId,
 } from "./buildingContext";
 import { mapDbError, nowIso, sb, todayIsoDate } from "./base";
+import { ensureDefaultDocumentFolders } from "./admin/documentFolders";
 import { ensureDefaultPortalModules } from "./admin/portalRepository";
 import { loadEntityComments, loadIncidentReportAttachments } from "./admin/shared";
 import { provisionUser } from "./provisionUser";
@@ -267,6 +268,7 @@ export const supabaseCompanyRepository = {
     await sb().from("public_portal_settings").insert({ building_id: buildingId, subdomain: input.subdomain });
     await sb().from("portal_tile_settings").insert({ building_id: buildingId });
     await ensureDefaultPortalModules(buildingId);
+    await ensureDefaultDocumentFolders(buildingId);
     setActiveBuildingId(buildingId);
     return mapBuilding(data as Record<string, unknown>);
   },
@@ -280,25 +282,28 @@ export const supabaseCompanyRepository = {
       )
       .eq("company_id", companyId);
     mapDbError(error);
-    return (data ?? []).map((row) => {
-      const profile = row.profile as {
-        first_name: string;
-        last_name: string;
-        email: string;
-        last_login_at: string | null;
-      };
-      const buildingLinks = (row.company_member_buildings ?? []) as Array<{ building_id: string }>;
-      return {
-        id: row.id as string,
-        membershipId: row.id as string,
-        firstName: profile.first_name,
-        lastName: profile.last_name,
-        email: profile.email,
-        role: row.role as CompanyRole,
-        assignedBuildingIds: buildingLinks.map((link) => link.building_id),
-        lastLogin: profile.last_login_at ?? undefined,
-      };
-    });
+    return (data ?? [])
+      .map((row) => {
+        const profile = row.profile as {
+          first_name: string;
+          last_name: string;
+          email: string;
+          last_login_at: string | null;
+        } | null;
+        if (!profile) return null;
+        const buildingLinks = (row.company_member_buildings ?? []) as Array<{ building_id: string }>;
+        return {
+          id: row.id as string,
+          membershipId: row.id as string,
+          firstName: profile.first_name,
+          lastName: profile.last_name,
+          email: profile.email,
+          role: row.role as CompanyRole,
+          assignedBuildingIds: buildingLinks.map((link) => link.building_id),
+          lastLogin: profile.last_login_at ?? undefined,
+        };
+      })
+      .filter((employee): employee is CompanyEmployee => employee !== null);
   },
 
   async createEmployee(input: CreateEmployeeInput): Promise<CompanyEmployee> {
@@ -700,6 +705,7 @@ export const supabaseCompanyRepository = {
       certificates: "v_master_report_certificates",
       "board-approvals": "v_master_report_board_approvals",
       "users-pending": "v_master_report_users_pending",
+      "portal-signups": "v_master_report_portal_signups",
     };
     const view = viewMap[reportType];
     if (!view) return { rows: [], total: 0 };
@@ -764,6 +770,40 @@ export const supabaseCompanyRepository = {
 
   async getUsersPending(params?: MasterReportListParams) {
     return this.getMasterReportList("users-pending", params);
+  },
+
+  async getPortalSignupRequest(id: string) {
+    const companyId = await ensureCompanyId();
+    const { data, error } = await sb()
+      .from("portal_signup_requests")
+      .select(
+        "id, building_id, unit_number, first_name, corp_number, city, email, resident_type, quickbooks_matched, quickbooks_balance, status, created_at, buildings!inner(name, company_id)"
+      )
+      .eq("id", id)
+      .eq("buildings.company_id", companyId)
+      .maybeSingle();
+    mapDbError(error);
+    if (!data) return null;
+    const building = data.buildings as { name: string };
+    return {
+      id: data.id as string,
+      buildingId: data.building_id as string,
+      buildingLabel: building.name,
+      unitNumber: data.unit_number as string,
+      firstName: data.first_name as string,
+      corpNumber: data.corp_number as string,
+      city: data.city as string,
+      email: data.email as string,
+      residentType: data.resident_type as string,
+      quickbooksMatched: Boolean(data.quickbooks_matched),
+      quickbooksBalance: (data.quickbooks_balance as string | null) ?? null,
+      status: data.status as string,
+      submittedAt: String(data.created_at),
+    };
+  },
+
+  async getPortalSignups(params?: MasterReportListParams) {
+    return this.getMasterReportList("portal-signups", params);
   },
 
   async getBoardApprovals(params?: MasterReportListParams) {
@@ -909,6 +949,8 @@ function mapMasterReportRow(row: Record<string, unknown>, reportType: MasterRepo
     disapprovedCount: row.disapproved_count as number | undefined,
     votesCollected: row.votes_collected as number | undefined,
     votesRequired: row.votes_required as number | undefined,
+    extra: row.extra as string | undefined,
+    residentType: row.resident_type as string | undefined,
   };
 }
 

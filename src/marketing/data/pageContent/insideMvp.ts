@@ -43,7 +43,7 @@ export const insideMvpPageContent: MarketingPageContent = {
     },
     {
       kind: "cta-band",
-      title: "Want to see how this model applies to your building?",
+      title: "Want to see how this model applies to your community?",
       text: "Schedule a **free consultation** and we will walk through your current pain points and transition options.",
       action: { label: "Talk to MVP", href: "/free-consultation", variant: "primary" },
     },

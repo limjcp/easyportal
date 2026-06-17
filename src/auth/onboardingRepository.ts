@@ -15,7 +15,6 @@ export type OnboardingLookupResult = {
 
 export type OnboardingRegisterPayload = {
   email: string;
-  password: string;
   firstName: string;
   corpNumber: string;
   city: string;
@@ -27,8 +26,6 @@ export type OnboardingRegisterPayload = {
 };
 
 export type OnboardingRegisterResult = {
-  profileId: string;
-  userId: string;
   requestId: string;
   status: "pending";
 };
@@ -73,13 +70,11 @@ export async function registerOnboardingRequest(
   if (body?.error) {
     throw new Error(body.error);
   }
-  if (!body?.profileId || !body?.requestId) {
+  if (!body?.requestId) {
     throw new Error("Invalid response from registration.");
   }
 
   return {
-    profileId: body.profileId,
-    userId: body.userId!,
     requestId: body.requestId,
     status: "pending",
   };

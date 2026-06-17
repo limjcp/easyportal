@@ -5,6 +5,7 @@ import {
   FaExclamationTriangle,
   FaMoneyBillWave,
   FaShoppingCart,
+  FaUserPlus,
   FaUsers,
   FaWrench,
 } from "react-icons/fa";
@@ -67,5 +68,11 @@ export const MASTER_REPORT_HUB_TILES: MasterReportHubTile[] = [
     label: "Users Pending",
     btnClass: "bg-[#337ab7] hover:bg-[#2e6da4]",
     icon: FaUsers,
+  },
+  {
+    id: "portal-signups",
+    label: "Portal Registrations",
+    btnClass: "bg-[#5bc0de] hover:bg-[#46b8da]",
+    icon: FaUserPlus,
   },
 ];

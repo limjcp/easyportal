@@ -51,6 +51,7 @@ export function ResidentDetailPage({ section }: ResidentDetailPageProps) {
   const [parkingActionRequestId, setParkingActionRequestId] = useState<string | null>(null);
   const [parkingNotice, setParkingNotice] = useState<string | null>(null);
   const [parkingError, setParkingError] = useState<string | null>(null);
+  const [qboSnapshot, setQboSnapshot] = useState<Awaited<ReturnType<typeof residentRepo.getQuickBooksAccountSnapshot>> | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -59,11 +60,15 @@ export function ResidentDetailPage({ section }: ResidentDetailPageProps) {
       section === "parkingSpots"
         ? residentRepo.getVisitorParkingOvernightEmail()
         : Promise.resolve("support@mvpcondos.com"),
-    ]).then(([data, requests, overnightEmail]) => {
+      section === "purchaseDateMaintFees"
+        ? residentRepo.getQuickBooksAccountSnapshot().catch(() => null)
+        : Promise.resolve(null),
+    ]).then(([data, requests, overnightEmail, snapshot]) => {
       setDetails(data);
       setDraft(structuredClone(data[section]));
       setParkingRequests(requests);
       setVisitorOvernightEmail(overnightEmail);
+      setQboSnapshot(snapshot);
       setSelectedFeeYear(new Date().getFullYear());
       setCustomFeeAmount("");
       setActiveScheduleMonth(null);
@@ -309,19 +314,59 @@ export function ResidentDetailPage({ section }: ResidentDetailPageProps) {
         />
       )}
       {section === "purchaseDateMaintFees" && (
-        <CondoFeesPaymentPanel
-          values={draft as ResidentProfileDetails["purchaseDateMaintFees"]}
-          selectedYear={selectedFeeYear}
-          onYearChange={setSelectedFeeYear}
-          customAmount={customFeeAmount}
-          onCustomAmountChange={setCustomFeeAmount}
-          paymentProcessing={paymentProcessing}
-          paymentNotice={paymentNotice}
-          onPayMinimum={handlePayMinimum}
-          onPayAdvance={handlePayAdvance}
-          onPayCustom={handlePayCustom}
-          onMonthClick={handleScheduleMonthClick}
-        />
+        <>
+          <CondoFeesPaymentPanel
+            values={draft as ResidentProfileDetails["purchaseDateMaintFees"]}
+            selectedYear={selectedFeeYear}
+            onYearChange={setSelectedFeeYear}
+            customAmount={customFeeAmount}
+            onCustomAmountChange={setCustomFeeAmount}
+            paymentProcessing={paymentProcessing}
+            paymentNotice={paymentNotice}
+            onPayMinimum={handlePayMinimum}
+            onPayAdvance={handlePayAdvance}
+            onPayCustom={handlePayCustom}
+            onMonthClick={handleScheduleMonthClick}
+          />
+
+          <div className="mt-4 rounded border border-slate-200 bg-white p-3">
+            <h4 className="text-sm font-semibold text-slate-800">Open invoices (QuickBooks Online)</h4>
+            {!qboSnapshot ? (
+              <p className="mt-2 text-sm text-slate-500">Loading…</p>
+            ) : !qboSnapshot.connected ? (
+              <p className="mt-2 text-sm text-slate-500">
+                QuickBooks is not connected (or your unit is not mapped yet).
+              </p>
+            ) : qboSnapshot.invoices.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-500">No open invoices found.</p>
+            ) : (
+              <div className="mt-3 overflow-x-auto rounded border border-slate-200">
+                <table className="w-full min-w-[560px] text-sm">
+                  <thead className="bg-slate-50 text-slate-700">
+                    <tr>
+                      <th className="border-b border-slate-200 px-3 py-2 text-left">Invoice</th>
+                      <th className="border-b border-slate-200 px-3 py-2 text-left">Txn date</th>
+                      <th className="border-b border-slate-200 px-3 py-2 text-left">Due date</th>
+                      <th className="border-b border-slate-200 px-3 py-2 text-left">Total</th>
+                      <th className="border-b border-slate-200 px-3 py-2 text-left">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {qboSnapshot.invoices.map((inv) => (
+                      <tr key={inv.id}>
+                        <td className="border-b border-slate-100 px-3 py-2">{inv.docNumber || inv.id}</td>
+                        <td className="border-b border-slate-100 px-3 py-2">{inv.txnDate || "—"}</td>
+                        <td className="border-b border-slate-100 px-3 py-2">{inv.dueDate || "—"}</td>
+                        <td className="border-b border-slate-100 px-3 py-2">${inv.total.toFixed(2)}</td>
+                        <td className="border-b border-slate-100 px-3 py-2">${inv.balance.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
       )}
       {editable && section !== "parkingSpots" && (
         <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-200 pt-4">

@@ -77,6 +77,22 @@ export function getMasterReportColumns(
         { key: "status", header: "Status", render: (r) => <StatusBadge status={r.status} /> },
         { key: "view", header: "", render: viewButton(onView), className: "text-right" },
       ];
+    case "portal-signups":
+      return [
+        { key: "building", header: "Community", render: (r) => r.buildingLabel },
+        { key: "title", header: "Name", render: (r) => r.title },
+        { key: "unit", header: "Unit", render: (r) => r.unit ?? "—", hideBelow: "md" },
+        { key: "extra", header: "Email", render: (r) => r.extra ?? "—", hideBelow: "lg" },
+        {
+          key: "residentType",
+          header: "Resident type",
+          render: (r) => r.residentType ?? "—",
+          hideBelow: "md",
+        },
+        { key: "status", header: "Status", render: (r) => <StatusBadge status={r.status} /> },
+        { key: "date", header: "Submitted", render: (r) => r.date, hideBelow: "lg" },
+        { key: "view", header: "", render: viewButton(onView), className: "text-right" },
+      ];
     default:
       return [
         { key: "id", header: "ID", render: (r) => r.id },

@@ -83,11 +83,11 @@ export function LoginPage({ onLogin, onOpenMarketing, initialMode = "signin" }: 
   return (
     <AuthLayout
       onBack={() => onOpenMarketing?.("/")}
-      title={mode === "signin" ? "Sign in" : "Create account"}
+      title={mode === "signin" ? "Sign in" : "Request access"}
       subtitle={
         mode === "signin"
           ? "Access your community portal with your email and password."
-          : "Register for resident portal access in three quick steps."
+          : "Submit your details for property manager review."
       }
     >
       <div className="mb-6 flex rounded border border-slate-200 p-1">
@@ -113,7 +113,7 @@ export function LoginPage({ onLogin, onOpenMarketing, initialMode = "signin" }: 
             setError("");
           }}
         >
-          Create account
+          Request access
         </button>
       </div>
 
@@ -183,7 +183,7 @@ export function LoginPage({ onLogin, onOpenMarketing, initialMode = "signin" }: 
           <p className="text-center text-sm text-slate-500">
             New here?{" "}
             <button type="button" className={authSecondaryButtonClassName} onClick={() => setMode("signup")}>
-              Create account
+              Request access
             </button>
           </p>
         </form>

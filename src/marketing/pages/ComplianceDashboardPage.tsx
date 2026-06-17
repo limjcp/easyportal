@@ -128,7 +128,7 @@ export function ComplianceDashboardPage({ onNavigate }: ComplianceDashboardPageP
 
       <section className={`${EDITORIAL_SECTION_PY} bg-foreground text-background`}>
         <div className={`${EDITORIAL_CONTAINER} text-center`}>
-          <h2 className={`${pe.editorialSectionTitle} text-balance`}>See it for your building</h2>
+          <h2 className={`${pe.editorialSectionTitle} text-balance`}>See it for your community</h2>
           <p className={`mx-auto mt-6 max-w-2xl ${pe.editorialBody} text-background/70`}>
             Request a walkthrough and we will connect your corporation number to a live compliance dashboard.
           </p>

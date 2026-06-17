@@ -160,7 +160,7 @@ export function getMasterReportFilters(args: {
     ];
   }
 
-  if (args.reportType === "users-pending") {
+  if (args.reportType === "users-pending" || args.reportType === "portal-signups") {
     return base;
   }
 

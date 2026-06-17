@@ -13,13 +13,10 @@ import { adminRepository } from "../data/adminRepository";
 import { AdminPageActions } from "../components/AdminPageActions";
 import type { AdminRoute } from "../navigation";
 import type {
-  CreateDocumentInput,
   DocumentFile,
   DocumentFolder,
   DocumentStorageStats,
 } from "../../resident/data/types";
-
-const DEFAULT_FOLDER_ID = "0";
 
 type AdminDocumentsPageProps = {
   route: AdminRoute & { page: "documents" };
@@ -34,7 +31,6 @@ export function AdminDocumentsPage({
   refreshKey,
   onRefresh,
 }: AdminDocumentsPageProps) {
-  const folderId = route.folderId ?? DEFAULT_FOLDER_ID;
   const [folders, setFolders] = useState<DocumentFolder[]>([]);
   const [documents, setDocuments] = useState<DocumentFile[]>([]);
   const [storage, setStorage] = useState<DocumentStorageStats | null>(null);
@@ -43,6 +39,14 @@ export function AdminDocumentsPage({
   const [page, setPage] = useState(1);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [viewDoc, setViewDoc] = useState<DocumentFile | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const folderId = useMemo(() => {
+    if (route.folderId && folders.some((f) => f.id === route.folderId)) {
+      return route.folderId;
+    }
+    return folders[0]?.id ?? "";
+  }, [route.folderId, folders]);
 
   useEffect(() => {
     adminRepository.getDocumentFolders().then(setFolders);
@@ -50,23 +54,47 @@ export function AdminDocumentsPage({
   }, [refreshKey]);
 
   useEffect(() => {
-    adminRepository.getDocuments(folderId).then(setDocuments);
+    if (!folders.length) return;
+    if (!route.folderId || !folders.some((f) => f.id === route.folderId)) {
+      onNavigate({ page: "documents", folderId: folders[0].id });
+    }
+  }, [folders, route.folderId, onNavigate]);
+
+  useEffect(() => {
+    if (!folderId) {
+      setDocuments([]);
+      return;
+    }
+    setLoadError(null);
+    void adminRepository
+      .getDocuments(folderId)
+      .then(setDocuments)
+      .catch((err) => {
+        setDocuments([]);
+        setLoadError(err instanceof Error ? err.message : "Failed to load documents.");
+      });
     setPage(1);
   }, [folderId, refreshKey]);
 
   const selectedFolder = folders.find((f) => f.id === folderId);
 
   const folderGroups = useMemo(() => {
-    const residentRoot = folders.filter((f) => f.section === "resident-portal");
-    const residentChildren = folders.filter(
-      (f) => !f.section && f.id !== "0" && f.id !== "1"
-    );
+    const residentPortal = folders.filter((f) => f.section !== "admin-only");
     const adminOnly = folders.filter((f) => f.section === "admin-only");
-    return { residentRoot, residentChildren, adminOnly };
+    return { residentPortal, adminOnly };
   }, [folders]);
 
   const setFolder = (id: string) => {
     onNavigate({ page: "documents", folderId: id });
+  };
+
+  const handleDownload = async (doc: DocumentFile) => {
+    try {
+      const url = await adminRepository.getDocumentDownloadUrl(doc.id);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Unable to download document.");
+    }
   };
 
   const usedPercent = storage
@@ -84,12 +112,19 @@ export function AdminDocumentsPage({
           <button
             type="button"
             onClick={() => setUploadOpen(true)}
-            className="inline-flex items-center gap-2 rounded bg-[#7D5DA7] px-3 py-1.5 text-sm text-white hover:opacity-90"
+            disabled={!folderId}
+            className="inline-flex items-center gap-2 rounded bg-[#7D5DA7] px-3 py-1.5 text-sm text-white hover:opacity-90 disabled:opacity-50"
           >
             + Upload Document
           </button>
         }
       />
+
+      {loadError && (
+        <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {loadError}
+        </div>
+      )}
 
       {storage && (
         <div className="mb-4 overflow-hidden rounded-sm border border-slate-300 bg-white">
@@ -130,23 +165,27 @@ export function AdminDocumentsPage({
             <select
               value={folderId}
               onChange={(e) => setFolder(e.target.value)}
+              disabled={!folderId}
               className="min-w-0 flex-1 rounded border border-slate-400 bg-white px-3 py-2 text-slate-800"
             >
-              {folderGroups.residentRoot.map((f) => (
-                <option key={f.id} value={f.id} className="bg-slate-200 font-bold">
-                  {f.name}
-                </option>
-              ))}
-              {folderGroups.residentChildren.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-              {folderGroups.adminOnly.map((f) => (
-                <option key={f.id} value={f.id} className="bg-slate-200 font-bold">
-                  {f.name}
-                </option>
-              ))}
+              {folderGroups.residentPortal.length > 0 && (
+                <optgroup label="Resident Portal">
+                  {folderGroups.residentPortal.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {folderGroups.adminOnly.length > 0 && (
+                <optgroup label="Admin Only">
+                  {folderGroups.adminOnly.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </label>
         </div>
@@ -231,6 +270,7 @@ export function AdminDocumentsPage({
                 <OptionsDropdown
                   options={[
                     { label: "View", onClick: () => setViewDoc(row) },
+                    { label: "Download", onClick: () => void handleDownload(row) },
                     {
                       label: "Delete",
                       onClick: () => adminRepository.deleteDocument(row.id).then(onRefresh),
@@ -248,8 +288,8 @@ export function AdminDocumentsPage({
         folderId={folderId}
         folderName={selectedFolder?.name ?? "Folder"}
         onClose={() => setUploadOpen(false)}
-        onSubmit={async (input) => {
-          await adminRepository.createDocument(input);
+        onSubmit={async (file, input) => {
+          await adminRepository.createDocument(file, input);
           setUploadOpen(false);
           onRefresh();
         }}
@@ -260,13 +300,24 @@ export function AdminDocumentsPage({
         onClose={() => setViewDoc(null)}
         title={viewDoc?.title ?? "Document"}
         footer={
-          <button
-            type="button"
-            onClick={() => setViewDoc(null)}
-            className="rounded border border-slate-300 px-4 py-2 text-sm"
-          >
-            Close
-          </button>
+          <div className="flex justify-end gap-2">
+            {viewDoc && (
+              <button
+                type="button"
+                onClick={() => void handleDownload(viewDoc)}
+                className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white"
+              >
+                Download
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setViewDoc(null)}
+              className="rounded border border-slate-300 px-4 py-2 text-sm"
+            >
+              Close
+            </button>
+          </div>
         }
       >
         {viewDoc && (
@@ -299,32 +350,44 @@ function UploadDocumentModal({
   folderId: string;
   folderName: string;
   onClose: () => void;
-  onSubmit: (input: CreateDocumentInput) => void;
+  onSubmit: (
+    file: File,
+    input: { folderId: string; title: string; shownTo: string }
+  ) => Promise<void>;
 }) {
   const [title, setTitle] = useState("");
   const [shownTo, setShownTo] = useState("All Residents");
+  const [file, setFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = () => {
+  useEffect(() => {
+    if (open) {
+      setTitle("");
+      setShownTo("All Residents");
+      setFile(null);
+      setSaving(false);
+      setError(null);
+    }
+  }, [open]);
+
+  const handleSubmit = async () => {
     if (!title.trim()) {
-      alert("Title is required.");
+      setError("Title is required.");
       return;
     }
-    onSubmit({
-      folderId,
-      fileType: "pdf",
-      title: title.trim(),
-      date: new Date().toLocaleDateString("en-US", {
-        month: "2-digit",
-        day: "2-digit",
-        year: "numeric",
-      }),
-      filename: `${title.trim().replace(/\s+/g, "_").toLowerCase()}.pdf`,
-      size: "128 KB",
-      shownTo,
-      downloadCount: 0,
-    });
-    setTitle("");
-    setShownTo("All Residents");
+    if (!file) {
+      setError("Please select a file to upload.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onSubmit(file, { folderId, title: title.trim(), shownTo });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload document.");
+      setSaving(false);
+    }
   };
 
   return (
@@ -334,15 +397,16 @@ function UploadDocumentModal({
       title="Upload Document"
       footer={
         <>
-          <button type="button" onClick={onClose} className="rounded border px-4 py-2 text-sm">
+          <button type="button" onClick={onClose} disabled={saving} className="rounded border px-4 py-2 text-sm">
             Cancel
           </button>
           <button
             type="button"
-            onClick={handleSubmit}
-            className="rounded bg-[#7D5DA7] px-4 py-2 text-sm text-white"
+            onClick={() => void handleSubmit()}
+            disabled={saving}
+            className="rounded bg-[#7D5DA7] px-4 py-2 text-sm text-white disabled:opacity-50"
           >
-            Upload
+            {saving ? "Uploading…" : "Upload"}
           </button>
         </>
       }
@@ -351,6 +415,11 @@ function UploadDocumentModal({
         Uploading to folder: <strong>{folderName}</strong>
       </p>
       <div className="space-y-3">
+        {error && (
+          <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+            {error}
+          </div>
+        )}
         <label className="block text-sm">
           Title *
           <input
@@ -371,8 +440,8 @@ function UploadDocumentModal({
             <option>Admin Only</option>
           </select>
         </label>
-        <FileUploadZone />
-        <p className="text-xs text-slate-500">Mock upload — adds a placeholder document entry.</p>
+        <FileUploadZone onFileSelect={setFile} onRemove={() => setFile(null)} />
+        <p className="text-xs text-slate-500">PDF and image files up to 50MB.</p>
       </div>
     </Modal>
   );

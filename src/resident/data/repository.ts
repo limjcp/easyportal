@@ -60,6 +60,7 @@ export interface ResidentRepository {
   getNewsletterById(id: string): Promise<Newsletter | null>;
   getDocumentFolders(): Promise<DocumentFolder[]>;
   getDocuments(folderId: string): Promise<DocumentFile[]>;
+  getDocumentDownloadUrl(id: string): Promise<string>;
   getFaqs(): Promise<FaqItem[]>;
   getAlbums(): Promise<GalleryAlbum[]>;
   getEvents(): Promise<CalendarEvent[]>;
@@ -116,6 +117,17 @@ export interface ResidentRepository {
   acceptParkingRequestPayment(requestId: string): Promise<ParkingRequest>;
   declineParkingRequestOffer(requestId: string): Promise<ParkingRequest>;
   getVisitorParkingOvernightEmail(): Promise<string>;
+  getQuickBooksAccountSnapshot(): Promise<{
+    connected: boolean;
+    invoices: {
+      id: string;
+      docNumber: string;
+      txnDate: string;
+      dueDate: string;
+      total: number;
+      balance: number;
+    }[];
+  }>;
   getAmenityBookings(): Promise<AmenityBooking[]>;
   getBuildingAmenitySettings(): Promise<BuildingAmenitySettings>;
   submitElevatorBooking(input: SubmitElevatorBookingInput): Promise<AmenityBooking>;

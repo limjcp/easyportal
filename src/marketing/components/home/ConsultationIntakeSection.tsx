@@ -98,7 +98,7 @@ const INTAKE_STEPS: IntakeStep[] = [
   {
     id: "region",
     type: "choice",
-    prompt: "Where is your building located?",
+    prompt: "Where is your community located?",
     options: [
       { value: "gta", label: "Greater Toronto Area" },
       { value: "kitchener-waterloo", label: "Kitchener–Waterloo" },

@@ -194,7 +194,7 @@ const adminNavItemsById = {
     id: "documents",
     label: "Documents",
     icon: FaFileAlt,
-    route: { page: "documents", folderId: "0" },
+    route: { page: "documents" },
     moduleKey: "documents",
   },
   events: {

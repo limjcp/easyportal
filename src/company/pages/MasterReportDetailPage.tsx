@@ -14,12 +14,14 @@ import type {
   IncidentReportDetail,
   MasterReportRow,
   MasterReportTab,
+  PortalSignupRequest,
   PurchaseOrder,
   PurchaseOrderPrefill,
 } from "../../resident/data/types";
 import { BoardApprovalViewModal } from "../components/BoardApprovalViewModal";
 import { CertificateViewModal } from "../components/CertificateViewModal";
 import { IncidentReportViewModal } from "../components/IncidentReportViewModal";
+import { PortalSignupViewModal } from "../components/PortalSignupViewModal";
 import { Modal } from "../../shared/Modal";
 import { getMasterReportColumns } from "../config/masterReportColumns";
 import { getBoardApprovalColumns } from "../config/boardApprovalColumns";
@@ -51,6 +53,7 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
   const [certificateDetail, setCertificateDetail] = useState<CertificateDetail | null>(null);
   const [boardApprovalDetail, setBoardApprovalDetail] = useState<BoardApprovalDetail | null>(null);
   const [incidentDetail, setIncidentDetail] = useState<IncidentReportDetail | null>(null);
+  const [portalSignupDetail, setPortalSignupDetail] = useState<PortalSignupRequest | null>(null);
   const [sortKey, setSortKey] = useState<string | undefined>();
   const [sortDir, setSortDir] = useState<SortDirection>("asc");
   const [createPoOpen, setCreatePoOpen] = useState(false);
@@ -63,6 +66,7 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
   const isBoardApprovals = route.reportType === "board-approvals";
   const isIncidentReports = route.reportType === "incident-reports";
   const isServiceRequests = route.reportType === "service-requests";
+  const isPortalSignups = route.reportType === "portal-signups";
   const isSettingsTab = isCertificates && tab === "settings";
   const hasArchived = ["incident-reports", "service-requests", "board-approvals"].includes(
     route.reportType
@@ -180,6 +184,20 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
     setCertificateDetail(null);
     setBoardApprovalDetail(null);
     setIncidentDetail(null);
+    setPortalSignupDetail(null);
+  }, []);
+
+  const openPortalSignupView = useCallback((row: MasterReportRow) => {
+    setDetailRow(row);
+    setCertificateDetail(null);
+    setBoardApprovalDetail(null);
+    setIncidentDetail(null);
+    setPortalSignupDetail(null);
+    setDetailLoading(true);
+    companyRepository
+      .getPortalSignupRequest(row.id)
+      .then((d) => setPortalSignupDetail(d ?? null))
+      .finally(() => setDetailLoading(false));
   }, []);
 
   const loadRelatedServiceRequestPOs = useCallback((requestId: string) => {
@@ -224,6 +242,7 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
     setCertificateDetail(null);
     setBoardApprovalDetail(null);
     setIncidentDetail(null);
+    setPortalSignupDetail(null);
     setDetailLoading(false);
   };
 
@@ -232,18 +251,21 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
     if (isBoardApprovals) return getBoardApprovalColumns(openBoardApprovalView, handleBoardApprovalRemind);
     if (isIncidentReports) return getIncidentReportColumns(openIncidentReportView);
     if (isServiceRequests) return getMasterReportColumns(route.reportType, openServiceRequestView);
+    if (isPortalSignups) return getMasterReportColumns(route.reportType, openPortalSignupView);
     return getMasterReportColumns(route.reportType, setDetailRow);
   }, [
     isCertificates,
     isBoardApprovals,
     isIncidentReports,
     isServiceRequests,
+    isPortalSignups,
     tab,
     route.reportType,
     openCertificateView,
     openBoardApprovalView,
     openIncidentReportView,
     openServiceRequestView,
+    openPortalSignupView,
     handleBoardApprovalRemind,
   ]);
 
@@ -498,6 +520,13 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
             setPage(1);
             closeDetail();
           }}
+        />
+      ) : isPortalSignups ? (
+        <PortalSignupViewModal
+          open={!!detailRow}
+          detail={portalSignupDetail}
+          loading={detailLoading}
+          onClose={closeDetail}
         />
       ) : (
         <Modal open={!!detailRow} onClose={closeDetail} title="Report Details" size="md">

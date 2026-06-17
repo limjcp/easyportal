@@ -10,6 +10,8 @@ export function QuickBooksTab() {
   const [importOpen, setImportOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
 
   const load = () => adminRepository.getBuildingExternalData().then(setData);
 
@@ -22,9 +24,20 @@ export function QuickBooksTab() {
     try {
       const result = await adminRepository.importQuickBooksUsers();
       setImportOpen(false);
-      alert(`Imported ${result.imported} users from QuickBooks (${result.skipped} skipped).`);
+      setLastSync(new Date().toLocaleString());
+      alert(`Synced ${result.imported} customers and ${result.invoices ?? 0} open invoices from QuickBooks.`);
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleConnect = async () => {
+    setConnecting(true);
+    try {
+      const url = await adminRepository.getQuickBooksOAuthUrl();
+      window.open(url, "_blank", "width=900,height=720");
+    } finally {
+      setConnecting(false);
     }
   };
 
@@ -80,7 +93,7 @@ export function QuickBooksTab() {
                     className="inline-flex items-center gap-2 rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf]"
                   >
                     <FaSync />
-                    Import Users From QB
+                    Sync balances & invoices
                   </button>
                   <button
                     type="button"
@@ -95,20 +108,18 @@ export function QuickBooksTab() {
               ) : (
                 <button
                   type="button"
-                  onClick={() =>
-                    window.open(
-                      "https://condocommunities.com/inc/quickbooksAPI/QBOnline/m-connect.asp",
-                      "_blank",
-                      "width=800,height=600"
-                    )
-                  }
+                  onClick={handleConnect}
+                  disabled={connecting}
                   className="inline-flex items-center gap-2 rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf]"
                 >
                   <FaLink />
-                  Connect to QuickBooks Online
+                  {connecting ? "Opening QuickBooks…" : "Connect to QuickBooks Online"}
                 </button>
               )}
             </div>
+            {lastSync && (
+              <p className="mt-4 text-center text-xs text-slate-500">Last sync: {lastSync}</p>
+            )}
           </AdminSectionPanel>
         </div>
 
@@ -126,7 +137,7 @@ export function QuickBooksTab() {
       <Modal
         open={importOpen}
         onClose={() => setImportOpen(false)}
-        title="Import Users From QuickBooks"
+        title="Sync Balances & Invoices"
         size="md"
         footer={
           <div className="flex w-full justify-end gap-2">
@@ -149,8 +160,8 @@ export function QuickBooksTab() {
         }
       >
         <p className="text-sm text-slate-600">
-          This will sync resident user records from your connected QuickBooks Online company. Users must still
-          be assigned to units manually in Condo Communities after import.
+          This will pull QuickBooks Online customers + open invoices and store them in EasyPortal so balances and
+          invoices can be displayed.
         </p>
       </Modal>
     </>

@@ -18,7 +18,8 @@ export const contactUsPageContent: MarketingPageContent = {
         },
         {
           title: "Practical recommendations",
-          description: "You receive **clear options**, realistic sequencing, and next-step guidance tailored to your building.",
+          description:
+            "You receive **clear options**, realistic sequencing, and next-step guidance tailored to your community.",
         },
         {
           title: "Fast follow-up",

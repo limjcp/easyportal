@@ -33,7 +33,6 @@ type IdentityForm = {
   corpNumber: string;
   city: string;
   email: string;
-  password: string;
 };
 
 export function SignupWizard({ onComplete, onSwitchToSignIn }: SignupWizardProps) {
@@ -44,7 +43,6 @@ export function SignupWizard({ onComplete, onSwitchToSignIn }: SignupWizardProps
     corpNumber: "",
     city: "",
     email: "",
-    password: "",
   });
   const [lookup, setLookup] = useState<OnboardingLookupResult | null>(null);
   const [residentType, setResidentType] = useState<UnitsUsersResidentType>("Owner");
@@ -79,7 +77,6 @@ export function SignupWizard({ onComplete, onSwitchToSignIn }: SignupWizardProps
     try {
       await registerOnboardingRequest({
         email: identity.email.trim(),
-        password: identity.password,
         firstName: identity.firstName.trim(),
         corpNumber: identity.corpNumber.trim(),
         city: identity.city.trim(),
@@ -101,8 +98,8 @@ export function SignupWizard({ onComplete, onSwitchToSignIn }: SignupWizardProps
     return (
       <div className="space-y-4 text-center">
         <p className="text-sm text-slate-600">
-          Registration submitted. Your property manager will review your request and we&apos;ll notify you when
-          resident portal access is approved.
+          Your registration request has been submitted. Your property manager will review your details and contact
+          you when resident portal access is ready. You will not be able to sign in until access is approved.
         </p>
         <button type="button" className={authPrimaryButtonClassName} onClick={onComplete}>
           Back to sign in
@@ -174,8 +171,8 @@ export function SignupWizard({ onComplete, onSwitchToSignIn }: SignupWizardProps
         <div>
           <p className="text-sm font-medium text-slate-900">Resident type</p>
           <p className="mt-1 text-sm text-slate-500">
-            Self-registration is for the resident portal only. Your property manager must approve access before you
-            can sign in.
+            Choose how you are associated with this unit. Your property manager must approve access before you can
+            sign in.
           </p>
         </div>
 
@@ -205,7 +202,7 @@ export function SignupWizard({ onComplete, onSwitchToSignIn }: SignupWizardProps
             Back
           </button>
           <button type="submit" disabled={loading} className={`${authPrimaryButtonClassName} flex-1`}>
-            {loading ? "Submitting…" : "Submit registration"}
+            {loading ? "Submitting…" : "Submit registration request"}
           </button>
         </div>
       </form>
@@ -287,23 +284,6 @@ export function SignupWizard({ onComplete, onSwitchToSignIn }: SignupWizardProps
           className={`${authInputClassName} mt-1.5`}
           autoComplete="email"
         />
-      </div>
-
-      <div>
-        <label htmlFor="signup-password" className={authLabelClassName}>
-          Password
-        </label>
-        <input
-          id="signup-password"
-          type="password"
-          required
-          minLength={8}
-          value={identity.password}
-          onChange={(e) => setIdentity((prev) => ({ ...prev, password: e.target.value }))}
-          className={`${authInputClassName} mt-1.5`}
-          autoComplete="new-password"
-        />
-        <p className="mt-1 text-xs text-slate-500">At least 8 characters.</p>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

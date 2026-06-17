@@ -68,7 +68,7 @@ export const HOME_MAIN_TOPICS: HomeMainTopic[] = [
   {
     id: "contact",
     groupLabel: "Contact",
-    title: "Let's talk about your building",
+    title: "Let's talk about your community",
     description:
       "Reach our team for support, questions, or a confidential second opinion on your current management.",
     links: [

@@ -8,7 +8,6 @@ const corsHeaders = {
 
 type RegisterPayload = {
   email?: string;
-  password?: string;
   firstName?: string;
   corpNumber?: string;
   city?: string;
@@ -53,7 +52,6 @@ Deno.serve(async (req) => {
 
     const payload = (await req.json()) as RegisterPayload;
     const email = payload.email?.trim().toLowerCase() ?? "";
-    const password = payload.password ?? "";
     const firstName = payload.firstName?.trim() ?? "";
     const corpNumber = payload.corpNumber?.trim() ?? "";
     const city = payload.city?.trim() ?? "";
@@ -61,11 +59,8 @@ Deno.serve(async (req) => {
     const residentType = payload.residentType?.trim() ?? "";
     const buildingId = payload.buildingId?.trim() ?? "";
 
-    if (!email || !password || !firstName || !corpNumber || !city || !unitNumber || !residentType || !buildingId) {
+    if (!email || !firstName || !corpNumber || !city || !unitNumber || !residentType || !buildingId) {
       return jsonResponse({ error: "Missing required fields." }, 400);
-    }
-    if (password.length < 8) {
-      return jsonResponse({ error: "Password must be at least 8 characters." }, 400);
     }
     if (!RESIDENT_TYPES.has(residentType)) {
       return jsonResponse({ error: "Invalid resident type." }, 400);
@@ -101,59 +96,25 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (existingProfile?.id) {
-      const { data: existingRequest } = await adminClient
-        .from("portal_signup_requests")
-        .select("id, status")
-        .eq("profile_id", existingProfile.id)
-        .eq("building_id", buildingId)
-        .eq("status", "pending")
-        .maybeSingle();
-
-      if (existingRequest?.id) {
-        return jsonResponse({ error: "A pending registration already exists for this email." }, 409);
-      }
-
       return jsonResponse({ error: "An account with this email already exists. Sign in instead." }, 409);
     }
 
-    const lastName = "—";
-    const displayName = firstName;
+    const { data: existingRequest } = await adminClient
+      .from("portal_signup_requests")
+      .select("id")
+      .eq("building_id", buildingId)
+      .ilike("email", email)
+      .eq("status", "pending")
+      .maybeSingle();
 
-    const { data: createdUser, error: createError } = await adminClient.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        first_name: firstName,
-        last_name: lastName,
-        display_name: displayName,
-      },
-    });
-
-    if (createError) {
-      return jsonResponse({ error: createError.message }, 400);
-    }
-
-    const userId = createdUser.user.id;
-
-    const { error: profileError } = await adminClient
-      .from("profiles")
-      .update({
-        email,
-        first_name: firstName,
-        last_name: lastName,
-        display_name: displayName,
-      })
-      .eq("id", userId);
-
-    if (profileError) {
-      return jsonResponse({ error: profileError.message }, 400);
+    if (existingRequest?.id) {
+      return jsonResponse({ error: "A pending registration already exists for this email." }, 409);
     }
 
     const { data: requestRow, error: requestError } = await adminClient
       .from("portal_signup_requests")
       .insert({
-        profile_id: userId,
+        profile_id: null,
         building_id: buildingId,
         unit_number: unitNumber,
         first_name: firstName,
@@ -173,8 +134,6 @@ Deno.serve(async (req) => {
     }
 
     return jsonResponse({
-      profileId: userId,
-      userId,
       requestId: requestRow.id,
       status: "pending",
     });
