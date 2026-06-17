@@ -15,7 +15,6 @@ export const DEFAULT_PORTAL_MODULES: PortalModuleConfig[] = [
   { moduleId: "galleries", name: "Galleries", tileLabel: "Photo Gallery", enabled: true, message: "", sortOrder: 5, layoutZone: "primary" },
   { moduleId: "incidentReport", name: "Incident Reports", tileLabel: "Incident Reports", enabled: true, message: "", sortOrder: 6, layoutZone: "primary" },
   { moduleId: "news", name: "News & Notices", tileLabel: "News / Notices", enabled: true, message: "", sortOrder: 7, layoutZone: "primary" },
-  { moduleId: "newsletters", name: "Newsletters", tileLabel: "Newsletters", enabled: false, message: "", sortOrder: 8, layoutZone: "primary" },
   { moduleId: "serviceRequest", name: "Service Requests", tileLabel: "Service Requests", enabled: true, message: "", sortOrder: 1, layoutZone: "compact" },
   { moduleId: "statusCerts", name: "Status Certificates", tileLabel: "Status Certificates", enabled: false, message: "", sortOrder: 2, layoutZone: "compact" },
   { moduleId: "suggestion", name: "Suggestion Box", tileLabel: "Suggestions", enabled: true, message: "", sortOrder: 3, layoutZone: "compact" },

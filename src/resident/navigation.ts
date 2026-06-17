@@ -5,8 +5,6 @@ export type ResidentRoute =
   | { page: "documents" }
   | { page: "service-requests" }
   | { page: "incident-reports" }
-  | { page: "newsletters" }
-  | { page: "newsletter-detail"; id: string }
   | { page: "suggestions" }
   | { page: "events" }
   | { page: "gallery" }
@@ -44,13 +42,6 @@ export function getBreadcrumbs(route: ResidentRoute): { label: string; route?: R
       return [{ label: "Service Requests", route }];
     case "incident-reports":
       return [{ label: "Incident Report", route }];
-    case "newsletters":
-      return [{ label: "Newsletters", route }];
-    case "newsletter-detail":
-      return [
-        { label: "Newsletters", route: { page: "newsletters" } },
-        { label: "Newsletter" },
-      ];
     case "suggestions":
       return [{ label: "Suggestions", route }];
     case "events":
@@ -105,7 +96,6 @@ export function tileLabelToRoute(label: string): ResidentRoute | null {
     Documents: { page: "documents" },
     "Incident Reports": { page: "incident-reports" },
     "Service Requests": { page: "service-requests" },
-    Newsletters: { page: "newsletters" },
     Suggestions: { page: "suggestions" },
     Events: { page: "events" },
     "Photo Gallery": { page: "gallery" },

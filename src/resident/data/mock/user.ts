@@ -16,7 +16,6 @@ export const seedUser: ResidentUser = {
 
 export const seedNotificationPreferences: NotificationPreference[] = [
   { id: "news", label: "News & Notices", enabled: true },
-  { id: "newsletters", label: "Newsletters", enabled: true },
   { id: "events", label: "Events & RSVPs", enabled: true },
   { id: "service", label: "Service Request Updates", enabled: true },
   { id: "incidents", label: "Incident Report Updates", enabled: false },

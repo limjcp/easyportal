@@ -1,6 +1,6 @@
 import { Modal } from "../../shared/Modal";
 import { FaEnvelope } from "react-icons/fa";
-import type { AdminNewsItem, AdminNewsletter, EmailNoticeStats } from "../../resident/data/types";
+import type { AdminNewsItem, EmailNoticeStats } from "../../resident/data/types";
 
 export type EmailNoticeReportItem = {
   title: string;
@@ -11,7 +11,7 @@ export type EmailNoticeReportItem = {
 
 type EmailNoticesReportModalProps = {
   open: boolean;
-  item: AdminNewsItem | AdminNewsletter | EmailNoticeReportItem | null;
+  item: AdminNewsItem | EmailNoticeReportItem | null;
   onClose: () => void;
 };
 

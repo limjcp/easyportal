@@ -1,7 +1,6 @@
 import type {
   AdminIncidentReport,
   AdminNewsItem,
-  AdminNewsletter,
   AdminServiceRequest,
   AdminSuggestion,
   AgmMeeting,
@@ -66,26 +65,6 @@ export function mapAdminNews(row: Record<string, unknown>): AdminNewsItem {
     imageUrl: (row.image_url as string) || undefined,
     attachmentName: (row.attachment_name as string) || undefined,
     attachmentUrl: (row.attachment_url as string) || undefined,
-  };
-}
-
-export function mapAdminNewsletter(row: Record<string, unknown>): AdminNewsletter {
-  return {
-    id: row.id as string,
-    title: row.title as string,
-    date: String(row.newsletter_date ?? todayIsoDate()),
-    body: row.body as string,
-    attachmentName: row.attachment_name as string | undefined,
-    status: row.status as AdminNewsletter["status"],
-    emailDelivered: row.email_delivered as number,
-    emailTotal: row.email_total as number,
-    emailStats: row.email_stats as AdminNewsletter["emailStats"],
-    noticeHistoryId: row.notice_history_id as string | undefined,
-    postTime: row.post_time as string | undefined,
-    noNotifications: row.no_notifications as boolean,
-    editHistory: (row.edit_history as AdminNewsletter["editHistory"]) ?? [],
-    lastUpdatedBy: row.last_updated_by as string | undefined,
-    lastUpdatedAt: row.last_updated_at ? String(row.last_updated_at) : undefined,
   };
 }
 

@@ -276,33 +276,6 @@ export const supabaseResidentRepository: ResidentRepository = {
     };
   },
 
-  async getNewsletters() {
-    const buildingId = await bid();
-    const { data, error } = await sb().from("newsletters").select("*").eq("building_id", buildingId);
-    mapDbError(error);
-    return (data ?? []).map((n) => ({
-      id: n.id as string,
-      title: n.title as string,
-      date: String(n.newsletter_date),
-      body: n.body as string,
-      attachmentName: n.attachment_name as string | undefined,
-    }));
-  },
-
-  async getNewsletterById(id) {
-    const { data, error } = await sb().from("newsletters").select("*").eq("id", id).maybeSingle();
-    mapDbError(error);
-    return data
-      ? {
-          id: data.id as string,
-          title: data.title as string,
-          date: String(data.newsletter_date),
-          body: data.body as string,
-          attachmentName: data.attachment_name as string | undefined,
-        }
-      : null;
-  },
-
   async getDocumentFolders() {
     const buildingId = await bid();
     await ensureDefaultDocumentFolders(buildingId);

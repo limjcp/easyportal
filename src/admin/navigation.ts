@@ -73,8 +73,6 @@ export type AdminRoute =
   | { page: "incident-reports"; tab: "current" | "archived" | "contact-emails" | "categories" }
   | { page: "news-notices"; tab: "current" | "archived" }
   | { page: "news-notice-edit"; id: string }
-  | { page: "newsletters" }
-  | { page: "newsletter-edit"; id: string }
   | { page: "polls" }
   | { page: "poll-edit"; id: string }
   | { page: "service-requests"; tab: "current" | "archived" | "categories" | "terms" }
@@ -232,13 +230,6 @@ const adminNavItemsById = {
     route: { page: "news-notices", tab: "current" },
     moduleKey: "news-notices",
   },
-  newsletters: {
-    id: "newsletters",
-    label: "Newsletters",
-    icon: FaFile,
-    route: { page: "newsletters" },
-    moduleKey: "newsletters",
-  },
   "service-requests": {
     id: "service-requests",
     label: "Service Requests",
@@ -306,7 +297,7 @@ export const adminNavGroups: AdminNavGroup[] = [
   {
     id: "communications-content",
     label: "Communications & Content",
-    items: navItems(["news-notices", "newsletters", "events", "documents", "faq", "galleries"]),
+    items: navItems(["news-notices", "events", "documents", "faq", "galleries"]),
   },
   {
     id: "community-engagement",
@@ -406,8 +397,6 @@ export function isNavActive(route: AdminRoute, navId: string): boolean {
       return route.page === "incident-reports";
     case "news-notices":
       return route.page === "news-notices" || route.page === "news-notice-edit";
-    case "newsletters":
-      return route.page === "newsletters" || route.page === "newsletter-edit";
     case "service-requests":
       return route.page === "service-requests";
     case "status-certificates":
@@ -507,10 +496,6 @@ export function getPageTitle(route: AdminRoute): string {
       return "News & Notices";
     case "news-notice-edit":
       return "Edit News/Notice";
-    case "newsletters":
-      return "Newsletters";
-    case "newsletter-edit":
-      return "Edit Newsletter";
     case "polls":
       return "Polls";
     case "poll-edit":
@@ -660,10 +645,6 @@ export function getBreadcrumbTrail(route: AdminRoute): { label: string; route?: 
       return [{ label: "News & Notices", route }];
     case "news-notice-edit":
       return [{ label: "News & Notices", route: { page: "news-notices", tab: "current" } }, { label: "Edit" }];
-    case "newsletters":
-      return [{ label: "Newsletters", route }];
-    case "newsletter-edit":
-      return [{ label: "Newsletters", route: { page: "newsletters" } }, { label: "Edit" }];
     case "polls":
       return [{ label: "Polls", route }];
     case "poll-edit":

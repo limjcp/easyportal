@@ -2,7 +2,6 @@ import type {
   AdminUser,
   AdminIncidentReport,
   AdminNewsItem,
-  AdminNewsletter,
   AdminServiceRequest,
   AdminSuggestion,
   BoardApproval,
@@ -54,7 +53,6 @@ import type {
   ConsultationSubmission,
 } from "../../resident/data/types";
 import { seedAdminNews } from "../../admin/data/mock/adminNews";
-import { seedAdminNewsletters } from "../../admin/data/mock/adminNewsletters";
 import { seedAdminServiceRequests } from "../../admin/data/mock/adminServiceRequests";
 import { seedAdminSuggestions } from "../../admin/data/mock/adminSuggestions";
 import { seedBoardApprovals } from "../../admin/data/mock/boardApprovals";
@@ -117,7 +115,6 @@ export const seedFaqs: FaqItem[] = [
 
 export const store = {
   adminNews: [...seedAdminNews] as AdminNewsItem[],
-  adminNewsletters: [...seedAdminNewsletters] as AdminNewsletter[],
   polls: [...seedPolls] as Poll[],
   pollAttachments: [] as PollAttachment[],
   agmMeetings: [...seedAgmMeetings] as AgmMeeting[],

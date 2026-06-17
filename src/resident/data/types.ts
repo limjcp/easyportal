@@ -105,14 +105,6 @@ export interface NewsItem {
   attachmentUrl?: string;
 }
 
-export interface Newsletter {
-  id: string;
-  title: string;
-  date: string;
-  body: string;
-  attachmentName?: string;
-}
-
 export type DocumentFolderSection = "resident-portal" | "admin-only";
 
 export interface DocumentFolder {
@@ -332,20 +324,6 @@ export interface AdminNewsItem extends NewsItem {
   residentTypes: string[];
   adminCcTypes: string[];
   showToFilter: string;
-  editHistory: NewsEditHistoryEntry[];
-  lastUpdatedBy?: string;
-  lastUpdatedAt?: string;
-}
-
-/** Admin newsletter list/edit model (legacy newsletters module). */
-export interface AdminNewsletter extends Newsletter {
-  status: ContentStatus;
-  emailDelivered: number;
-  emailTotal: number;
-  emailStats?: EmailNoticeStats;
-  noticeHistoryId?: string;
-  postTime?: string;
-  noNotifications: boolean;
   editHistory: NewsEditHistoryEntry[];
   lastUpdatedBy?: string;
   lastUpdatedAt?: string;

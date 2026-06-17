@@ -20,8 +20,6 @@ import { HomePage } from "./pages/HomePage";
 import { IncidentReportsPage } from "./pages/IncidentReportsPage";
 import { NewsDetailPage } from "./pages/NewsDetailPage";
 import { NewsPage } from "./pages/NewsPage";
-import { NewsletterDetailPage } from "./pages/NewsletterDetailPage";
-import { NewslettersPage } from "./pages/NewslettersPage";
 import { ServiceRequestsPage } from "./pages/ServiceRequestsPage";
 import { StatusCertificatesPage } from "./pages/StatusCertificatesPage";
 import { SuggestionsPage } from "./pages/SuggestionsPage";
@@ -263,10 +261,6 @@ function renderPage(
       return <ServiceRequestsPage onAddNew={handlers.onAddService} refreshKey={refreshKey} />;
     case "incident-reports":
       return <IncidentReportsPage onAddNew={handlers.onAddIncident} refreshKey={refreshKey} />;
-    case "newsletters":
-      return <NewslettersPage onNavigate={onNavigate} />;
-    case "newsletter-detail":
-      return <NewsletterDetailPage id={route.id} onNavigate={onNavigate} />;
     case "suggestions":
       return <SuggestionsPage onAddNew={handlers.onAddSuggestion} refreshKey={refreshKey} />;
     case "events":

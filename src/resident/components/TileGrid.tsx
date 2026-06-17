@@ -37,7 +37,6 @@ const TILE_ICONS: Record<string, IconType> = {
   Documents: FaFileAlt,
   "Incident Reports": FaExclamationTriangle,
   "Service Requests": FaWrench,
-  Newsletters: FaFile,
   Suggestions: FaCommentDots,
   Events: FaCalendarAlt,
   "Photo Gallery": FaImages,

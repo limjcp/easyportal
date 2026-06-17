@@ -23,8 +23,6 @@ import { GalleriesPage } from "./pages/GalleriesPage";
 import { IncidentReportsPage } from "./pages/IncidentReportsPage";
 import { NewsNoticeEditPage } from "./pages/NewsNoticeEditPage";
 import { NewsNoticesPage } from "./pages/NewsNoticesPage";
-import { NewsletterEditPage } from "./pages/NewsletterEditPage";
-import { NewslettersPage } from "./pages/NewslettersPage";
 import { PortalSettingsPage } from "./pages/PortalSettingsPage";
 import { ServiceRequestsPage } from "./pages/ServiceRequestsPage";
 import { SuggestionDetailPage } from "./pages/SuggestionDetailPage";
@@ -268,17 +266,6 @@ export function AdminPortal({
       )}
       {route.page === "news-notice-edit" && (
         <NewsNoticeEditPage route={route} onNavigate={navigate} onRefresh={bumpRefresh} />
-      )}
-      {route.page === "newsletters" && (
-        <NewslettersPage
-          route={route}
-          onNavigate={navigate}
-          refreshKey={refreshKey}
-          onRefresh={bumpRefresh}
-        />
-      )}
-      {route.page === "newsletter-edit" && (
-        <NewsletterEditPage route={route} onNavigate={navigate} onRefresh={bumpRefresh} />
       )}
       {route.page === "polls" && (
         <PollsPage

@@ -1,6 +1,5 @@
 import type {
   AdminNewsItem,
-  AdminNewsletter,
   AgmMeeting,
   CalendarEvent,
   CreateCalendarEventInput,
@@ -20,7 +19,6 @@ import { parsePollAnswerOptions } from "../../../shared/pollUtils";
 import { mapDbError, nowIso, sb, todayIsoDate } from "../base";
 import {
   mapAdminNews,
-  mapAdminNewsletter,
   mapAgmMeeting,
   mapCalendarEvent,
   mapDocumentFile,
@@ -121,58 +119,6 @@ export const contentRepository = {
     const { data, error } = await sb().from("news_items").update(payload).eq("id", id).select("*").maybeSingle();
     mapDbError(error);
     return data ? mapAdminNews(data as Record<string, unknown>) : null;
-  },
-
-  async getNewsletters() {
-    const buildingId = await bid();
-    const { data, error } = await sb().from("newsletters").select("*").eq("building_id", buildingId);
-    mapDbError(error);
-    return (data ?? []).map((n) => mapAdminNewsletter(n as Record<string, unknown>));
-  },
-
-  async getNewsletterById(id: string) {
-    const { data, error } = await sb().from("newsletters").select("*").eq("id", id).maybeSingle();
-    mapDbError(error);
-    return data ? mapAdminNewsletter(data as Record<string, unknown>) : null;
-  },
-
-  async createNewsletter(title: string) {
-    const buildingId = await bid();
-    const { data, error } = await sb()
-      .from("newsletters")
-      .insert({
-        building_id: buildingId,
-        title,
-        newsletter_date: todayIsoDate(),
-        status: "draft",
-        no_notifications: true,
-        edit_history: [
-          { status: "draft", date: new Date().toLocaleString(), user: "Admin", action: "Draft Created" },
-        ],
-      })
-      .select("*")
-      .single();
-    mapDbError(error);
-    return mapAdminNewsletter(data as Record<string, unknown>);
-  },
-
-  async updateNewsletter(id: string, updates: Partial<AdminNewsletter>) {
-    const payload: Record<string, unknown> = { updated_at: nowIso() };
-    if (updates.title !== undefined) payload.title = updates.title;
-    if (updates.body !== undefined) payload.body = updates.body;
-    if (updates.status !== undefined) payload.status = updates.status;
-    if (updates.date !== undefined) payload.newsletter_date = updates.date;
-    if (updates.attachmentName !== undefined) payload.attachment_name = updates.attachmentName;
-    if (updates.postTime !== undefined) payload.post_time = updates.postTime;
-    if (updates.noNotifications !== undefined) payload.no_notifications = updates.noNotifications;
-    if (updates.editHistory !== undefined) payload.edit_history = updates.editHistory;
-    const { data, error } = await sb().from("newsletters").update(payload).eq("id", id).select("*").maybeSingle();
-    mapDbError(error);
-    return data ? mapAdminNewsletter(data as Record<string, unknown>) : null;
-  },
-
-  async deleteNewsletter(id: string) {
-    await sb().from("newsletters").delete().eq("id", id);
   },
 
   async getPolls() {

@@ -40,7 +40,6 @@ export const BUILDING_PERMISSION_MODULES: { moduleKey: string; label: string }[]
   { moduleKey: "galleries", label: "Galleries" },
   { moduleKey: "incident-reports", label: "Incident Reports" },
   { moduleKey: "news-notices", label: "News & Notices" },
-  { moduleKey: "newsletters", label: "Newsletters" },
   { moduleKey: "portal-settings", label: "Portal Settings" },
   { moduleKey: "service-requests", label: "Service Request" },
   { moduleKey: "status-certificates", label: "Status Certificates" },

@@ -14,7 +14,6 @@ import type {
   ResidentIncidentReportDetail,
   ResidentServiceRequestDetail,
   NewsItem,
-  Newsletter,
   NotificationPreference,
   ResidentUser,
   RsvpItem,
@@ -56,8 +55,6 @@ export interface ResidentRepository {
   updateUserProfile(input: Partial<Pick<ResidentUser, "email" | "phone" | "birthMonth" | "birthDay">>): Promise<ResidentUser>;
   getNews(): Promise<NewsItem[]>;
   getNewsById(id: string): Promise<NewsItem | null>;
-  getNewsletters(): Promise<Newsletter[]>;
-  getNewsletterById(id: string): Promise<Newsletter | null>;
   getDocumentFolders(): Promise<DocumentFolder[]>;
   getDocuments(folderId: string): Promise<DocumentFile[]>;
   getDocumentDownloadUrl(id: string): Promise<string>;

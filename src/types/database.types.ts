@@ -204,7 +204,6 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["vendor_users"]["Row"]>;
       };
       news_items: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
-      newsletters: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       polls: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       poll_questions: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       poll_attachments: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
