@@ -114,7 +114,7 @@ export async function resolvePortalAccess(userId: string): Promise<PortalAccess>
     { data: buildingMemberships },
     { data: vendorUser },
   ] = await Promise.all([
-    client.from("company_memberships").select("company_id, role").eq("profile_id", userId),
+    client.from("company_memberships").select("id, company_id, role").eq("profile_id", userId),
     client
       .from("unit_occupancies")
       .select("building_id, can_access_resident_portal, can_access_building_admin")
@@ -126,22 +126,61 @@ export async function resolvePortalAccess(userId: string): Promise<PortalAccess>
 
   if (companyMemberships?.length) {
     portals.add("company");
-    companyRole = companyMemberships[0].role;
-    companyId = companyMemberships[0].company_id;
+    companyRole = companyMemberships[0].role as string;
+    companyId = companyMemberships[0].company_id as string;
+
+    const membershipIds = companyMemberships.map((m) => m.id as string);
+    const { data: memberBuildings } = await client
+      .from("company_member_buildings")
+      .select("building_id, membership_id")
+      .in("membership_id", membershipIds);
+
+    const companyBuildingIds = new Set<string>();
+    const membershipsWithAssignments = new Set<string>();
+
+    memberBuildings?.forEach((row) => {
+      companyBuildingIds.add(row.building_id as string);
+      membershipsWithAssignments.add(row.membership_id as string);
+    });
+
+    const ownerAdminCompanyIds = new Set<string>();
+    for (const membership of companyMemberships) {
+      const role = membership.role as string;
+      const isOwnerOrAdmin = role === "Company Owner" || role === "Company Administrator";
+      if (isOwnerOrAdmin && !membershipsWithAssignments.has(membership.id as string)) {
+        ownerAdminCompanyIds.add(membership.company_id as string);
+      }
+    }
+
+    if (ownerAdminCompanyIds.size > 0) {
+      const { data: companyBuildings } = await client
+        .from("buildings")
+        .select("id")
+        .in("company_id", [...ownerAdminCompanyIds]);
+      companyBuildings?.forEach((b) => companyBuildingIds.add(b.id as string));
+    }
+
+    if (companyBuildingIds.size > 0) {
+      portals.add("building");
+      companyBuildingIds.forEach((id) => buildingIds.add(id));
+    }
   }
 
   occupancies?.forEach((o) => {
     if (o.can_access_resident_portal !== false) {
       portals.add("resident");
     }
-    buildingIds.add(o.building_id);
+    buildingIds.add(o.building_id as string);
+    if (o.can_access_building_admin === true) {
+      portals.add("building");
+    }
   });
 
   buildingMemberships?.forEach((m) => {
     const occ = occupancies?.find((o) => o.building_id === m.building_id);
     if (occ?.can_access_building_admin === false) return;
     portals.add("building");
-    buildingIds.add(m.building_id);
+    buildingIds.add(m.building_id as string);
   });
 
   if (vendorUser?.vendor_id) {

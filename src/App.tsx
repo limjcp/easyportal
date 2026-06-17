@@ -91,7 +91,7 @@ export default function App() {
     setView("resident");
   }, [auth.initializing, auth.session, auth.portalAccess?.portals, auth.portalAccess?.isSuperAdmin, view, auth.setActivePortal]);
 
-  const handleSwitchToAdmin = () => {
+  const handleSwitchToAdmin = async () => {
     if (!auth.portalAccess?.isSuperAdmin && !auth.portalAccess?.portals.includes("building")) {
       window.alert("You do not have access to the Building Admin portal.");
       return;
@@ -101,6 +101,26 @@ export default function App() {
       setActiveBuildingId(buildingId);
       setAdminActiveBuildingId(buildingId);
     }
+
+    const access = auth.portalAccess;
+    if (access?.portals.includes("company") && access.companyId) {
+      auth.setActivePortal("company");
+      setPersistedPortalView("company");
+      setView("company");
+      try {
+        const buildings = await companyRepository.getBuildings();
+        const building =
+          (buildingId ? buildings.find((b) => b.id === buildingId) : null) ?? buildings[0] ?? null;
+        if (building) {
+          setActiveBuilding(building);
+          setActiveBuildingId(building.id);
+        }
+      } catch {
+        // Company portal still opens; user can select a building from the list.
+      }
+      return;
+    }
+
     auth.setActivePortal("building");
     setView("admin");
   };
