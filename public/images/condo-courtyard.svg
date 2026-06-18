@@ -1,12 +1,1 @@
-﻿<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
-  <defs>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#5ba3e8"/>
-      <stop offset="100%" stop-color="#1e3a5f"/>
-    </linearGradient>
-  </defs>
-  <rect width="1920" height="1080" fill="url(#sky)"/>
-  <polygon points="200,1080 500,400 800,1080" fill="#e8eef5" opacity="0.9"/>
-  <polygon points="600,1080 950,350 1300,1080" fill="#f5f8fc" opacity="0.95"/>
-  <polygon points="1100,1080 1400,450 1700,1080" fill="#dce6f2" opacity="0.9"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><defs><linearGradient id="sky" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#5ba3e8"/><stop offset="100%" stop-color="#1e3a5f"/></linearGradient></defs><rect width="1920" height="1080" fill="url(#sky)"/><polygon fill="#e8eef5" points="200 1080 500 400 800 1080" opacity=".9"/><polygon fill="#f5f8fc" points="600 1080 950 350 1300 1080" opacity=".95"/><polygon fill="#dce6f2" points="1100 1080 1400 450 1700 1080" opacity=".9"/></svg>
