@@ -8,15 +8,6 @@ import type { BuildingExternalData } from "../../../resident/data/types";
 const QBO_POLL_MS = 2000;
 const QBO_POLL_TIMEOUT_MS = 120_000;
 
-function stripQboConnectedParam() {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get("qbo") !== "connected") return;
-  params.delete("qbo");
-  const nextSearch = params.toString();
-  const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
-  window.history.replaceState({}, "", nextUrl);
-}
-
 export function QuickBooksTab() {
   const [data, setData] = useState<BuildingExternalData | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -28,7 +19,10 @@ export function QuickBooksTab() {
 
   const refreshExternalData = () => adminRepository.getBuildingExternalData();
 
-  const load = () => refreshExternalData().then(setData);
+  const load = () =>
+    refreshExternalData()
+      .then(setData)
+      .catch(() => setData(null));
 
   const stopPolling = () => {
     if (pollRef.current !== null) {
@@ -45,22 +39,18 @@ export function QuickBooksTab() {
         stopPolling();
         return;
       }
-      void refreshExternalData().then((next) => {
-        setData(next);
-        if (next.quickbooks.qboConnected) stopPolling();
-      });
+      void refreshExternalData()
+        .then((next) => {
+          setData(next);
+          if (next.quickbooks.qboConnected) stopPolling();
+        })
+        .catch(() => {
+          // Parent tab only; ignore when building context is unavailable.
+        });
     }, QBO_POLL_MS);
   };
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("qbo") === "connected") {
-      void refreshExternalData().then((next) => {
-        setData(next);
-        stripQboConnectedParam();
-      });
-      return;
-    }
     void load();
   }, []);
 

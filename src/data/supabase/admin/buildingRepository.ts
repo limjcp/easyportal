@@ -411,7 +411,7 @@ export const buildingRepository = {
     const { data, error } = await requireSupabase().functions.invoke("qbo-oauth-start", {
       body: {
         buildingId,
-        returnUrl: typeof window !== "undefined" ? window.location.href : undefined,
+        returnUrl: typeof window !== "undefined" ? `${window.location.origin}/qbo-connected` : undefined,
       },
     });
     const body = data as { error?: string; url?: string } | null;

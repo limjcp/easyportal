@@ -9,19 +9,14 @@ function escapeHtml(s: string) {
 }
 
 function buildSuccessRedirect(returnUrl: string | null | undefined): string {
-  const fallback =
-    Deno.env.get("PORTAL_APP_URL")?.trim() || "http://localhost:5173";
-  let target: URL;
+  const fallback = Deno.env.get("PORTAL_APP_URL")?.trim() || "http://localhost:5173";
+  let origin: string;
   try {
-    target = new URL(returnUrl?.trim() || fallback);
+    origin = new URL(returnUrl?.trim() || fallback).origin;
   } catch {
-    target = new URL(fallback);
+    origin = new URL(fallback).origin;
   }
-  if (target.protocol !== "http:" && target.protocol !== "https:") {
-    target = new URL(fallback);
-  }
-  target.searchParams.set("qbo", "connected");
-  return target.toString();
+  return `${origin}/qbo-connected`;
 }
 
 async function exchangeToken(args: {

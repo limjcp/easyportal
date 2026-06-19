@@ -18,6 +18,7 @@ import { setActiveBuildingId, setActiveCompanyId, getActiveBuildingId } from "./
 import { companyRepository } from "./company/data/companyRepository";
 import { formatBuildingOptionLabel } from "./admin/navigation";
 import { scrollPageToTop } from "./utils/scroll";
+import { QboConnectedPage } from "./auth/QboConnectedPage";
 
 type AppView = "marketing" | "login" | "resident" | "admin" | "company" | "vendor" | "prototype";
 
@@ -228,6 +229,10 @@ export default function App() {
       ))}
     </div>
   ) : null;
+
+  if (typeof window !== "undefined" && window.location.pathname === "/qbo-connected") {
+    return <QboConnectedPage />;
+  }
 
   if (auth.initializing && view !== "marketing" && view !== "login") {
     return <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">Loading…</div>;
