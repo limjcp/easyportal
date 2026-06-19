@@ -400,10 +400,10 @@ export const buildingRepository = {
     const { data, error } = await requireSupabase().functions.invoke("qbo-sync", {
       body: { buildingId },
     });
-    if (error) throw new Error(error.message || "QuickBooks sync failed.");
-    const body = data as { error?: string; customers?: number; invoices?: number };
+    const body = data as { error?: string; customers?: number; invoices?: number } | null;
     if (body?.error) throw new Error(body.error);
-    return { imported: body.customers ?? 0, skipped: 0, invoices: body.invoices ?? 0 };
+    if (error) throw new Error(error.message || "QuickBooks sync failed.");
+    return { imported: body?.customers ?? 0, skipped: 0, invoices: body?.invoices ?? 0 };
   },
 
   async getQuickBooksOAuthUrl() {
@@ -414,9 +414,9 @@ export const buildingRepository = {
         returnUrl: typeof window !== "undefined" ? window.location.href : undefined,
       },
     });
-    if (error) throw new Error(error.message || "QuickBooks connect failed.");
-    const body = data as { error?: string; url?: string };
+    const body = data as { error?: string; url?: string } | null;
     if (body?.error) throw new Error(body.error);
+    if (error) throw new Error(error.message || "QuickBooks connect failed.");
     if (!body?.url) throw new Error("Invalid response from QuickBooks connect.");
     return body.url;
   },

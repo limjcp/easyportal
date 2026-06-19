@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { canAccessBuilding } from "../_shared/buildingAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,12 +62,8 @@ Deno.serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const { data: allowed, error: allowedError } = await admin.rpc("is_building_member", {
-      p_user_id: user.id,
-      p_building_id: buildingId,
-    });
-    if (allowedError) return jsonResponse({ error: allowedError.message }, 400);
-    if (allowed !== true) return jsonResponse({ error: "Not authorized for this building." }, 403);
+    const allowed = await canAccessBuilding(admin, user.id, buildingId);
+    if (!allowed) return jsonResponse({ error: "Not authorized for this building." }, 403);
 
     const { data: stateRow, error: stateError } = await admin
       .from("quickbooks_oauth_states")
