@@ -204,7 +204,7 @@ export function AddBuildingModal({ open, onClose, onCreated, copyFrom }: AddBuil
                   className={`${inputClass} max-w-xs flex-1`}
                   autoComplete="off"
                 />
-                <span className="text-sm text-slate-600">.condocommunities.com</span>
+                <span className="text-sm text-slate-600">.easyportal.ca</span>
               </div>
               {subdomainStatus === "checking" && (
                 <p className="mt-1 text-xs text-slate-500">Checking availability…</p>

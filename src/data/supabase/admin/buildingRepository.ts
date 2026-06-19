@@ -409,7 +409,10 @@ export const buildingRepository = {
   async getQuickBooksOAuthUrl() {
     const buildingId = await bid();
     const { data, error } = await requireSupabase().functions.invoke("qbo-oauth-start", {
-      body: { buildingId },
+      body: {
+        buildingId,
+        returnUrl: typeof window !== "undefined" ? window.location.href : undefined,
+      },
     });
     if (error) throw new Error(error.message || "QuickBooks connect failed.");
     const body = data as { error?: string; url?: string };

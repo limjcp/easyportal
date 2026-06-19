@@ -46,3 +46,12 @@ verify_jwt = false
 
 [functions.onboarding-register]
 verify_jwt = false
+
+[functions.qbo-oauth-callback]
+verify_jwt = false
+
+[functions.qbo-oauth-start]
+verify_jwt = true
+
+[functions.qbo-sync]
+verify_jwt = true

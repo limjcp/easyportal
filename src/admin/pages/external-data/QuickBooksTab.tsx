@@ -1,9 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FaCheckCircle, FaLink, FaSync, FaTimes } from "react-icons/fa";
 import { AdminSectionPanel } from "../../components/AdminSectionPanel";
 import { Modal } from "../../../shared/Modal";
 import { adminRepository } from "../../data/adminRepository";
 import type { BuildingExternalData } from "../../../resident/data/types";
+
+const QBO_POLL_MS = 2000;
+const QBO_POLL_TIMEOUT_MS = 120_000;
+
+function stripQboConnectedParam() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("qbo") !== "connected") return;
+  params.delete("qbo");
+  const nextSearch = params.toString();
+  const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
+  window.history.replaceState({}, "", nextUrl);
+}
 
 export function QuickBooksTab() {
   const [data, setData] = useState<BuildingExternalData | null>(null);
@@ -12,11 +24,55 @@ export function QuickBooksTab() {
   const [disconnecting, setDisconnecting] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const pollRef = useRef<number | null>(null);
 
-  const load = () => adminRepository.getBuildingExternalData().then(setData);
+  const refreshExternalData = () => adminRepository.getBuildingExternalData();
+
+  const load = () => refreshExternalData().then(setData);
+
+  const stopPolling = () => {
+    if (pollRef.current !== null) {
+      window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  const startPollingForConnection = () => {
+    stopPolling();
+    const deadline = Date.now() + QBO_POLL_TIMEOUT_MS;
+    pollRef.current = window.setInterval(() => {
+      if (Date.now() > deadline) {
+        stopPolling();
+        return;
+      }
+      void refreshExternalData().then((next) => {
+        setData(next);
+        if (next.quickbooks.qboConnected) stopPolling();
+      });
+    }, QBO_POLL_MS);
+  };
 
   useEffect(() => {
-    load();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("qbo") === "connected") {
+      void refreshExternalData().then((next) => {
+        setData(next);
+        stripQboConnectedParam();
+      });
+      return;
+    }
+    void load();
+  }, []);
+
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === "qbo-connected") void load();
+    };
+    window.addEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      stopPolling();
+    };
   }, []);
 
   const handleImport = async () => {
@@ -36,6 +92,7 @@ export function QuickBooksTab() {
     try {
       const url = await adminRepository.getQuickBooksOAuthUrl();
       window.open(url, "_blank", "width=900,height=720");
+      startPollingForConnection();
     } finally {
       setConnecting(false);
     }
@@ -63,7 +120,7 @@ export function QuickBooksTab() {
           </div>
           <p className="text-sm text-slate-700">
             <strong>
-              Does your building use QuickBooks for accounting purposes? With Condo Communities QuickBooks
+              Does your building use QuickBooks for accounting purposes? With EasyPortal QuickBooks
               integration you can eliminate dual data entry*, while also allowing residents to see their account
               balance and open invoices. Simply enable either QuickBooks Online or the QuickBooks Web Connector
               in the options below to get started!
@@ -76,7 +133,7 @@ export function QuickBooksTab() {
             <p className="text-center text-sm text-slate-600">
               By enabling Quickbooks Online and entering your Quickbooks Online CompanyID, you can allow
               residents to see their current account balance and any outstanding invoices**. Creation of, as well
-              as updates to, customer/user records are shared between Condo Communities and Quickbooks in
+              as updates to, customer/user records are shared between EasyPortal and Quickbooks in
               real-time***.
             </p>
 
@@ -126,7 +183,7 @@ export function QuickBooksTab() {
         <p className="mt-6 text-xs text-slate-500">
           * QuickBooks does not support unique fields for unit/suite/apt number. Due to this, as well as the
           variability of address formatting used by countries and regions around the world, users must be
-          manually assigned to their units in Condo Communities.
+          manually assigned to their units in EasyPortal.
           <br />
           ** Only users saved as Owners or Absentee Owners are allowed to see account balances &amp; invoices.
           <br />

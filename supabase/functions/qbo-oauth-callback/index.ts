@@ -8,6 +8,22 @@ function escapeHtml(s: string) {
   return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 
+function buildSuccessRedirect(returnUrl: string | null | undefined): string {
+  const fallback =
+    Deno.env.get("PORTAL_APP_URL")?.trim() || "http://localhost:5173";
+  let target: URL;
+  try {
+    target = new URL(returnUrl?.trim() || fallback);
+  } catch {
+    target = new URL(fallback);
+  }
+  if (target.protocol !== "http:" && target.protocol !== "https:") {
+    target = new URL(fallback);
+  }
+  target.searchParams.set("qbo", "connected");
+  return target.toString();
+}
+
 async function exchangeToken(args: {
   clientId: string;
   clientSecret: string;
@@ -77,7 +93,7 @@ Deno.serve(async (req) => {
 
     const { data: stateRow, error: stateError } = await admin
       .from("quickbooks_oauth_states")
-      .select("id, building_id, created_at")
+      .select("id, building_id, return_url, created_at")
       .eq("id", state)
       .maybeSingle();
 
@@ -111,22 +127,7 @@ Deno.serve(async (req) => {
       updated_at: new Date().toISOString(),
     });
 
-    return html(`<!doctype html>
-<html>
-  <head><meta charset="utf-8" /><title>QuickBooks Connected</title></head>
-  <body style="font-family: system-ui; padding: 24px;">
-    <h3>QuickBooks Online connected</h3>
-    <p>You can close this window and return to EasyPortal.</p>
-    <script>
-      try {
-        if (window.opener) {
-          window.opener.postMessage({ type: "qbo-connected", realmId: ${JSON.stringify(realmId)} }, "*");
-        }
-      } catch {}
-      setTimeout(() => window.close(), 400);
-    </script>
-  </body>
-</html>`);
+    return Response.redirect(buildSuccessRedirect(stateRow.return_url as string | null), 302);
   } catch (err) {
     return html(`<h3>QuickBooks connection failed</h3><p>${escapeHtml(err instanceof Error ? err.message : "Unknown error")}</p>`, 500);
   }

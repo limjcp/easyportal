@@ -13,6 +13,17 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+function sanitizeReturnUrl(raw: string | undefined): string | null {
+  if (!raw?.trim()) return null;
+  try {
+    const parsed = new URL(raw.trim());
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 async function requireUser(req: Request) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -41,9 +52,10 @@ Deno.serve(async (req) => {
     }
 
     const user = await requireUser(req);
-    const body = (await req.json().catch(() => ({}))) as { buildingId?: string };
+    const body = (await req.json().catch(() => ({}))) as { buildingId?: string; returnUrl?: string };
     const buildingId = body.buildingId?.trim() ?? "";
     if (!buildingId) return jsonResponse({ error: "Missing buildingId." }, 400);
+    const returnUrl = sanitizeReturnUrl(body.returnUrl);
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -58,7 +70,7 @@ Deno.serve(async (req) => {
 
     const { data: stateRow, error: stateError } = await admin
       .from("quickbooks_oauth_states")
-      .insert({ building_id: buildingId })
+      .insert({ building_id: buildingId, return_url: returnUrl })
       .select("id")
       .single();
     if (stateError) return jsonResponse({ error: stateError.message }, 400);
