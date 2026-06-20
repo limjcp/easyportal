@@ -70,6 +70,59 @@ function mapBuilding(row: Record<string, unknown>): CompanyBuilding {
   };
 }
 
+type BuildingAdminSummary = {
+  admins?: string;
+  adminsCount: number;
+};
+
+async function loadBuildingAdminSummaries(
+  buildingIds: string[]
+): Promise<Map<string, BuildingAdminSummary>> {
+  const summaries = new Map<string, BuildingAdminSummary>();
+  if (buildingIds.length === 0) return summaries;
+
+  const { data, error } = await sb()
+    .from("building_memberships")
+    .select("building_id, status, profiles(first_name, last_name)")
+    .in("building_id", buildingIds);
+  mapDbError(error);
+
+  const namesByBuilding = new Map<string, string[]>();
+  for (const row of data ?? []) {
+    if (row.status !== "active") continue;
+    const buildingId = row.building_id as string;
+    const profile = row.profiles as { first_name: string; last_name: string } | null;
+    if (!profile) continue;
+    const name = `${profile.first_name} ${profile.last_name}`.trim();
+    if (!name) continue;
+    const names = namesByBuilding.get(buildingId) ?? [];
+    names.push(name);
+    namesByBuilding.set(buildingId, names);
+  }
+
+  for (const buildingId of buildingIds) {
+    const names = (namesByBuilding.get(buildingId) ?? []).sort((a, b) => a.localeCompare(b));
+    summaries.set(buildingId, {
+      admins: names.length > 0 ? names.join(", ") : undefined,
+      adminsCount: names.length,
+    });
+  }
+
+  return summaries;
+}
+
+function enrichBuilding(
+  building: CompanyBuilding,
+  summary?: BuildingAdminSummary
+): CompanyBuilding {
+  if (!summary) return building;
+  return {
+    ...building,
+    admins: summary.admins,
+    adminsCount: summary.adminsCount,
+  };
+}
+
 async function ensureCompanyId(): Promise<string> {
   const activeCompanyId = getActiveCompanyId();
   if (activeCompanyId) return activeCompanyId;
@@ -213,13 +266,18 @@ export const supabaseCompanyRepository = {
     const companyId = await ensureCompanyId();
     const { data, error } = await sb().from("buildings").select("*").eq("company_id", companyId);
     mapDbError(error);
-    return (data ?? []).map((row) => mapBuilding(row as Record<string, unknown>));
+    const buildings = (data ?? []).map((row) => mapBuilding(row as Record<string, unknown>));
+    const summaries = await loadBuildingAdminSummaries(buildings.map((b) => b.id));
+    return buildings.map((b) => enrichBuilding(b, summaries.get(b.id)));
   },
 
   async getBuilding(id: string): Promise<CompanyBuilding | undefined> {
     const { data, error } = await sb().from("buildings").select("*").eq("id", id).maybeSingle();
     mapDbError(error);
-    return data ? mapBuilding(data as Record<string, unknown>) : undefined;
+    if (!data) return undefined;
+    const building = mapBuilding(data as Record<string, unknown>);
+    const summaries = await loadBuildingAdminSummaries([building.id]);
+    return enrichBuilding(building, summaries.get(building.id));
   },
 
   async checkSubdomainAvailable(subdomain: string): Promise<boolean> {

@@ -190,9 +190,20 @@ export async function refreshBuildingCounts(buildingId: string): Promise<void> {
     .not("account_status", "in", '("Archived","Deleted")');
   mapDbError(usersError);
 
+  const { count: adminsCount, error: adminsError } = await sb()
+    .from("building_memberships")
+    .select("*", { count: "exact", head: true })
+    .eq("building_id", buildingId)
+    .eq("status", "active");
+  mapDbError(adminsError);
+
   const { error: updateError } = await sb()
     .from("buildings")
-    .update({ units_count: unitsCount ?? 0, users_count: usersCount ?? 0 })
+    .update({
+      units_count: unitsCount ?? 0,
+      users_count: usersCount ?? 0,
+      admins_count: adminsCount ?? 0,
+    })
     .eq("id", buildingId);
   mapDbError(updateError);
 }

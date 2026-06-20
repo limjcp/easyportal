@@ -14,6 +14,7 @@ import { mapDbError, sb } from "../base";
 import { provisionUser } from "../provisionUser";
 import { bid } from "./shared";
 import { mapCompanyPermissionDbRows } from "../portalModulePermissions";
+import { refreshBuildingCounts } from "../unitsUsersRepository";
 
 export const adminsRepository = {
   async getAdminUser(): Promise<AdminUser> {
@@ -197,6 +198,7 @@ export const adminsRepository = {
       roleCode: input.role,
       roleLabel,
     });
+    await refreshBuildingCounts(buildingId);
     return {
       id: result.membershipId ?? result.profileId,
       firstName: input.firstName.trim(),
@@ -226,6 +228,10 @@ export const adminsRepository = {
     if (input.status) updates.status = input.status;
     if (Object.keys(updates).length) {
       await sb().from("building_memberships").update(updates).eq("id", id);
+      if (input.status) {
+        const buildingId = await bid();
+        await refreshBuildingCounts(buildingId);
+      }
     }
     if (input.firstName || input.lastName || input.email) {
       const { data: membership } = await sb()
