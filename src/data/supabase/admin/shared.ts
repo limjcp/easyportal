@@ -6,6 +6,12 @@ export async function bid(): Promise<string> {
   return buildingIdOrThrow();
 }
 
+export async function resolveBuildingId(explicit?: string): Promise<string> {
+  const id = explicit?.trim();
+  if (id) return id;
+  return bid();
+}
+
 export function normalizeCategoryName(name: string): string {
   return name.replace(/\s+/g, " ").trim();
 }

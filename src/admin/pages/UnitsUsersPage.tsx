@@ -2,7 +2,6 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { FaBuilding, FaCheck, FaUser } from "react-icons/fa";
 import { OptionsDropdown } from "../components/AdminBadges";
 import { AdminPanelTable, AdminTabs, type AdminTableColumn } from "../components/AdminPanelTable";
-import { resetPasswordForEmail } from "../../auth/supabaseAuth";
 import { adminRepository } from "../data/adminRepository";
 import { BUILDING_ADMIN_ROLES } from "../data/mock/buildingPermissions";
 import { Modal } from "../../shared/Modal";
@@ -298,7 +297,7 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
   const [confirmKind, setConfirmKind] = useState<"deleteUser" | "passwordReset" | null>(null);
   const [savingEmail, setSavingEmail] = useState(false);
   const [savingRestore, setSavingRestore] = useState(false);
-  const pendingResetEmailRef = useRef<string | null>(null);
+  const pendingLoginDetailsRef = useRef<{ occupancyId: string; email: string } | null>(null);
 
   const refreshLists = useCallback(() => {
     invalidateBuilding();
@@ -770,27 +769,27 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
     void saveUserDetail();
   };
 
-  const handleEmailLoginDetails = (email: string, status: UnitsUsersAccountStatus) => {
+  const handleEmailLoginDetails = (occupancyId: string, email: string, status: UnitsUsersAccountStatus) => {
     if (status !== "Activated") {
       setActionError("This user does not have a login account yet.");
       return;
     }
-    pendingResetEmailRef.current = email;
+    pendingLoginDetailsRef.current = { occupancyId, email };
     setConfirmKind("passwordReset");
   };
 
   const confirmPasswordReset = async () => {
-    const email = pendingResetEmailRef.current;
-    if (!email) return;
+    const pending = pendingLoginDetailsRef.current;
+    if (!pending) return;
     setSavingEmail(true);
     setActionError(null);
     try {
-      await resetPasswordForEmail(email);
-      window.alert(`Password reset email sent to ${email}.`);
+      const result = await adminRepository.emailOccupancyLoginDetails(pending.occupancyId);
+      window.alert(result.message);
       setConfirmKind(null);
-      pendingResetEmailRef.current = null;
+      pendingLoginDetailsRef.current = null;
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to send password reset email.");
+      setActionError(err instanceof Error ? err.message : "Failed to send login details email.");
     } finally {
       setSavingEmail(false);
     }
@@ -867,7 +866,7 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
             { label: "Merge Account", disabled: true, onClick: () => undefined },
             {
               label: "Email Login Details",
-              onClick: () => handleEmailLoginDetails(row.email, row.status),
+              onClick: () => handleEmailLoginDetails(row.id, row.email, row.status),
             },
           ]}
         />
@@ -2369,13 +2368,13 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
         onClose={() => {
           if (savingEmail) return;
           setConfirmKind(null);
-          pendingResetEmailRef.current = null;
+          pendingLoginDetailsRef.current = null;
         }}
-        title="Send Password Reset"
+        title="Send Login Details"
         message={
-          pendingResetEmailRef.current
-            ? `Send password reset email to ${pendingResetEmailRef.current}?`
-            : "Send password reset email?"
+          pendingLoginDetailsRef.current
+            ? `Send login details with a temporary password to ${pendingLoginDetailsRef.current.email}? They will be asked to choose a new password on first sign-in.`
+            : "Send login details email?"
         }
         loading={savingEmail}
         onConfirm={() => void confirmPasswordReset()}

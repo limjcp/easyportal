@@ -6,7 +6,9 @@ import {
 import { verifyRecaptchaOnServer } from "../shared/recaptcha";
 import {
   clearSupabaseAuthStorage,
+  fetchProfile,
   getRememberMe,
+  profileMustChangePassword,
   resolvePortalAccess,
   resetPasswordForEmail,
   setRememberMe,
@@ -20,6 +22,7 @@ type AuthMode = "signin" | "signup";
 
 type LoginPageProps = {
   onLogin: (portal: LoginPortalRole, username: string) => void;
+  onRequirePasswordChange: (portal: LoginPortalRole) => void;
   onOpenMarketing?: (path?: string) => void;
   initialMode?: AuthMode;
 };
@@ -50,7 +53,12 @@ function RecaptchaAttribution() {
   );
 }
 
-export function LoginPage({ onLogin, onOpenMarketing, initialMode = "signin" }: LoginPageProps) {
+export function LoginPage({
+  onLogin,
+  onRequirePasswordChange,
+  onOpenMarketing,
+  initialMode = "signin",
+}: LoginPageProps) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -87,6 +95,11 @@ export function LoginPage({ onLogin, onOpenMarketing, initialMode = "signin" }: 
       }
       if (access.defaultPortal === "resident" || access.portals.includes("resident")) {
         await ensureActiveBuildingForUser(user.id);
+      }
+      const profile = await fetchProfile(user.id);
+      if (profileMustChangePassword(profile)) {
+        onRequirePasswordChange(access.defaultPortal);
+        return;
       }
       onLogin(access.defaultPortal, username.trim());
     } catch (err) {

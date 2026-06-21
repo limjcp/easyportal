@@ -21,7 +21,7 @@ import {
   mapBuildingUnitGroupDefinition,
 } from "./mappers";
 import { assertEdgeFunctionOk, parseEdgeFunctionError } from "../parseEdgeFunctionError";
-import { bid, expandRange } from "./shared";
+import { bid, expandRange, resolveBuildingId } from "./shared";
 
 export const buildingRepository = {
   async getBuildingDefinition(): Promise<BuildingDefinition> {
@@ -428,8 +428,8 @@ export const buildingRepository = {
     return mapBuildingReminder(data as Record<string, unknown>);
   },
 
-  async getBuildingExternalData(): Promise<BuildingExternalData> {
-    const buildingId = await bid();
+  async getBuildingExternalData(explicitBuildingId?: string): Promise<BuildingExternalData> {
+    const buildingId = await resolveBuildingId(explicitBuildingId);
     const { data, error } = await sb()
       .from("building_external_integrations")
       .select("*")
@@ -490,18 +490,18 @@ export const buildingRepository = {
     return this.getBuildingExternalData();
   },
 
-  async disconnectQuickBooksOnline() {
-    const buildingId = await bid();
+  async disconnectQuickBooksOnline(explicitBuildingId?: string) {
+    const buildingId = await resolveBuildingId(explicitBuildingId);
     const { data, error } = await requireSupabase().functions.invoke("qbo-disconnect", {
       body: { buildingId },
     });
     const body = data as { error?: string } | null;
     await assertEdgeFunctionOk(body, error, "QuickBooks disconnect failed.");
-    return this.getBuildingExternalData();
+    return this.getBuildingExternalData(buildingId);
   },
 
-  async importQuickBooksUsers() {
-    const buildingId = await bid();
+  async importQuickBooksUsers(explicitBuildingId?: string) {
+    const buildingId = await resolveBuildingId(explicitBuildingId);
     const { data, error } = await requireSupabase().functions.invoke("qbo-sync", {
       body: { buildingId },
     });
@@ -522,8 +522,12 @@ export const buildingRepository = {
     };
   },
 
-  async getQuickBooksOAuthUrl() {
-    const buildingId = await bid();
+  async getQuickBooksOAuthUrl(explicitBuildingId?: string) {
+    const buildingId = await resolveBuildingId(explicitBuildingId);
+    const { data: sessionData } = await requireSupabase().auth.getSession();
+    if (!sessionData.session) {
+      throw new Error("Your session has expired. Sign out and sign in again, then retry.");
+    }
     const { data, error } = await requireSupabase().functions.invoke("qbo-oauth-start", {
       body: {
         buildingId,

@@ -3,6 +3,7 @@ import { requireSupabase } from "../../lib/supabaseClient";
 export type SendPortalEmailPayload =
   | { type: "employee_login_details"; membershipId: string }
   | { type: "building_admin_login_details"; membershipId: string }
+  | { type: "occupancy_login_details"; occupancyId: string }
   | { type: "vendor_invite"; vendorId: string; email: string }
   | { type: "certificate_resend"; certificateId: string };
 

@@ -11,6 +11,7 @@ import type {
 } from "../../resident/data/types";
 import { mapDbError, nowIso, sb, todayIsoDate } from "./base";
 import { buildingIdOrThrow } from "./base";
+import { invokeSendPortalEmail } from "./sendPortalEmail";
 import {
   aggregateOccupancyProfiles,
   applyProfileDetailsToDisplayFields,
@@ -899,6 +900,13 @@ export const unitsUsersRepository = {
       }))
     );
     mapDbError(error);
+  },
+
+  async emailOccupancyLoginDetails(occupancyId: string) {
+    return invokeSendPortalEmail({
+      type: "occupancy_login_details",
+      occupancyId,
+    });
   },
 };
 

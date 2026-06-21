@@ -1,21 +1,26 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FaCheckCircle, FaLink } from "react-icons/fa";
+import { useAuth } from "../../../auth/AuthProvider";
 import { AdminSectionPanel } from "../../components/AdminSectionPanel";
 import { Modal } from "../../../shared/Modal";
 import { ConfirmModal } from "../../../shared/ConfirmModal";
 import { ActionButton } from "../../../shared/ActionButton";
 import { useAsyncAction } from "../../../shared/useAsyncAction";
 import { useInvalidatePortalQueries } from "../../../shared/queries/useInvalidatePortalQueries";
+import { getActiveBuildingId, setActiveBuildingId } from "../../../data/supabase/buildingContext";
 import { adminRepository } from "../../data/adminRepository";
 import type { BuildingExternalData } from "../../../resident/data/types";
 
 const QBO_POLL_MS = 2000;
 const QBO_POLL_TIMEOUT_MS = 120_000;
+const POPUP_FEATURES = "width=900,height=720";
 
 type QuickBooksTabProps = {
   activeBuildingId?: string;
   refreshKey?: number;
 };
+
+type LoadStatus = "loading" | "ready" | "no-building" | "error";
 
 function formatSyncTime(iso: string | undefined): string | null {
   if (!iso) return null;
@@ -24,25 +29,69 @@ function formatSyncTime(iso: string | undefined): string | null {
   return parsed.toLocaleString();
 }
 
+function prepareOAuthPopup(): Window {
+  const popup = window.open("about:blank", "_blank", POPUP_FEATURES);
+  if (!popup) {
+    throw new Error(
+      "Your browser blocked the QuickBooks window. Allow popups for this site and try again."
+    );
+  }
+  popup.document.title = "QuickBooks";
+  popup.document.body.innerHTML =
+    "<p style=\"font-family:sans-serif;padding:24px\">Opening QuickBooks…</p>";
+  return popup;
+}
+
 export function QuickBooksTab({ activeBuildingId, refreshKey = 0 }: QuickBooksTabProps) {
+  const auth = useAuth();
   const { invalidateBuilding } = useInvalidatePortalQueries();
   const [data, setData] = useState<BuildingExternalData | null>(null);
+  const [loadStatus, setLoadStatus] = useState<LoadStatus>("loading");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [lastSyncLabel, setLastSyncLabel] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
 
-  const refreshExternalData = useCallback(() => adminRepository.getBuildingExternalData(), []);
+  const buildingId = useMemo(
+    () => activeBuildingId ?? getActiveBuildingId() ?? undefined,
+    [activeBuildingId]
+  );
+
+  useLayoutEffect(() => {
+    if (activeBuildingId) {
+      setActiveBuildingId(activeBuildingId);
+    }
+  }, [activeBuildingId]);
+
+  const refreshExternalData = useCallback(
+    () => adminRepository.getBuildingExternalData(buildingId),
+    [buildingId]
+  );
 
   const load = useCallback(() => {
+    if (!buildingId) {
+      setData(null);
+      setLoadError(null);
+      setLoadStatus("no-building");
+      return Promise.resolve();
+    }
+
+    setLoadStatus("loading");
+    setLoadError(null);
     return refreshExternalData()
       .then((next) => {
         setData(next);
+        setLoadStatus("ready");
         const synced = formatSyncTime(next.quickbooks.lastSyncedAt);
         if (synced) setLastSyncLabel(synced);
       })
-      .catch(() => setData(null));
-  }, [refreshExternalData]);
+      .catch((err) => {
+        setData(null);
+        setLoadStatus("error");
+        setLoadError(err instanceof Error ? err.message : "Failed to load QuickBooks settings.");
+      });
+  }, [buildingId, refreshExternalData]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current !== null) {
@@ -62,17 +111,24 @@ export function QuickBooksTab({ activeBuildingId, refreshKey = 0 }: QuickBooksTa
       void refreshExternalData()
         .then((next) => {
           setData(next);
+          setLoadStatus("ready");
           if (next.quickbooks.qboConnected) stopPolling();
         })
         .catch(() => {
-          // Parent tab only; ignore when building context is unavailable.
+          // Ignore transient polling errors.
         });
     }, QBO_POLL_MS);
   }, [refreshExternalData, stopPolling]);
 
+  const connectDisabled =
+    !buildingId || auth.initializing || auth.loading;
+
   const { run: handleImport, loading: importing } = useAsyncAction(
     useCallback(async () => {
-      const result = await adminRepository.importQuickBooksUsers();
+      if (!buildingId) {
+        throw new Error("No building is selected. Open the building from the company portal and try again.");
+      }
+      const result = await adminRepository.importQuickBooksUsers(buildingId);
       setImportOpen(false);
       setLastSyncLabel(new Date().toLocaleString());
       await load();
@@ -82,25 +138,39 @@ export function QuickBooksTab({ activeBuildingId, refreshKey = 0 }: QuickBooksTa
         `Synced ${result.imported} QBO customers and ${result.invoices ?? 0} open invoices. ` +
           `${occupantTotal} occupant record(s) added or updated in Units & Users → Pending.`
       );
-    }, [load, invalidateBuilding]),
+    }, [buildingId, load, invalidateBuilding]),
     { successMessage: "QuickBooks data synced." }
   );
 
   const { run: handleConnect, loading: connecting } = useAsyncAction(
     useCallback(async () => {
-      const url = await adminRepository.getQuickBooksOAuthUrl();
-      window.open(url, "_blank", "width=900,height=720");
-      startPollingForConnection();
-    }, [startPollingForConnection]),
+      if (!buildingId) {
+        throw new Error("No building is selected. Open the building from the company portal and try again.");
+      }
+
+      const popup = prepareOAuthPopup();
+      try {
+        const url = await adminRepository.getQuickBooksOAuthUrl(buildingId);
+        popup.location.href = url;
+        startPollingForConnection();
+      } catch (err) {
+        popup.close();
+        throw err;
+      }
+    }, [buildingId, startPollingForConnection]),
     { showSuccessToast: false }
   );
 
   const { run: handleDisconnect, loading: disconnecting } = useAsyncAction(
     useCallback(async () => {
-      const updated = await adminRepository.disconnectQuickBooksOnline();
+      if (!buildingId) {
+        throw new Error("No building is selected. Open the building from the company portal and try again.");
+      }
+      const updated = await adminRepository.disconnectQuickBooksOnline(buildingId);
       setData(updated);
+      setLoadStatus("ready");
       setDisconnectOpen(false);
-    }, []),
+    }, [buildingId]),
     { successMessage: "QuickBooks disconnected." }
   );
 
@@ -119,7 +189,26 @@ export function QuickBooksTab({ activeBuildingId, refreshKey = 0 }: QuickBooksTa
     };
   }, [load, stopPolling]);
 
-  if (!data) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (loadStatus === "loading") {
+    return <p className="text-sm text-slate-500">Loading…</p>;
+  }
+
+  if (loadStatus === "no-building") {
+    return (
+      <p className="text-sm text-slate-600">
+        Open a building first, then connect QuickBooks from External Data.
+      </p>
+    );
+  }
+
+  if (loadStatus === "error" || !data) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-red-700">{loadError ?? "Failed to load QuickBooks settings."}</p>
+        <ActionButton label="Retry" variant="secondary" onClick={() => void load()} />
+      </div>
+    );
+  }
 
   const qb = data.quickbooks;
   const cachedCount = qb.syncedCustomerCount ?? 0;
@@ -180,6 +269,7 @@ export function QuickBooksTab({ activeBuildingId, refreshKey = 0 }: QuickBooksTa
                     label={connecting ? "Opening QuickBooks…" : "Connect to QuickBooks Online"}
                     loading={connecting}
                     loadingLabel="Opening QuickBooks…"
+                    disabled={connectDisabled}
                     onClick={() => void handleConnect()}
                   />
                   {cachedCount > 0 && (
@@ -190,6 +280,9 @@ export function QuickBooksTab({ activeBuildingId, refreshKey = 0 }: QuickBooksTa
                 </>
               )}
             </div>
+            {!qb.qboConnected && connectDisabled && buildingId && (auth.initializing || auth.loading) && (
+              <p className="mt-3 text-center text-xs text-slate-500">Preparing your session…</p>
+            )}
             {lastSyncLabel && (
               <p className="mt-4 text-center text-xs text-slate-500">Last sync: {lastSyncLabel}</p>
             )}
@@ -204,6 +297,8 @@ export function QuickBooksTab({ activeBuildingId, refreshKey = 0 }: QuickBooksTa
           <br />
           *** Disconnecting stops live API sync only. Imported occupants, cached customers, and invoice data
           already stored in EasyPortal are not removed.
+          <br />
+          **** If the QuickBooks window does not open, allow popups for this site in your browser settings.
         </p>
       </AdminSectionPanel>
 

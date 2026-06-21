@@ -15,6 +15,7 @@ const corsHeaders = {
 type SendPortalEmailPayload =
   | { type: "employee_login_details"; membershipId: string }
   | { type: "building_admin_login_details"; membershipId: string }
+  | { type: "occupancy_login_details"; occupancyId: string }
   | { type: "vendor_invite"; vendorId: string; email: string }
   | { type: "certificate_resend"; certificateId: string };
 
@@ -140,6 +141,17 @@ async function sendLoginDetailsEmail(input: {
     text: template.text,
   });
 
+  const { error: profileError } = await input.adminClient
+    .from("profiles")
+    .update({
+      must_change_password: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.profileId);
+  if (profileError) {
+    throw new Error(profileError.message);
+  }
+
   return { email: input.email, message: `Login details sent to ${input.email}.` };
 }
 
@@ -210,6 +222,51 @@ async function handleBuildingAdminLoginDetails(
   return sendLoginDetailsEmail({
     adminClient,
     profileId: membership.profile_id as string,
+    email: profile.email.trim(),
+    firstName: profile.first_name?.trim() || profile.last_name?.trim() || "",
+  });
+}
+
+async function handleOccupancyLoginDetails(
+  adminClient: SupabaseClient,
+  callerId: string,
+  isSuperAdmin: boolean,
+  occupancyId: string
+) {
+  const { data: occupancy, error } = await adminClient
+    .from("unit_occupancies")
+    .select("building_id, profile_id, account_status, profiles(first_name, last_name, email)")
+    .eq("id", occupancyId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!occupancy) throw new Error("User not found.");
+
+  if (occupancy.account_status !== "Activated") {
+    throw new Error("This user does not have an activated login account yet.");
+  }
+
+  const profileId = occupancy.profile_id as string | null;
+  if (!profileId) {
+    throw new Error("This user does not have a login account yet.");
+  }
+
+  const buildingId = occupancy.building_id as string;
+  if (!(await hasBuildingAccess(adminClient, callerId, buildingId, isSuperAdmin))) {
+    throw new Error("Not allowed to email login details for this user.");
+  }
+
+  const profile = occupancy.profiles as {
+    first_name: string;
+    last_name: string;
+    email: string;
+  } | null;
+  if (!profile?.email?.trim()) {
+    throw new Error("User does not have an email address.");
+  }
+
+  return sendLoginDetailsEmail({
+    adminClient,
+    profileId,
     email: profile.email.trim(),
     firstName: profile.first_name?.trim() || profile.last_name?.trim() || "",
   });
@@ -365,6 +422,17 @@ Deno.serve(async (req) => {
           caller.id,
           isSuperAdmin,
           payload.membershipId.trim()
+        );
+        break;
+      case "occupancy_login_details":
+        if (!payload.occupancyId?.trim()) {
+          return jsonResponse({ error: "occupancyId is required." }, 400);
+        }
+        result = await handleOccupancyLoginDetails(
+          adminClient,
+          caller.id,
+          isSuperAdmin,
+          payload.occupancyId.trim()
         );
         break;
       case "vendor_invite":

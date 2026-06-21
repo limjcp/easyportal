@@ -19,13 +19,15 @@ import { companyRepository } from "./company/data/companyRepository";
 import { formatBuildingOptionLabel } from "./admin/navigation";
 import { scrollPageToTop } from "./utils/scroll";
 import { QboConnectedPage } from "./auth/QboConnectedPage";
+import { ChangePasswordPage } from "./auth/ChangePasswordPage";
+import { profileMustChangePassword } from "./auth/supabaseAuth";
 import { ToastProvider } from "./shared/Toast";
 import { CookieConsentProvider } from "./shared/CookieConsentProvider";
 import { portalRoleToView, resolvePortalForUser } from "./auth/portalNavigation";
 import { useAccessibleBuildings } from "./shared/queries/companyQueries";
 import { removeBuildingQueries } from "./shared/queryInvalidation";
 
-type AppView = "marketing" | "login" | "resident" | "admin" | "company" | "vendor" | "prototype";
+type AppView = "marketing" | "login" | "change-password" | "resident" | "admin" | "company" | "vendor" | "prototype";
 
 const getInitialView = (): AppView => {
   if (typeof window !== "undefined") {
@@ -56,6 +58,9 @@ export default function App() {
   const [adminBuildings, setAdminBuildings] = useState<CompanyBuilding[]>([]);
   const [adminActiveBuildingId, setAdminActiveBuildingId] = useState<string | null>(() => getActiveBuildingId());
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
+  const [pendingPortal, setPendingPortal] = useState<LoginPortalRole>("resident");
+
+  const mustChangePassword = profileMustChangePassword(auth.profile);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -72,7 +77,8 @@ export default function App() {
 
   useEffect(() => {
     if (auth.initializing || !auth.session || !auth.activePortal) return;
-    if (view === "marketing" || view === "login") return;
+    if (view === "marketing" || view === "login" || view === "change-password") return;
+    if (mustChangePassword) return;
     setView(
       auth.activePortal === "company"
         ? "company"
@@ -82,7 +88,7 @@ export default function App() {
             ? "vendor"
             : "resident"
     );
-  }, [auth.initializing, auth.session, auth.activePortal, view]);
+  }, [auth.initializing, auth.session, auth.activePortal, view, mustChangePassword]);
 
   useEffect(() => {
     if (auth.initializing || !auth.session) return;
@@ -208,6 +214,12 @@ export default function App() {
     setView(nextView);
   };
 
+  const handleRequirePasswordChange = (portal: LoginPortalRole) => {
+    setPendingPortal(portal);
+    auth.setActivePortal(portal);
+    setView("change-password");
+  };
+
   const handleGoToWebsite = (path = "/") => {
     navigatePublic(path);
   };
@@ -215,6 +227,12 @@ export default function App() {
   const handleGoToPortal = () => {
     if (!auth.session) {
       navigatePublic("/login");
+      return;
+    }
+    if (mustChangePassword) {
+      handleRequirePasswordChange(
+        auth.activePortal ?? auth.portalAccess?.defaultPortal ?? "resident"
+      );
       return;
     }
     const portal = resolvePortalForUser({
@@ -238,8 +256,22 @@ export default function App() {
   useEffect(() => {
     if (auth.initializing || view !== "login") return;
     if (!auth.session) return;
+    if (mustChangePassword) {
+      handleRequirePasswordChange(
+        auth.activePortal ?? auth.portalAccess?.defaultPortal ?? "resident"
+      );
+      return;
+    }
     handleGoToPortal();
-  }, [auth.initializing, auth.session, view, auth.activePortal, auth.portalAccess]);
+  }, [auth.initializing, auth.session, view, auth.activePortal, auth.portalAccess, mustChangePassword]);
+
+  useEffect(() => {
+    if (auth.initializing || !auth.session || !mustChangePassword) return;
+    if (view === "change-password") return;
+    handleRequirePasswordChange(
+      auth.activePortal ?? auth.portalAccess?.defaultPortal ?? pendingPortal
+    );
+  }, [auth.initializing, auth.session, mustChangePassword, view, auth.activePortal, auth.portalAccess, pendingPortal]);
 
   const handleLogout = async () => {
     setActiveBuilding(null);
@@ -324,7 +356,7 @@ export default function App() {
           onGoToPortal={handleGoToPortal}
         />
       )}
-      {view === "login" && (
+      {view === "login" && !auth.session && (
         <LoginPage
           initialMode={
             typeof window !== "undefined" && new URLSearchParams(window.location.search).get("signup") === "1"
@@ -332,17 +364,25 @@ export default function App() {
               : "signin"
           }
           onLogin={handleLogin}
+          onRequirePasswordChange={handleRequirePasswordChange}
           onOpenMarketing={(path) => navigatePublic(path ?? "/")}
         />
       )}
-      {view === "resident" && (
+      {view === "change-password" && auth.session && mustChangePassword && (
+        <ChangePasswordPage
+          pendingPortal={pendingPortal}
+          onComplete={handleLogin}
+          onSignOut={() => void handleLogout()}
+        />
+      )}
+      {view === "resident" && !mustChangePassword && (
         <ResidentPortal
           onSwitchToAdmin={handleSwitchToAdmin}
           onLogout={handleLogout}
           onGoToWebsite={handleGoToWebsite}
         />
       )}
-      {view === "company" && (
+      {view === "company" && !mustChangePassword && (
         <CompanyPortal
           activeBuilding={activeBuilding}
           onOpenBuilding={handleOpenBuilding}
@@ -352,7 +392,7 @@ export default function App() {
           onGoToWebsite={handleGoToWebsite}
         />
       )}
-      {view === "admin" && (
+      {view === "admin" && !mustChangePassword && (
         <BuildingAdmin
           key={activeAdminBuilding?.id ?? adminActiveBuildingId ?? "none"}
           onSwitchToResident={() => {
@@ -373,7 +413,7 @@ export default function App() {
           onSwitchBuilding={adminBuildings.length > 1 ? handleSwitchAdminBuilding : undefined}
         />
       )}
-      {view === "vendor" && <VendorPortal onLogout={handleLogout} />}
+      {view === "vendor" && !mustChangePassword && <VendorPortal onLogout={handleLogout} />}
       {view === "prototype" && <ThemePreviewPage onBack={() => setView("login")} />}
       {portalSwitcher}
       {view !== "login" && view !== "marketing" && view !== "prototype" && (

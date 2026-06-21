@@ -14,6 +14,9 @@ const FRIENDLY_MESSAGES: Record<string, string> = {
 };
 
 function mapFriendlyMessage(raw: string): string {
+  if (raw.includes("No active building selected")) {
+    return FRIENDLY_MESSAGES["Missing buildingId."];
+  }
   return FRIENDLY_MESSAGES[raw] ?? raw;
 }
 

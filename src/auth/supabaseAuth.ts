@@ -68,6 +68,31 @@ export async function fetchProfile(userId: string) {
   return data;
 }
 
+export type AuthProfile = NonNullable<Awaited<ReturnType<typeof fetchProfile>>>;
+
+export function profileMustChangePassword(profile: AuthProfile | null | undefined): boolean {
+  return profile?.must_change_password === true;
+}
+
+export async function completeRequiredPasswordChange(newPassword: string): Promise<void> {
+  const client = requireSupabase();
+  const {
+    data: { user },
+    error: userError,
+  } = await client.auth.getUser();
+  if (userError) throw userError;
+  if (!user) throw new Error("Your session has expired. Sign out and sign in again, then retry.");
+
+  const { error: passwordError } = await client.auth.updateUser({ password: newPassword });
+  if (passwordError) throw passwordError;
+
+  const { error: profileError } = await client
+    .from("profiles")
+    .update({ must_change_password: false, updated_at: new Date().toISOString() })
+    .eq("id", user.id);
+  if (profileError) throw profileError;
+}
+
 export async function updateLastLogin(userId: string) {
   await requireSupabase()
     .from("profiles")
