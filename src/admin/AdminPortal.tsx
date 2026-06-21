@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "../auth/AuthProvider";
-import { getPersistedAdminRoute, setPersistedAdminRoute } from "../auth/persistedAdminRoute";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  buildAdminPath,
+  extractAdminSubPath,
+  pathToAdminRoute,
+} from "../routing/adminRoutePaths";
 import { AdminLayout } from "./AdminLayout";
 import { adminRepository } from "./data/adminRepository";
 import type { AdminRoute } from "./navigation";
@@ -42,6 +46,7 @@ import type { CompanyBuilding } from "../resident/data/types";
 import { setActiveBuildingId } from "../data/supabase/buildingContext";
 
 type AdminPortalProps = {
+  adminPathPrefix: string;
   onSwitchToResident?: () => void;
   onLogout?: () => void;
   onGoToWebsite?: () => void;
@@ -56,6 +61,7 @@ type AdminPortalProps = {
 };
 
 export function AdminPortal({
+  adminPathPrefix,
   onSwitchToResident,
   onLogout,
   onGoToWebsite,
@@ -68,15 +74,19 @@ export function AdminPortal({
   onCloseBuilding,
   embedded = false,
 }: AdminPortalProps) {
-  const auth = useAuth();
+  const location = useLocation();
+  const routerNavigate = useNavigate();
   const { invalidateBuilding } = useInvalidatePortalQueries();
-  const [route, setRouteState] = useState<AdminRoute>(
-    () => getPersistedAdminRoute() ?? { page: "dashboard" }
+  const route = useMemo(() => {
+    const sub = extractAdminSubPath(location.pathname, adminPathPrefix);
+    return pathToAdminRoute(sub, location.search);
+  }, [location.pathname, location.search, adminPathPrefix]);
+  const navigate = useCallback(
+    (next: AdminRoute) => {
+      routerNavigate(buildAdminPath(adminPathPrefix, next));
+    },
+    [adminPathPrefix, routerNavigate]
   );
-  const navigate = useCallback((next: AdminRoute) => {
-    setRouteState(next);
-    setPersistedAdminRoute(next);
-  }, []);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const bumpRefresh = useCallback(() => {
@@ -96,18 +106,13 @@ export function AdminPortal({
     if (!activeBuildingId) return;
     setActiveBuildingId(activeBuildingId);
     setRefreshKey((k) => k + 1);
-    const dashboardRoute: AdminRoute = { page: "dashboard" };
-    setRouteState(dashboardRoute);
-    setPersistedAdminRoute(dashboardRoute);
   }, [activeBuildingId]);
 
   useEffect(() => {
     if (!isAdminRouteAllowed(route, navAccess)) {
-      const fallback: AdminRoute = { page: "dashboard" };
-      setRouteState(fallback);
-      setPersistedAdminRoute(fallback);
+      navigate({ page: "dashboard" });
     }
-  }, [route, navAccess]);
+  }, [route, navAccess, navigate]);
 
   return (
     <AdminLayout

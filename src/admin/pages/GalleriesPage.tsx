@@ -5,6 +5,7 @@ import { OptionsDropdown } from "../components/AdminBadges";
 import { AdminPanelTable } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
 import { AddAlbumModal } from "../modals/AddAlbumModal";
+import { ManageAlbumModal } from "../modals/ManageAlbumModal";
 import { AdminPageActions } from "../components/AdminPageActions";
 import type { AdminRoute } from "../navigation";
 import type { GalleryAlbum } from "../../resident/data/types";
@@ -22,6 +23,7 @@ export function GalleriesPage({ route, onNavigate, refreshKey, onRefresh }: Gall
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
   const [addOpen, setAddOpen] = useState(false);
+  const [manageAlbum, setManageAlbum] = useState<GalleryAlbum | null>(null);
   const pendingAlbumRef = useRef<{ id: string; title?: string } | null>(null);
   const pendingCreateTitleRef = useRef("");
 
@@ -33,8 +35,9 @@ export function GalleriesPage({ route, onNavigate, refreshKey, onRefresh }: Gall
     useCallback(async () => {
       const title = pendingCreateTitleRef.current;
       if (!title) return;
-      await adminRepository.createAlbum(title);
+      const album = await adminRepository.createAlbum(title);
       onRefresh();
+      setManageAlbum(album);
     }, [onRefresh]),
     { successMessage: "Album created." }
   );
@@ -97,6 +100,10 @@ export function GalleriesPage({ route, onNavigate, refreshKey, onRefresh }: Gall
               <OptionsDropdown
                 options={[
                   {
+                    label: "Manage",
+                    onClick: () => setManageAlbum(row),
+                  },
+                  {
                     label: "Edit",
                     onClick: () => {
                       const title = prompt("Edit album title:", row.title);
@@ -123,6 +130,12 @@ export function GalleriesPage({ route, onNavigate, refreshKey, onRefresh }: Gall
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onSubmit={createAlbum}
+      />
+      <ManageAlbumModal
+        open={manageAlbum !== null}
+        album={manageAlbum}
+        onClose={() => setManageAlbum(null)}
+        onUpdated={onRefresh}
       />
     </>
   );

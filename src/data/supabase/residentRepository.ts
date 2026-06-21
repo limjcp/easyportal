@@ -46,7 +46,7 @@ import {
 } from "./admin/mappers";
 import { ensureDefaultDocumentFolders } from "./admin/documentFolders";
 import { buildingIdOrThrow, mapDbError, nowIso, sb, todayIsoDate } from "./base";
-import { getBuildingDocumentSignedUrl, formatFileSize, inferDocumentFileType, removeBuildingDocument, uploadBuildingDocument } from "./storage";
+import { getBuildingDocumentSignedUrl, formatFileSize, getGalleryPhotoSignedUrl, inferDocumentFileType, removeBuildingDocument, uploadBuildingDocument } from "./storage";
 import { supabaseChatRepository } from "./chatRepository";
 import { ensureActiveBuildingForUser } from "./buildingContext";
 import { ensureIncidentCategory, insertComment, insertIncidentReportAttachment, insertServiceRequestAttachment, loadIncidentReportAttachments, loadServiceRequestAttachments } from "./admin/shared";
@@ -398,12 +398,55 @@ export const supabaseResidentRepository: ResidentRepository = {
     const buildingId = await bid();
     const { data, error } = await sb().from("gallery_albums").select("*").eq("building_id", buildingId);
     mapDbError(error);
-    return (data ?? []).map((a) => ({
-      id: a.id as string,
-      title: a.title as string,
-      coverUrl: a.cover_url as string | undefined,
-      photoCount: a.photo_count as number,
-    }));
+    return Promise.all(
+      (data ?? []).map(async (a) => {
+        const coverStoragePath = a.cover_storage_path as string | undefined;
+        let coverUrl = a.cover_url as string | undefined;
+        if (coverStoragePath) {
+          try {
+            coverUrl = await getGalleryPhotoSignedUrl(coverStoragePath);
+          } catch {
+            // keep stored cover_url if signing fails
+          }
+        }
+        return {
+          id: a.id as string,
+          title: a.title as string,
+          coverUrl,
+          photoCount: a.photo_count as number,
+        };
+      })
+    );
+  },
+
+  async getAlbumPhotos(albumId: string) {
+    const buildingId = await bid();
+    const { data, error } = await sb()
+      .from("gallery_photos")
+      .select("*")
+      .eq("album_id", albumId)
+      .eq("building_id", buildingId)
+      .order("sort_order", { ascending: true });
+    mapDbError(error);
+    return Promise.all(
+      (data ?? []).map(async (row) => {
+        const storagePath = row.storage_path as string | undefined;
+        let url = row.url as string;
+        if (storagePath) {
+          try {
+            url = await getGalleryPhotoSignedUrl(storagePath);
+          } catch {
+            // keep stored url if signing fails
+          }
+        }
+        return {
+          id: row.id as string,
+          albumId: row.album_id as string,
+          url,
+          sortOrder: row.sort_order as number,
+        };
+      })
+    );
   },
 
   async getEvents() {

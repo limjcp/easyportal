@@ -9,6 +9,7 @@ import type {
   EmailRecord,
   FaqItem,
   GalleryAlbum,
+  GalleryPhoto,
   IncidentReport,
   IncidentReportCategory,
   ResidentIncidentReportDetail,
@@ -63,6 +64,7 @@ export interface ResidentRepository {
   createDocument(file: File, input: { folderId: string; title: string }): Promise<{ id: string }>;
   getFaqs(): Promise<FaqItem[]>;
   getAlbums(): Promise<GalleryAlbum[]>;
+  getAlbumPhotos(albumId: string): Promise<GalleryPhoto[]>;
   getEvents(): Promise<CalendarEvent[]>;
   getRsvps(): Promise<RsvpItem[]>;
   getEmails(): Promise<EmailRecord[]>;

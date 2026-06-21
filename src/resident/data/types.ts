@@ -145,6 +145,13 @@ export interface GalleryAlbum {
   photoCount: number;
 }
 
+export interface GalleryPhoto {
+  id: string;
+  albumId: string;
+  url: string;
+  sortOrder: number;
+}
+
 export type AdminEventType = "once" | "recurring" | "paid";
 export type AdminEventStatus = "Draft" | "Active";
 

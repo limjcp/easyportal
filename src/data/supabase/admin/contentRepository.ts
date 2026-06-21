@@ -8,6 +8,7 @@ import type {
   DocumentStorageStats,
   FaqItem,
   GalleryAlbum,
+  GalleryPhoto,
   Poll,
   PollAttachment,
   PollQuestion,
@@ -24,6 +25,7 @@ import {
   mapDocumentFile,
   mapFaq,
   mapGalleryAlbum,
+  mapGalleryPhoto,
   mapPoll,
   mapPollAttachment,
   mapPollQuestion,
@@ -33,9 +35,12 @@ import { bid } from "./shared";
 import {
   formatFileSize,
   getBuildingDocumentSignedUrl,
+  getGalleryPhotoSignedUrl,
   inferDocumentFileType,
   removeBuildingDocument,
+  removeGalleryPhoto,
   uploadBuildingDocument,
+  uploadGalleryPhoto,
 } from "../storage";
 
 async function loadPollQuestions(pollIds: string[]): Promise<Map<string, PollQuestion[]>> {
@@ -634,7 +639,19 @@ export const contentRepository = {
     const buildingId = await bid();
     const { data, error } = await sb().from("gallery_albums").select("*").eq("building_id", buildingId);
     mapDbError(error);
-    return (data ?? []).map((a) => mapGalleryAlbum(a as Record<string, unknown>));
+    const albums = (data ?? []).map((a) => mapGalleryAlbum(a as Record<string, unknown>));
+    return Promise.all(
+      albums.map(async (album) => {
+        const row = (data ?? []).find((a) => a.id === album.id) as Record<string, unknown> | undefined;
+        const coverStoragePath = row?.cover_storage_path as string | undefined;
+        if (!coverStoragePath) return album;
+        try {
+          return { ...album, coverUrl: await getGalleryPhotoSignedUrl(coverStoragePath) };
+        } catch {
+          return album;
+        }
+      })
+    );
   },
 
   async createAlbum(title: string) {
@@ -659,6 +676,131 @@ export const contentRepository = {
   },
 
   async deleteAlbum(id: string) {
+    const buildingId = await bid();
+    const { data: photos, error: photosError } = await sb()
+      .from("gallery_photos")
+      .select("storage_path")
+      .eq("album_id", id)
+      .eq("building_id", buildingId);
+    mapDbError(photosError);
+    await Promise.all(
+      (photos ?? []).map((photo) => removeGalleryPhoto(photo.storage_path as string | null))
+    );
     await sb().from("gallery_albums").delete().eq("id", id);
+  },
+
+  async getGalleryPhotos(albumId: string) {
+    const buildingId = await bid();
+    const { data, error } = await sb()
+      .from("gallery_photos")
+      .select("*")
+      .eq("album_id", albumId)
+      .eq("building_id", buildingId)
+      .order("sort_order", { ascending: true });
+    mapDbError(error);
+    return Promise.all(
+      (data ?? []).map(async (row) => {
+        const photo = mapGalleryPhoto(row as Record<string, unknown>);
+        const storagePath = row.storage_path as string | undefined;
+        if (!storagePath) return photo;
+        try {
+          return { ...photo, url: await getGalleryPhotoSignedUrl(storagePath) };
+        } catch {
+          return photo;
+        }
+      })
+    );
+  },
+
+  async addGalleryPhoto(albumId: string, file: File) {
+    const buildingId = await bid();
+    const storagePath = await uploadGalleryPhoto(buildingId, albumId, file);
+    const signedUrl = await getGalleryPhotoSignedUrl(storagePath);
+
+    const { count, error: countError } = await sb()
+      .from("gallery_photos")
+      .select("id", { count: "exact", head: true })
+      .eq("album_id", albumId);
+    mapDbError(countError);
+    const sortOrder = count ?? 0;
+
+    const { data, error } = await sb()
+      .from("gallery_photos")
+      .insert({
+        album_id: albumId,
+        building_id: buildingId,
+        url: signedUrl,
+        storage_path: storagePath,
+        sort_order: sortOrder,
+      })
+      .select("*")
+      .single();
+    mapDbError(error);
+
+    const { data: albumRow, error: albumError } = await sb()
+      .from("gallery_albums")
+      .select("photo_count, cover_storage_path")
+      .eq("id", albumId)
+      .maybeSingle();
+    mapDbError(albumError);
+
+    const nextCount = ((albumRow?.photo_count as number) ?? 0) + 1;
+    const albumUpdates: Record<string, unknown> = { photo_count: nextCount };
+    if (!albumRow?.cover_storage_path) {
+      albumUpdates.cover_storage_path = storagePath;
+      albumUpdates.cover_url = signedUrl;
+    }
+
+    await sb().from("gallery_albums").update(albumUpdates).eq("id", albumId);
+
+    return { ...mapGalleryPhoto(data as Record<string, unknown>), url: signedUrl };
+  },
+
+  async deleteGalleryPhoto(photoId: string) {
+    const buildingId = await bid();
+    const { data: photo, error: photoError } = await sb()
+      .from("gallery_photos")
+      .select("*")
+      .eq("id", photoId)
+      .eq("building_id", buildingId)
+      .maybeSingle();
+    mapDbError(photoError);
+    if (!photo) return;
+
+    const albumId = photo.album_id as string;
+    await removeGalleryPhoto(photo.storage_path as string | null);
+    await sb().from("gallery_photos").delete().eq("id", photoId);
+
+    const { data: albumRow, error: albumError } = await sb()
+      .from("gallery_albums")
+      .select("photo_count, cover_storage_path")
+      .eq("id", albumId)
+      .maybeSingle();
+    mapDbError(albumError);
+
+    const nextCount = Math.max(0, ((albumRow?.photo_count as number) ?? 1) - 1);
+    const albumUpdates: Record<string, unknown> = { photo_count: nextCount };
+
+    if (albumRow?.cover_storage_path === photo.storage_path) {
+      const { data: nextPhoto, error: nextPhotoError } = await sb()
+        .from("gallery_photos")
+        .select("storage_path")
+        .eq("album_id", albumId)
+        .order("sort_order", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      mapDbError(nextPhotoError);
+
+      if (nextPhoto?.storage_path) {
+        const coverUrl = await getGalleryPhotoSignedUrl(nextPhoto.storage_path as string);
+        albumUpdates.cover_storage_path = nextPhoto.storage_path;
+        albumUpdates.cover_url = coverUrl;
+      } else {
+        albumUpdates.cover_storage_path = null;
+        albumUpdates.cover_url = null;
+      }
+    }
+
+    await sb().from("gallery_albums").update(albumUpdates).eq("id", albumId);
   },
 };

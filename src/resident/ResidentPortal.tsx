@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { FaCloudUploadAlt } from "react-icons/fa";
 import { useAuth } from "../auth/AuthProvider";
 import { ensureActiveBuildingForUser, getActiveBuildingId } from "../data/supabase/buildingContext";
@@ -17,6 +18,7 @@ import { DocumentsPage } from "./pages/DocumentsPage";
 import { EventsPage } from "./pages/EventsPage";
 import { FaqPage } from "./pages/FaqPage";
 import { GalleryPage } from "./pages/GalleryPage";
+import { GalleryAlbumPage } from "./pages/GalleryAlbumPage";
 import { HomePage } from "./pages/HomePage";
 import { IncidentReportsPage } from "./pages/IncidentReportsPage";
 import { NewsDetailPage } from "./pages/NewsDetailPage";
@@ -33,6 +35,12 @@ import { FireSafetyPlanPage } from "./pages/FireSafetyPlanPage";
 import { ResidentChatPage } from "./pages/ResidentChatPage";
 import { AmenityBookingsPage } from "./pages/AmenityBookingsPage";
 import { routePageToDetailSection } from "./data/residentDetailConfig";
+import {
+  RESIDENT_PATH_PREFIX,
+  buildResidentPath,
+  extractResidentSubPath,
+  pathToResidentRoute,
+} from "../routing/residentRoutePaths";
 
 type ResidentPortalProps = {
   onSwitchToAdmin: () => void;
@@ -82,7 +90,28 @@ export function ResidentPortal({ onSwitchToAdmin, onLogout, onGoToWebsite }: Res
 }
 
 function ResidentPortalInner({ onSwitchToAdmin, onLogout, onGoToWebsite }: ResidentPortalProps) {
-  const [route, setRoute] = useState<ResidentRoute>({ page: "home" });
+  const location = useLocation();
+  const routerNavigate = useNavigate();
+  const route = useMemo(() => {
+    const sub = extractResidentSubPath(location.pathname, RESIDENT_PATH_PREFIX);
+    return pathToResidentRoute(sub);
+  }, [location.pathname]);
+  const navigate = useCallback(
+    (next: ResidentRoute) => {
+      routerNavigate(buildResidentPath(RESIDENT_PATH_PREFIX, next));
+    },
+    [routerNavigate]
+  );
+
+  useEffect(() => {
+    const sub = extractResidentSubPath(location.pathname, RESIDENT_PATH_PREFIX);
+    const parsed = pathToResidentRoute(sub);
+    const canonical = buildResidentPath(RESIDENT_PATH_PREFIX, parsed);
+    if (location.pathname !== canonical) {
+      routerNavigate(canonical, { replace: true });
+    }
+  }, [location.pathname, routerNavigate]);
+
   const { publicPortalSettings } = usePortalConfig();
   const themeColor = publicPortalSettings.portalThemeColor;
   const [profileOpen, setProfileOpen] = useState(false);
@@ -111,7 +140,7 @@ function ResidentPortalInner({ onSwitchToAdmin, onLogout, onGoToWebsite }: Resid
     <>
       <ResidentLayout
         route={route}
-        onNavigate={setRoute}
+        onNavigate={navigate}
         onSwitchToAdmin={onSwitchToAdmin}
         onOpenProfile={() => setProfileOpen(true)}
         onLogout={onLogout}
@@ -119,7 +148,7 @@ function ResidentPortalInner({ onSwitchToAdmin, onLogout, onGoToWebsite }: Resid
         navAction={navAction}
         fullWidth={fullWidth}
       >
-        {renderPage(route, setRoute, listRefresh, {
+        {renderPage(route, navigate, listRefresh, {
           onAddService: () => setServiceModalOpen(true),
           onAddIncident: () => setIncidentModalOpen(true),
           onAddSuggestion: () => setSuggestionModalOpen(true),
@@ -273,7 +302,9 @@ function renderPage(
     case "events":
       return <EventsPage />;
     case "gallery":
-      return <GalleryPage />;
+      return <GalleryPage onNavigate={onNavigate} />;
+    case "gallery-detail":
+      return <GalleryAlbumPage albumId={route.id} />;
     case "faq":
       return <FaqPage />;
     case "status-certificates":

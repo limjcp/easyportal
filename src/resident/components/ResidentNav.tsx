@@ -26,6 +26,7 @@ const iconMap: Record<string, IconType> = {
   suggestions: FaCommentDots,
   events: FaCalendarAlt,
   gallery: FaImages,
+  "gallery-detail": FaImages,
   faq: FaQuestionCircle,
   "status-certificates": FaCertificate,
   "board-elections": FaVoteYea,

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { AdminPortal } from "../admin/AdminPortal";
 import { CompanyLayout } from "./CompanyLayout";
@@ -16,28 +17,34 @@ import { useAuth } from "../auth/AuthProvider";
 import { useCompanyBuildings, useCompanyUser } from "../shared/queries/companyQueries";
 import { useInvalidatePortalQueries } from "../shared/queries/useInvalidatePortalQueries";
 import { companyRepository } from "./data/companyRepository";
+import {
+  companyBuildingAdminPrefix,
+  extractAdminSubPath,
+} from "../routing/adminRoutePaths";
+import {
+  companyRouteToPath,
+  parseCompanyBuildingAdminPath,
+  parseCompanyRoute,
+} from "../routing/companyRoutePaths";
+import { setActiveBuildingId } from "../data/supabase/buildingContext";
+import { removeBuildingQueries } from "../shared/queryInvalidation";
 
 type CompanyPortalProps = {
-  activeBuilding: CompanyBuilding | null;
-  onOpenBuilding: (building: CompanyBuilding) => void;
-  onCloseBuilding: () => void;
   onOpenResidentPortal?: () => void;
   onLogout: () => void;
   onGoToWebsite?: () => void;
 };
 
 export function CompanyPortal({
-  activeBuilding,
-  onOpenBuilding,
-  onCloseBuilding,
   onOpenResidentPortal,
   onLogout,
   onGoToWebsite,
 }: CompanyPortalProps) {
   const auth = useAuth();
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { invalidateCompany } = useInvalidatePortalQueries();
-  const [route, setRoute] = useState<CompanyRoute>({ page: "buildings" });
   const [refreshKey, setRefreshKey] = useState(0);
 
   const bumpRefresh = () => setRefreshKey((k) => k + 1);
@@ -45,10 +52,42 @@ export function CompanyPortal({
   const { data: buildings = [], refetch: refetchBuildings } = useCompanyBuildings();
   const { data: user, isLoading: userLoading } = useCompanyUser();
 
+  const buildingAdmin = useMemo(
+    () => parseCompanyBuildingAdminPath(location.pathname),
+    [location.pathname]
+  );
+
+  const route = useMemo(
+    () => parseCompanyRoute(location.pathname, location.search),
+    [location.pathname, location.search]
+  );
+
+  const activeBuilding = useMemo(() => {
+    if (!buildingAdmin) return null;
+    return buildings.find((b) => b.id === buildingAdmin.buildingId) ?? null;
+  }, [buildingAdmin, buildings]);
+
+  const adminPathPrefix = activeBuilding
+    ? companyBuildingAdminPrefix(activeBuilding.id)
+    : "";
+
+  useEffect(() => {
+    if (activeBuilding) {
+      setActiveBuildingId(activeBuilding.id);
+    }
+  }, [activeBuilding]);
+
   const refreshBuildings = useCallback(async () => {
     const result = await refetchBuildings();
     return result.data ?? [];
   }, [refetchBuildings]);
+
+  const handleNavigate = useCallback(
+    (next: CompanyRoute) => {
+      navigate(companyRouteToPath(next));
+    },
+    [navigate]
+  );
 
   const handleOpenBuilding = useCallback(
     async (building: CompanyBuilding) => {
@@ -58,7 +97,6 @@ export function CompanyPortal({
         window.alert("You do not have access to this building.");
         return;
       }
-      onOpenBuilding(building);
       queryClient.setQueryData(
         ["accessibleBuildings", auth.session?.user?.id ?? "none"],
         (prev: CompanyBuilding[] | undefined) => {
@@ -70,29 +108,44 @@ export function CompanyPortal({
           return next;
         }
       );
+      navigate(companyBuildingAdminPrefix(building.id));
     },
-    [onOpenBuilding, queryClient, auth.session?.user?.id]
+    [navigate, queryClient, auth.session?.user?.id]
   );
 
   const handleCloseBuilding = useCallback(() => {
-    onCloseBuilding();
+    navigate("/company/buildings");
     void refreshBuildings();
-  }, [onCloseBuilding, refreshBuildings]);
+  }, [navigate, refreshBuildings]);
 
-  const handleNavigate = (next: CompanyRoute) => {
-    if (activeBuilding) {
-      handleCloseBuilding();
-    }
-    setRoute(next);
-  };
+  const handleSwitchBuilding = useCallback(
+    async (building: CompanyBuilding) => {
+      try {
+        await companyRepository.assertBuildingAccess(building.id);
+      } catch {
+        window.alert("You do not have access to this building.");
+        return;
+      }
+      const previousId = activeBuilding?.id;
+      if (previousId && previousId !== building.id) {
+        removeBuildingQueries(previousId);
+      }
+      const subPath = buildingAdmin
+        ? extractAdminSubPath(location.pathname, companyBuildingAdminPrefix(buildingAdmin.buildingId))
+        : "";
+      const nextPrefix = companyBuildingAdminPrefix(building.id);
+      navigate(subPath ? `${nextPrefix}/${subPath}` : nextPrefix);
+    },
+    [activeBuilding?.id, buildingAdmin, location.pathname, navigate]
+  );
 
   useEffect(() => {
-    if (!activeBuilding) return;
-    const allowed = buildings.some((b) => b.id === activeBuilding.id);
-    if (!allowed && buildings.length > 0) {
-      onCloseBuilding();
+    if (!buildingAdmin || buildings.length === 0) return;
+    const allowed = buildings.some((b) => b.id === buildingAdmin.buildingId);
+    if (!allowed) {
+      navigate("/company/buildings", { replace: true });
     }
-  }, [activeBuilding, buildings, onCloseBuilding]);
+  }, [buildingAdmin, buildings, navigate]);
 
   const handleOpenResidentPortal = () => {
     if (onOpenResidentPortal) {
@@ -100,7 +153,7 @@ export function CompanyPortal({
       return;
     }
     if (activeBuilding) {
-      onOpenBuilding(activeBuilding);
+      void handleOpenBuilding(activeBuilding);
     }
   };
 
@@ -132,15 +185,17 @@ export function CompanyPortal({
       activeBuilding={activeBuilding}
       onCloseBuilding={handleCloseBuilding}
     >
-      {activeBuilding ? (
+      {activeBuilding && adminPathPrefix ? (
         <AdminPortal
           key={activeBuilding.id}
           embedded
+          adminPathPrefix={adminPathPrefix}
           buildingLabel={`(${activeBuilding.code}) ${activeBuilding.address} - ${activeBuilding.code}`}
           buildings={buildings}
           activeBuildingId={activeBuilding.id}
-          onSwitchBuilding={handleOpenBuilding}
+          onSwitchBuilding={(building) => void handleSwitchBuilding(building)}
           onOpenResidentPortal={handleOpenResidentPortal}
+          onCloseBuilding={handleCloseBuilding}
         />
       ) : (
         <>
@@ -156,17 +211,17 @@ export function CompanyPortal({
               }}
             />
           )}
-          {route.page === "master-reports" && <MasterReportsPage onNavigate={setRoute} />}
+          {route.page === "master-reports" && <MasterReportsPage onNavigate={handleNavigate} />}
           {route.page === "master-report-detail" && (
-            <MasterReportDetailPage route={route} onNavigate={setRoute} />
+            <MasterReportDetailPage route={route} onNavigate={handleNavigate} />
           )}
           {route.page === "employees" && <EmployeesPage />}
-          {route.page === "vendors" && <VendorsPage onNavigate={setRoute} />}
+          {route.page === "vendors" && <VendorsPage onNavigate={handleNavigate} />}
           {route.page === "purchase-orders" && (
-            <PurchaseOrdersPage route={route} onNavigate={setRoute} onRefresh={bumpRefresh} />
+            <PurchaseOrdersPage route={route} onNavigate={handleNavigate} onRefresh={bumpRefresh} />
           )}
           {route.page === "chat" && <CompanyChatPage user={user} buildings={buildings} />}
-          {route.page === "account" && <AccountPage route={route} onNavigate={setRoute} />}
+          {route.page === "account" && <AccountPage route={route} onNavigate={handleNavigate} />}
         </>
       )}
     </CompanyLayout>

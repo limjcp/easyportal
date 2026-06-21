@@ -28,6 +28,7 @@ import type {
   FaqItem,
   FireSafetySubmission,
   GalleryAlbum,
+  GalleryPhoto,
   IncidentContactEmail,
   IncidentReportAttachment,
   IncidentReportCategory,
@@ -182,6 +183,15 @@ export function mapGalleryAlbum(row: Record<string, unknown>): GalleryAlbum {
     title: row.title as string,
     coverUrl: row.cover_url as string | undefined,
     photoCount: row.photo_count as number,
+  };
+}
+
+export function mapGalleryPhoto(row: Record<string, unknown>): GalleryPhoto {
+  return {
+    id: row.id as string,
+    albumId: row.album_id as string,
+    url: row.url as string,
+    sortOrder: row.sort_order as number,
   };
 }
 

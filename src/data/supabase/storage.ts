@@ -2,7 +2,9 @@ import { sanitizeFileName } from "../../shared/attachmentUtils";
 import { mapDbError, sb } from "./base";
 
 export const BUILDING_DOCUMENTS_BUCKET = "building-documents";
+export const GALLERY_PHOTOS_BUCKET = "gallery-photos";
 export const MAX_BUILDING_DOCUMENT_BYTES = 52_428_800;
+export const MAX_GALLERY_PHOTO_BYTES = 52_428_800;
 
 export function formatFileSize(bytes: number): string {
   if (bytes >= 1024 * 1024) {
@@ -58,5 +60,52 @@ export async function getBuildingDocumentSignedUrl(
 export async function removeBuildingDocument(storagePath: string | null | undefined): Promise<void> {
   if (!storagePath) return;
   const { error } = await sb().storage.from(BUILDING_DOCUMENTS_BUCKET).remove([storagePath]);
+  if (error) throw new Error(error.message);
+}
+
+export function validateGalleryPhotoFile(file: File): string | null {
+  if (!file.name.trim()) return "A file is required.";
+  if (!file.type.startsWith("image/")) return "Gallery photos must be image files.";
+  if (file.size > MAX_GALLERY_PHOTO_BYTES) return "Photo must be 50MB or smaller.";
+  return null;
+}
+
+export function buildGalleryPhotoPath(buildingId: string, albumId: string, fileName: string): string {
+  const safeName = sanitizeFileName(fileName);
+  return `${buildingId}/${albumId}/${crypto.randomUUID()}/${safeName}`;
+}
+
+export async function uploadGalleryPhoto(
+  buildingId: string,
+  albumId: string,
+  file: File
+): Promise<string> {
+  const validationError = validateGalleryPhotoFile(file);
+  if (validationError) throw new Error(validationError);
+
+  const path = buildGalleryPhotoPath(buildingId, albumId, file.name);
+  const { error } = await sb().storage.from(GALLERY_PHOTOS_BUCKET).upload(path, file, {
+    upsert: false,
+    contentType: file.type || undefined,
+  });
+  if (error) throw new Error(error.message);
+  return path;
+}
+
+export async function getGalleryPhotoSignedUrl(
+  storagePath: string,
+  expiresInSeconds = 3600
+): Promise<string> {
+  const { data, error } = await sb()
+    .storage.from(GALLERY_PHOTOS_BUCKET)
+    .createSignedUrl(storagePath, expiresInSeconds);
+  if (error) throw new Error(error.message);
+  if (!data?.signedUrl) throw new Error("Unable to create photo link.");
+  return data.signedUrl;
+}
+
+export async function removeGalleryPhoto(storagePath: string | null | undefined): Promise<void> {
+  if (!storagePath) return;
+  const { error } = await sb().storage.from(GALLERY_PHOTOS_BUCKET).remove([storagePath]);
   if (error) throw new Error(error.message);
 }

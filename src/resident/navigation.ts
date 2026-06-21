@@ -8,6 +8,7 @@ export type ResidentRoute =
   | { page: "suggestions" }
   | { page: "events" }
   | { page: "gallery" }
+  | { page: "gallery-detail"; id: string }
   | { page: "faq" }
   | { page: "status-certificates" }
   | { page: "parking-spots" }
@@ -48,6 +49,8 @@ export function getBreadcrumbs(route: ResidentRoute): { label: string; route?: R
       return [{ label: "Events", route }];
     case "gallery":
       return [{ label: "Albums", route }];
+    case "gallery-detail":
+      return [{ label: "Albums", route: { page: "gallery" } }, { label: "Photos" }];
     case "faq":
       return [{ label: "Frequently Asked Questions", route }];
     case "status-certificates":
