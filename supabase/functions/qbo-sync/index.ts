@@ -1,5 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { canAccessBuilding } from "../_shared/buildingAccess.ts";
 import { buildQuickBooksQueryUrl } from "../_shared/intuitEnv.ts";
 
@@ -13,6 +13,11 @@ function jsonResponse(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+function customerEmail(customerId: string, rawEmail: string | undefined | null): string {
+  const trimmed = rawEmail?.trim() ?? "";
+  return trimmed || `qbo-${customerId}@import.invalid`;
 }
 
 async function requireUser(req: Request) {
@@ -64,6 +69,103 @@ async function qboQuery(args: { realmId: string; accessToken: string; query: str
     throw new Error(msg);
   }
   return json as any;
+}
+
+async function importOccupanciesFromCustomers(
+  admin: SupabaseClient,
+  buildingId: string,
+  customers: any[],
+): Promise<{ occupantsImported: number; occupantsUpdated: number }> {
+  let occupantsImported = 0;
+  let occupantsUpdated = 0;
+
+  for (const c of customers) {
+    const customerId = String(c.Id);
+    const displayName = String(c.DisplayName ?? c.FullyQualifiedName ?? c.Id);
+    const email = customerEmail(customerId, c.PrimaryEmailAddr?.Address ? String(c.PrimaryEmailAddr.Address) : null);
+    const now = new Date().toISOString();
+
+    const { data: existingByQbo } = await admin
+      .from("unit_occupancies")
+      .select("id")
+      .eq("building_id", buildingId)
+      .eq("qbo_customer_id", customerId)
+      .maybeSingle();
+
+    if (existingByQbo?.id) {
+      const { error } = await admin
+        .from("unit_occupancies")
+        .update({ resident_name: displayName, email, updated_at: now })
+        .eq("id", existingByQbo.id);
+      if (!error) occupantsUpdated++;
+      continue;
+    }
+
+    const { data: existingByEmail } = await admin
+      .from("unit_occupancies")
+      .select("id")
+      .eq("building_id", buildingId)
+      .ilike("email", email)
+      .is("archived_at", null)
+      .maybeSingle();
+
+    if (existingByEmail?.id) {
+      const { error } = await admin
+        .from("unit_occupancies")
+        .update({
+          qbo_customer_id: customerId,
+          resident_name: displayName,
+          email,
+          updated_at: now,
+        })
+        .eq("id", existingByEmail.id);
+      if (!error) occupantsUpdated++;
+      continue;
+    }
+
+    const { error } = await admin.from("unit_occupancies").insert({
+      building_id: buildingId,
+      qbo_customer_id: customerId,
+      resident_name: displayName,
+      email,
+      resident_type: "Owner",
+      account_status: "Awaiting Activation",
+      unit_id: null,
+      profile_id: null,
+    });
+    if (!error) occupantsImported++;
+  }
+
+  return { occupantsImported, occupantsUpdated };
+}
+
+async function refreshBuildingCounts(admin: SupabaseClient, buildingId: string) {
+  const { count: unitsCount } = await admin
+    .from("units")
+    .select("*", { count: "exact", head: true })
+    .eq("building_id", buildingId);
+
+  const { count: usersCount } = await admin
+    .from("unit_occupancies")
+    .select("*", { count: "exact", head: true })
+    .eq("building_id", buildingId)
+    .is("archived_at", null)
+    .not("account_status", "in", '("Archived","Deleted")');
+
+  const { count: adminsCount } = await admin
+    .from("building_memberships")
+    .select("*", { count: "exact", head: true })
+    .eq("building_id", buildingId)
+    .eq("status", "active");
+
+  await admin
+    .from("buildings")
+    .update({
+      units_count: unitsCount ?? 0,
+      users_count: usersCount ?? 0,
+      admins_count: adminsCount ?? 0,
+    })
+    .eq("id", buildingId);
 }
 
 Deno.serve(async (req) => {
@@ -172,15 +274,30 @@ Deno.serve(async (req) => {
       if (error) return jsonResponse({ error: error.message }, 400);
     }
 
+    const { occupantsImported, occupantsUpdated } = await importOccupanciesFromCustomers(
+      admin,
+      buildingId,
+      customers,
+    );
+    await refreshBuildingCounts(admin, buildingId);
+
+    await admin.from("building_external_integrations").upsert({
+      building_id: buildingId,
+      qbo_connected: true,
+      qbo_company_id: realmId,
+      updated_at: syncedAt,
+    });
+
     return jsonResponse({
       buildingId,
       realmId,
       syncedAt,
       customers: customers.length,
       invoices: invoices.length,
+      occupantsImported,
+      occupantsUpdated,
     });
   } catch (err) {
     return jsonResponse({ error: err instanceof Error ? err.message : "Sync failed." }, 500);
   }
 });
-

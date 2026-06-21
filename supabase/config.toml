@@ -56,5 +56,8 @@ verify_jwt = true
 [functions.qbo-sync]
 verify_jwt = true
 
+[functions.qbo-disconnect]
+verify_jwt = true
+
 [functions.send-portal-email]
 verify_jwt = true

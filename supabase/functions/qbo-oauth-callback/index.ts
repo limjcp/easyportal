@@ -114,13 +114,16 @@ Deno.serve(async (req) => {
     });
     if (upsertError) return html(`<h3>QuickBooks connection failed</h3><p>${escapeHtml(upsertError.message)}</p>`, 400);
 
-    // Keep existing UI flags working.
-    await admin.from("building_external_integrations").upsert({
+    // Keep existing UI flags working (trigger also syncs on quickbooks_connections upsert).
+    const { error: integrationError } = await admin.from("building_external_integrations").upsert({
       building_id: buildingId,
       qbo_connected: true,
       qbo_company_id: realmId,
       updated_at: new Date().toISOString(),
     });
+    if (integrationError) {
+      return html(`<h3>QuickBooks connection failed</h3><p>${escapeHtml(integrationError.message)}</p>`, 400);
+    }
 
     return Response.redirect(buildSuccessRedirect(stateRow.return_url as string | null), 302);
   } catch (err) {

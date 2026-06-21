@@ -13,9 +13,16 @@ const TABS: { id: ExternalDataTab; label: string }[] = [
 type ExternalDataLinksPageProps = {
   route: AdminRoute & { page: "external-data-links" };
   onNavigate: (route: AdminRoute) => void;
+  activeBuildingId?: string;
+  refreshKey?: number;
 };
 
-export function ExternalDataLinksPage({ route, onNavigate }: ExternalDataLinksPageProps) {
+export function ExternalDataLinksPage({
+  route,
+  onNavigate,
+  activeBuildingId,
+  refreshKey,
+}: ExternalDataLinksPageProps) {
   const handleTabChange = (tabId: string) => {
     onNavigate({ page: "external-data-links", tab: tabId as ExternalDataTab });
   };
@@ -26,7 +33,9 @@ export function ExternalDataLinksPage({ route, onNavigate }: ExternalDataLinksPa
       <AdminTabs tabs={TABS} activeTab={route.tab} onChange={handleTabChange} />
       <div className="rounded-sm border border-slate-200 bg-white p-4">
         {route.tab === "stripe" && <StripePaymentsTab />}
-        {route.tab === "quickbooks" && <QuickBooksTab />}
+        {route.tab === "quickbooks" && (
+          <QuickBooksTab activeBuildingId={activeBuildingId} refreshKey={refreshKey} />
+        )}
       </div>
     </>
   );

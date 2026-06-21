@@ -1,66 +1,57 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FaCheckCircle, FaLink, FaSync, FaTimes } from "react-icons/fa";
+import { FaCheckCircle, FaLink } from "react-icons/fa";
 import { AdminSectionPanel } from "../../components/AdminSectionPanel";
 import { Modal } from "../../../shared/Modal";
 import { ConfirmModal } from "../../../shared/ConfirmModal";
 import { ActionButton } from "../../../shared/ActionButton";
 import { useAsyncAction } from "../../../shared/useAsyncAction";
+import { useInvalidatePortalQueries } from "../../../shared/queries/useInvalidatePortalQueries";
 import { adminRepository } from "../../data/adminRepository";
 import type { BuildingExternalData } from "../../../resident/data/types";
 
 const QBO_POLL_MS = 2000;
 const QBO_POLL_TIMEOUT_MS = 120_000;
 
-export function QuickBooksTab() {
+type QuickBooksTabProps = {
+  activeBuildingId?: string;
+  refreshKey?: number;
+};
+
+function formatSyncTime(iso: string | undefined): string | null {
+  if (!iso) return null;
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleString();
+}
+
+export function QuickBooksTab({ activeBuildingId, refreshKey = 0 }: QuickBooksTabProps) {
+  const { invalidateBuilding } = useInvalidatePortalQueries();
   const [data, setData] = useState<BuildingExternalData | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [disconnectOpen, setDisconnectOpen] = useState(false);
-  const [lastSync, setLastSync] = useState<string | null>(null);
+  const [lastSyncLabel, setLastSyncLabel] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
 
-  const { run: handleImport, loading: importing } = useAsyncAction(
-    useCallback(async () => {
-      const result = await adminRepository.importQuickBooksUsers();
-      setImportOpen(false);
-      setLastSync(new Date().toLocaleString());
-      alert(`Synced ${result.imported} customers and ${result.invoices ?? 0} open invoices from QuickBooks.`);
-    }, []),
-    { successMessage: "QuickBooks data imported." }
-  );
+  const refreshExternalData = useCallback(() => adminRepository.getBuildingExternalData(), []);
 
-  const { run: handleConnect, loading: connecting } = useAsyncAction(
-    useCallback(async () => {
-      const url = await adminRepository.getQuickBooksOAuthUrl();
-      window.open(url, "_blank", "width=900,height=720");
-      startPollingForConnection();
-    }, []),
-    { showSuccessToast: false }
-  );
-
-  const { run: handleDisconnect, loading: disconnecting } = useAsyncAction(
-    useCallback(async () => {
-      const updated = await adminRepository.disconnectQuickBooksOnline();
-      setData(updated);
-      setDisconnectOpen(false);
-    }, []),
-    { successMessage: "QuickBooks disconnected." }
-  );
-
-  const refreshExternalData = () => adminRepository.getBuildingExternalData();
-
-  const load = () =>
-    refreshExternalData()
-      .then(setData)
+  const load = useCallback(() => {
+    return refreshExternalData()
+      .then((next) => {
+        setData(next);
+        const synced = formatSyncTime(next.quickbooks.lastSyncedAt);
+        if (synced) setLastSyncLabel(synced);
+      })
       .catch(() => setData(null));
+  }, [refreshExternalData]);
 
-  const stopPolling = () => {
+  const stopPolling = useCallback(() => {
     if (pollRef.current !== null) {
       window.clearInterval(pollRef.current);
       pollRef.current = null;
     }
-  };
+  }, []);
 
-  const startPollingForConnection = () => {
+  const startPollingForConnection = useCallback(() => {
     stopPolling();
     const deadline = Date.now() + QBO_POLL_TIMEOUT_MS;
     pollRef.current = window.setInterval(() => {
@@ -77,11 +68,45 @@ export function QuickBooksTab() {
           // Parent tab only; ignore when building context is unavailable.
         });
     }, QBO_POLL_MS);
-  };
+  }, [refreshExternalData, stopPolling]);
+
+  const { run: handleImport, loading: importing } = useAsyncAction(
+    useCallback(async () => {
+      const result = await adminRepository.importQuickBooksUsers();
+      setImportOpen(false);
+      setLastSyncLabel(new Date().toLocaleString());
+      await load();
+      invalidateBuilding();
+      const occupantTotal = (result.occupantsImported ?? 0) + (result.occupantsUpdated ?? 0);
+      alert(
+        `Synced ${result.imported} QBO customers and ${result.invoices ?? 0} open invoices. ` +
+          `${occupantTotal} occupant record(s) added or updated in Units & Users → Pending.`
+      );
+    }, [load, invalidateBuilding]),
+    { successMessage: "QuickBooks data synced." }
+  );
+
+  const { run: handleConnect, loading: connecting } = useAsyncAction(
+    useCallback(async () => {
+      const url = await adminRepository.getQuickBooksOAuthUrl();
+      window.open(url, "_blank", "width=900,height=720");
+      startPollingForConnection();
+    }, [startPollingForConnection]),
+    { showSuccessToast: false }
+  );
+
+  const { run: handleDisconnect, loading: disconnecting } = useAsyncAction(
+    useCallback(async () => {
+      const updated = await adminRepository.disconnectQuickBooksOnline();
+      setData(updated);
+      setDisconnectOpen(false);
+    }, []),
+    { successMessage: "QuickBooks disconnected." }
+  );
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load, activeBuildingId, refreshKey]);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -92,9 +117,12 @@ export function QuickBooksTab() {
       window.removeEventListener("message", onMessage);
       stopPolling();
     };
-  }, []);
+  }, [load, stopPolling]);
 
   if (!data) return <p className="text-sm text-slate-500">Loading…</p>;
+
+  const qb = data.quickbooks;
+  const cachedCount = qb.syncedCustomerCount ?? 0;
 
   return (
     <>
@@ -105,10 +133,9 @@ export function QuickBooksTab() {
           </div>
           <p className="text-sm text-slate-700">
             <strong>
-              Does your building use QuickBooks for accounting purposes? With EasyPortal QuickBooks
-              integration you can eliminate dual data entry*, while also allowing residents to see their account
-              balance and open invoices. Simply enable either QuickBooks Online or the QuickBooks Web Connector
-              in the options below to get started!
+              Connect QuickBooks Online to sync customer balances and open invoices. Synced occupants appear
+              under Units &amp; Users → Pending and remain in EasyPortal even if QuickBooks is disconnected
+              later.
             </strong>
           </p>
         </div>
@@ -116,14 +143,19 @@ export function QuickBooksTab() {
         <div className="mx-auto mt-8 max-w-2xl">
           <AdminSectionPanel title="QuickBooks Online Data Link" icon={<FaLink />}>
             <p className="text-center text-sm text-slate-600">
-              By enabling Quickbooks Online and entering your Quickbooks Online CompanyID, you can allow
-              residents to see their current account balance and any outstanding invoices**. Creation of, as well
-              as updates to, customer/user records are shared between EasyPortal and Quickbooks in
-              real-time***.
+              Connect your QuickBooks company to pull customers and open invoices. Residents can see balances
+              after you assign them to units and activate their portal access.
             </p>
 
+            {cachedCount > 0 && (
+              <p className="mt-4 text-center text-sm text-slate-600">
+                {cachedCount} QBO customer{cachedCount === 1 ? "" : "s"} cached
+                {qb.companyId ? ` (Company ID ${qb.companyId})` : ""}.
+              </p>
+            )}
+
             <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-              {data.quickbooks.qboConnected ? (
+              {qb.qboConnected ? (
                 <>
                   <span className="inline-flex cursor-default items-center gap-2 rounded bg-[#89c64c] px-4 py-2 text-sm font-medium text-white">
                     <FaCheckCircle />
@@ -143,28 +175,35 @@ export function QuickBooksTab() {
                   />
                 </>
               ) : (
-                <ActionButton
-                  label={connecting ? "Opening QuickBooks…" : "Connect to QuickBooks Online"}
-                  loading={connecting}
-                  loadingLabel="Opening QuickBooks…"
-                  onClick={() => void handleConnect()}
-                />
+                <>
+                  <ActionButton
+                    label={connecting ? "Opening QuickBooks…" : "Connect to QuickBooks Online"}
+                    loading={connecting}
+                    loadingLabel="Opening QuickBooks…"
+                    onClick={() => void handleConnect()}
+                  />
+                  {cachedCount > 0 && (
+                    <span className="text-xs text-slate-500">
+                      Live link is off; cached data and pending occupants are still available.
+                    </span>
+                  )}
+                </>
               )}
             </div>
-            {lastSync && (
-              <p className="mt-4 text-center text-xs text-slate-500">Last sync: {lastSync}</p>
+            {lastSyncLabel && (
+              <p className="mt-4 text-center text-xs text-slate-500">Last sync: {lastSyncLabel}</p>
             )}
           </AdminSectionPanel>
         </div>
 
         <p className="mt-6 text-xs text-slate-500">
-          * QuickBooks does not support unique fields for unit/suite/apt number. Due to this, as well as the
-          variability of address formatting used by countries and regions around the world, users must be
-          manually assigned to their units in EasyPortal.
+          * QuickBooks does not support unique fields for unit/suite/apt number. Users must be manually assigned
+          to their units in EasyPortal.
           <br />
           ** Only users saved as Owners or Absentee Owners are allowed to see account balances &amp; invoices.
           <br />
-          *** Dependant on Quickbooks API availability and uptime. Some delays may occur.
+          *** Disconnecting stops live API sync only. Imported occupants, cached customers, and invoice data
+          already stored in EasyPortal are not removed.
         </p>
       </AdminSectionPanel>
 
@@ -183,8 +222,8 @@ export function QuickBooksTab() {
               Cancel
             </button>
             <ActionButton
-              label="Start Import"
-              loadingLabel="Importing…"
+              label="Start Sync"
+              loadingLabel="Syncing…"
               loading={importing}
               onClick={() => void handleImport()}
             />
@@ -192,8 +231,9 @@ export function QuickBooksTab() {
         }
       >
         <p className="text-sm text-slate-600">
-          This will pull QuickBooks Online customers + open invoices and store them in EasyPortal so balances and
-          invoices can be displayed.
+          This pulls QuickBooks Online customers and open invoices into EasyPortal, and creates or updates
+          pending occupant records under Units &amp; Users. Re-syncing updates names and emails without
+          removing existing records.
         </p>
       </Modal>
 
@@ -204,7 +244,7 @@ export function QuickBooksTab() {
           setDisconnectOpen(false);
         }}
         title="Disconnect QuickBooks"
-        message="Disconnect QuickBooks Online from this building?"
+        message="Disconnect the live QuickBooks link? Synced occupants and cached balances will stay in EasyPortal."
         variant="danger"
         loading={disconnecting}
         onConfirm={() => void handleDisconnect()}

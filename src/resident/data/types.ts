@@ -939,6 +939,8 @@ export interface BuildingStripeSettings {
 export interface BuildingQuickBooksSettings {
   qboConnected: boolean;
   companyId?: string;
+  syncedCustomerCount?: number;
+  lastSyncedAt?: string;
 }
 
 export interface BuildingExternalData {

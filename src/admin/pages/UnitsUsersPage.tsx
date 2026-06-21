@@ -253,6 +253,7 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
   const [typeFilter, setTypeFilter] = useState("");
   const [sortKey, setSortKey] = useState("unit");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [activeTab, setActiveTab] = useState<UnitsUsersTab>("current");
 
   const [selectedUnit, setSelectedUnit] = useState<UnitsUsersUnitDetail | null>(null);
   const [unitDraft, setUnitDraft] = useState<UnitsUsersUnitDetail | null>(null);
@@ -295,7 +296,14 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
   const [assignableUnits, setAssignableUnits] = useState<Array<{ id: string; label: string }>>([]);
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmKind, setConfirmKind] = useState<"deleteUser" | "passwordReset" | null>(null);
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [savingRestore, setSavingRestore] = useState(false);
   const pendingResetEmailRef = useRef<string | null>(null);
+
+  const refreshLists = useCallback(() => {
+    invalidateBuilding();
+    onRefresh();
+  }, [invalidateBuilding, onRefresh]);
 
   const { run: saveUnitDetail, loading: savingUnit } = useAsyncAction(
     useCallback(async () => {
@@ -416,9 +424,6 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
     { successMessage: "Changes saved successfully.", onError: setActionError, showErrorToast: false }
   );
 
-  const [savingEmail, setSavingEmail] = useState(false);
-  const [savingRestore, setSavingRestore] = useState(false);
-
   const { run: createResident, loading: savingCreate } = useAsyncAction(
     useCallback(async () => {
       if (!newResidentFirstName.trim() || !newResidentLastName.trim() || !newResidentEmail.trim()) return;
@@ -505,11 +510,6 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
 
   const saving =
     savingUnit || savingAssign || savingArchive || savingDelete || savingUser || savingEmail || savingRestore || savingCreate || savingOccupant;
-
-  const refreshLists = useCallback(() => {
-    invalidateBuilding();
-    onRefresh();
-  }, [invalidateBuilding, onRefresh]);
 
   void refreshKey;
 

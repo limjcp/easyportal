@@ -436,6 +436,30 @@ export const buildingRepository = {
       .eq("building_id", buildingId)
       .maybeSingle();
     mapDbError(error);
+
+    const { data: hasConnection, error: connectionError } = await sb().rpc("building_has_qbo_connection", {
+      p_building_id: buildingId,
+    });
+    mapDbError(connectionError);
+
+    const { count: customerCount, error: countError } = await sb()
+      .from("quickbooks_customers")
+      .select("*", { count: "exact", head: true })
+      .eq("building_id", buildingId);
+    mapDbError(countError);
+
+    const { data: latestCustomer, error: latestError } = await sb()
+      .from("quickbooks_customers")
+      .select("synced_at")
+      .eq("building_id", buildingId)
+      .order("synced_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    mapDbError(latestError);
+
+    const flagConnected = (data?.qbo_connected as boolean) ?? false;
+    const tokenConnected = hasConnection === true;
+
     return {
       stripe: {
         connected: (data?.stripe_connected as boolean) ?? false,
@@ -445,8 +469,10 @@ export const buildingRepository = {
         currency: (data?.stripe_currency as string) ?? "",
       },
       quickbooks: {
-        qboConnected: (data?.qbo_connected as boolean) ?? false,
-        companyId: data?.qbo_company_id as string | undefined,
+        qboConnected: flagConnected || tokenConnected,
+        companyId: (data?.qbo_company_id as string | undefined) ?? undefined,
+        syncedCustomerCount: customerCount ?? 0,
+        lastSyncedAt: latestCustomer?.synced_at ? String(latestCustomer.synced_at) : undefined,
       },
     };
   },
@@ -466,12 +492,11 @@ export const buildingRepository = {
 
   async disconnectQuickBooksOnline() {
     const buildingId = await bid();
-    await sb().from("building_external_integrations").upsert({
-      building_id: buildingId,
-      qbo_connected: false,
-      qbo_company_id: null,
-      updated_at: nowIso(),
+    const { data, error } = await requireSupabase().functions.invoke("qbo-disconnect", {
+      body: { buildingId },
     });
+    const body = data as { error?: string } | null;
+    await assertEdgeFunctionOk(body, error, "QuickBooks disconnect failed.");
     return this.getBuildingExternalData();
   },
 
@@ -480,9 +505,21 @@ export const buildingRepository = {
     const { data, error } = await requireSupabase().functions.invoke("qbo-sync", {
       body: { buildingId },
     });
-    const body = data as { error?: string; customers?: number; invoices?: number } | null;
+    const body = data as {
+      error?: string;
+      customers?: number;
+      invoices?: number;
+      occupantsImported?: number;
+      occupantsUpdated?: number;
+    } | null;
     await assertEdgeFunctionOk(body, error, "QuickBooks sync failed.");
-    return { imported: body?.customers ?? 0, skipped: 0, invoices: body?.invoices ?? 0 };
+    return {
+      imported: body?.customers ?? 0,
+      skipped: 0,
+      invoices: body?.invoices ?? 0,
+      occupantsImported: body?.occupantsImported ?? 0,
+      occupantsUpdated: body?.occupantsUpdated ?? 0,
+    };
   },
 
   async getQuickBooksOAuthUrl() {

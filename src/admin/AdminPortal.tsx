@@ -156,7 +156,12 @@ export function AdminPortal({
         />
       )}
       {route.page === "external-data-links" && (
-        <ExternalDataLinksPage route={route} onNavigate={navigate} />
+        <ExternalDataLinksPage
+          route={route}
+          onNavigate={navigate}
+          activeBuildingId={activeBuildingId}
+          refreshKey={refreshKey}
+        />
       )}
       {route.page === "portal-settings" && (
         <PortalSettingsPage route={route} onNavigate={navigate} />
