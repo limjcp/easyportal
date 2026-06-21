@@ -3,6 +3,7 @@ import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { DEFAULT_ROLE_NAMES } from "../data/mock/permissions";
 import { companyRepository } from "../data/companyRepository";
 import type { RoleNameOverride } from "../../resident/data/types";
 
@@ -14,6 +15,7 @@ type RoleNamesModalProps = {
 
 export function RoleNamesModal({ open, onClose, onSaved }: RoleNamesModalProps) {
   const [rows, setRows] = useState<RoleNameOverride[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const { run, loading, error, clearError } = useAsyncAction(
     useCallback(async () => {
@@ -29,10 +31,16 @@ export function RoleNamesModal({ open, onClose, onSaved }: RoleNamesModalProps) 
   );
 
   useEffect(() => {
-    if (open) {
-      clearError();
-      companyRepository.getRoleNameOverrides().then(setRows);
-    }
+    if (!open) return;
+    clearError();
+    setLoadError(null);
+    companyRepository
+      .getRoleNameOverrides()
+      .then(setRows)
+      .catch((err) => {
+        setRows(DEFAULT_ROLE_NAMES.map((row) => ({ ...row })));
+        setLoadError(err instanceof Error ? err.message : "Failed to load role names.");
+      });
   }, [open, clearError]);
 
   return (
@@ -52,6 +60,7 @@ export function RoleNamesModal({ open, onClose, onSaved }: RoleNamesModalProps) 
         You can set custom names for user types below. If nothing is entered for a particular role, the
         default name will be used. This will apply to users at all properties.
       </p>
+      {loadError ? <FormAlert message={loadError} className="mb-3" /> : null}
       {error ? <FormAlert message={error} className="mb-3" /> : null}
       <table className="w-full text-sm">
         <thead>

@@ -52,7 +52,7 @@ import { loadEntityComments, loadIncidentReportAttachments } from "./admin/share
 import * as companyReportOps from "./companyReportOperations";
 import type { CertificateSettingsData } from "./companyReportOperations";
 import { provisionUser } from "./provisionUser";
-import { createDefaultPermissionsForRole } from "../../company/data/mock/permissions";
+import { createDefaultPermissionsForRole, DEFAULT_ROLE_NAMES } from "../../company/data/mock/permissions";
 import { ensureCompanyRolePermissions, mapCompanyPermissionDbRows, mergePermissionRows } from "./portalModulePermissions";
 import { certificateDetailFromRow } from "../../company/data/mock/certificateDetails";
 import { boardApprovalDetailFromRow } from "../../company/data/mock/boardApprovalDetails";
@@ -632,9 +632,12 @@ export const supabaseCompanyRepository = {
       .select("default_role, custom_name")
       .eq("company_id", companyId);
     mapDbError(error);
-    return (data ?? []).map((r) => ({
-      defaultRole: r.default_role as string,
-      customName: r.custom_name as string,
+    const customByRole = new Map(
+      (data ?? []).map((r) => [r.default_role as string, r.custom_name as string])
+    );
+    return DEFAULT_ROLE_NAMES.map((row) => ({
+      defaultRole: row.defaultRole,
+      customName: customByRole.get(row.defaultRole) ?? row.customName,
     }));
   },
 
