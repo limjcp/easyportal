@@ -781,6 +781,8 @@ export interface UnitsUsersUnitDetail {
   visitorsToUnit: number;
   incidentReportsByUsers: number;
   incidentReportsInvolvingUnit: number;
+  incidentReportIdsByUsers: string[];
+  incidentReportIdsInvolvingUnit: string[];
   occupants: UnitsUsersUnitOccupant[];
   insuranceCarrier?: string;
   insurancePolicyNumber?: string;
@@ -1081,6 +1083,7 @@ export type ParkingRequestStatus =
   | "declined";
 
 export type AmenityBookingType = "elevator" | "party_room";
+export type BuildingAmenityResourceType = "party_room" | "elevator";
 export type AmenityBookingStatus =
   | "pending"
   | "approvedAwaitingPayment"
@@ -1094,12 +1097,24 @@ export interface BuildingAmenitySettings {
   partyRoomInstructions: string;
 }
 
+export interface BuildingAmenityResource {
+  id: string;
+  name: string;
+  locationLabel: string;
+  resourceType: BuildingAmenityResourceType;
+  isActive: boolean;
+  sortOrder: number;
+}
+
 export interface AmenityBooking {
   id: string;
   residentId: string;
   residentName: string;
   unit: string;
   bookingType: AmenityBookingType;
+  amenityResourceId?: string;
+  amenityResourceName?: string;
+  amenityResourceLocation?: string;
   bookingDate: string;
   startTime: string;
   endTime: string;
@@ -1115,6 +1130,7 @@ export interface AmenityBooking {
 }
 
 export interface SubmitElevatorBookingInput {
+  amenityResourceId: string;
   bookingDate: string;
   startTime: string;
   endTime: string;
@@ -1122,6 +1138,7 @@ export interface SubmitElevatorBookingInput {
 }
 
 export interface SubmitPartyRoomBookingInput {
+  amenityResourceId: string;
   bookingDate: string;
   startTime: string;
   endTime: string;

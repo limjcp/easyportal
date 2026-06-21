@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { StatusBadge } from "../components/AdminBadges";
 import { AdminPanelTable } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
@@ -21,10 +23,23 @@ export function PollsPage({ route, onNavigate, refreshKey, onRefresh }: PollsPag
   const [page, setPage] = useState(1);
   const [visibilityFilter, setVisibilityFilter] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
+  const pendingTitleRef = useRef("");
 
   useEffect(() => {
     adminRepository.getPolls().then(setItems);
   }, [refreshKey]);
+
+  const { run: createPollRun, error: createError } = useAsyncAction(
+    useCallback(async () => {
+      const title = pendingTitleRef.current;
+      if (!title) return;
+      const poll = await adminRepository.createPoll({ title });
+      setAddOpen(false);
+      onRefresh();
+      onNavigate({ page: "poll-edit", id: poll.id });
+    }, [onRefresh, onNavigate]),
+    { successMessage: "Poll created.", showErrorToast: false }
+  );
 
   return (
     <>
@@ -41,6 +56,7 @@ export function PollsPage({ route, onNavigate, refreshKey, onRefresh }: PollsPag
           </button>
         }
       />
+      {createError ? <FormAlert message={createError} className="mb-3" /> : null}
       <AdminPanelTable
         title="Polls"
         data={items}
@@ -102,10 +118,8 @@ export function PollsPage({ route, onNavigate, refreshKey, onRefresh }: PollsPag
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onContinue={async (title) => {
-          const poll = await adminRepository.createPoll({ title });
-          setAddOpen(false);
-          onRefresh();
-          onNavigate({ page: "poll-edit", id: poll.id });
+          pendingTitleRef.current = title;
+          await createPollRun();
         }}
       />
     </>

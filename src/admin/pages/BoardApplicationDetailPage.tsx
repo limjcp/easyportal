@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { AdminPanelHeader } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
 import { AdminPageActions } from "../components/AdminPageActions";
@@ -25,7 +28,6 @@ export function BoardApplicationDetailPage({
 }: BoardApplicationDetailPageProps) {
   const [application, setApplication] = useState<BoardMemberApplication | null>(null);
   const [status, setStatus] = useState<BoardMemberApplication["status"]>("Submitted");
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     adminRepository.getBoardMemberApplicationById(route.id).then((app) => {
@@ -37,20 +39,21 @@ export function BoardApplicationDetailPage({
         }
       }
     });
-  }, [route.id]);
+  }, [route.id, onRefresh]);
+
+  const { run: handleSaveStatus, loading: saving, error } = useAsyncAction(
+    useCallback(async () => {
+      await adminRepository.updateBoardMemberApplicationStatus(route.id, status);
+      const updated = await adminRepository.getBoardMemberApplicationById(route.id);
+      if (updated) setApplication(updated);
+      onRefresh();
+    }, [route.id, status, onRefresh]),
+    { successMessage: "Application status updated.", showErrorToast: false }
+  );
 
   if (!application) {
     return <div className="py-8 text-center text-slate-500">Loading...</div>;
   }
-
-  const handleSaveStatus = async () => {
-    setSaving(true);
-    await adminRepository.updateBoardMemberApplicationStatus(route.id, status);
-    const updated = await adminRepository.getBoardMemberApplicationById(route.id);
-    if (updated) setApplication(updated);
-    setSaving(false);
-    onRefresh();
-  };
 
   return (
     <>
@@ -60,6 +63,7 @@ export function BoardApplicationDetailPage({
         <AdminPanelHeader title="Board Member Application" color="purple" />
 
         <div className="space-y-4 p-4">
+          {error ? <FormAlert message={error} /> : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <p className="text-xs text-slate-500">Applicant</p>
@@ -105,14 +109,12 @@ export function BoardApplicationDetailPage({
             </select>
           </label>
 
-          <button
-            type="button"
-            onClick={handleSaveStatus}
-            disabled={saving}
-            className="rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf] disabled:opacity-60"
-          >
-            {saving ? "Saving..." : "Update Status"}
-          </button>
+          <ActionButton
+            label="Update Status"
+            loadingLabel="Saving…"
+            loading={saving}
+            onClick={() => void handleSaveStatus()}
+          />
         </div>
       </div>
     </>

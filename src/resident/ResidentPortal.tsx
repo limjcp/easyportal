@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import { FaCloudUploadAlt } from "react-icons/fa";
 import { useAuth } from "../auth/AuthProvider";
 import { ensureActiveBuildingForUser, getActiveBuildingId } from "../data/supabase/buildingContext";
-import { Modal } from "../shared/Modal";
 import { PortalConfigProvider, usePortalConfig } from "./context/PortalConfigContext";
 import { ResidentLayout } from "./ResidentLayout";
 import { residentRepo } from "./data/mockRepository";
@@ -11,6 +10,8 @@ import { ProfileModal } from "./modals/ProfileModal";
 import { ServiceRequestModal } from "./modals/ServiceRequestModal";
 import { StatusCertificateModal } from "./modals/StatusCertificateModal";
 import { SuggestionModal } from "./modals/SuggestionModal";
+import { ResidentUploadDocumentModal } from "./modals/ResidentUploadDocumentModal";
+import { Modal } from "../shared/Modal";
 import type { ResidentRoute } from "./navigation";
 import { DocumentsPage } from "./pages/DocumentsPage";
 import { EventsPage } from "./pages/EventsPage";
@@ -36,9 +37,10 @@ import { routePageToDetailSection } from "./data/residentDetailConfig";
 type ResidentPortalProps = {
   onSwitchToAdmin: () => void;
   onLogout: () => void;
+  onGoToWebsite?: () => void;
 };
 
-export function ResidentPortal({ onSwitchToAdmin, onLogout }: ResidentPortalProps) {
+export function ResidentPortal({ onSwitchToAdmin, onLogout, onGoToWebsite }: ResidentPortalProps) {
   const auth = useAuth();
   const [buildingKey, setBuildingKey] = useState<string | null>(() => getActiveBuildingId());
   const [buildingError, setBuildingError] = useState<string | null>(null);
@@ -70,12 +72,16 @@ export function ResidentPortal({ onSwitchToAdmin, onLogout }: ResidentPortalProp
 
   return (
     <PortalConfigProvider buildingKey={buildingKey}>
-      <ResidentPortalInner onSwitchToAdmin={onSwitchToAdmin} onLogout={onLogout} />
+      <ResidentPortalInner
+        onSwitchToAdmin={onSwitchToAdmin}
+        onLogout={onLogout}
+        onGoToWebsite={onGoToWebsite}
+      />
     </PortalConfigProvider>
   );
 }
 
-function ResidentPortalInner({ onSwitchToAdmin, onLogout }: ResidentPortalProps) {
+function ResidentPortalInner({ onSwitchToAdmin, onLogout, onGoToWebsite }: ResidentPortalProps) {
   const [route, setRoute] = useState<ResidentRoute>({ page: "home" });
   const { publicPortalSettings } = usePortalConfig();
   const themeColor = publicPortalSettings.portalThemeColor;
@@ -84,7 +90,7 @@ function ResidentPortalInner({ onSwitchToAdmin, onLogout }: ResidentPortalProps)
   const [incidentModalOpen, setIncidentModalOpen] = useState(false);
   const [suggestionModalOpen, setSuggestionModalOpen] = useState(false);
   const [statusCertModalOpen, setStatusCertModalOpen] = useState(false);
-  const [uploadInfoOpen, setUploadInfoOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [rsvpsOpen, setRsvpsOpen] = useState(false);
   const [listRefresh, setListRefresh] = useState(0);
 
@@ -95,7 +101,7 @@ function ResidentPortalInner({ onSwitchToAdmin, onLogout }: ResidentPortalProps)
     onAddIncident: () => setIncidentModalOpen(true),
     onAddSuggestion: () => setSuggestionModalOpen(true),
     onAddStatusCert: () => setStatusCertModalOpen(true),
-    onUploadDocs: () => setUploadInfoOpen(true),
+    onUploadDocs: () => setUploadOpen(true),
     onRsvps: () => setRsvpsOpen(true),
   });
 
@@ -109,6 +115,7 @@ function ResidentPortalInner({ onSwitchToAdmin, onLogout }: ResidentPortalProps)
         onSwitchToAdmin={onSwitchToAdmin}
         onOpenProfile={() => setProfileOpen(true)}
         onLogout={onLogout}
+        onGoToWebsite={onGoToWebsite}
         navAction={navAction}
         fullWidth={fullWidth}
       >
@@ -158,11 +165,11 @@ function ResidentPortalInner({ onSwitchToAdmin, onLogout }: ResidentPortalProps)
         }}
       />
 
-      <Modal open={uploadInfoOpen} onClose={() => setUploadInfoOpen(false)} title="Upload Documents" size="md">
-        <p className="text-sm text-slate-600">
-          Document uploads are not available in this demo. In production, files would be uploaded to secure storage.
-        </p>
-      </Modal>
+      <ResidentUploadDocumentModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onUploaded={bumpList}
+      />
 
       <RsvpsModal open={rsvpsOpen} onClose={() => setRsvpsOpen(false)} />
     </>
@@ -256,7 +263,7 @@ function renderPage(
     case "news-detail":
       return <NewsDetailPage id={route.id} />;
     case "documents":
-      return <DocumentsPage />;
+      return <DocumentsPage refreshKey={refreshKey} />;
     case "service-requests":
       return <ServiceRequestsPage onAddNew={handlers.onAddService} refreshKey={refreshKey} />;
     case "incident-reports":

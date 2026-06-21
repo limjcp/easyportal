@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal } from "../../shared/Modal";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { adminRepository } from "../data/adminRepository";
 import type { AmenityBooking } from "../../resident/data/types";
 
@@ -42,35 +45,37 @@ export function AmenityBookingDetailModal({
   const [booking, setBooking] = useState<AmenityBooking | null>(null);
   const [adminNotes, setAdminNotes] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const pendingActionRef = useRef<(() => Promise<unknown>) | null>(null);
+
+  const { run: executeAction, loading: saving, error, clearError } = useAsyncAction(
+    useCallback(async () => {
+      const action = pendingActionRef.current;
+      if (!action) return;
+      await action();
+      onUpdated();
+      onClose();
+    }, [onUpdated, onClose]),
+    { showSuccessToast: false }
+  );
+
+  const queueAction = (action: () => Promise<unknown>) => {
+    pendingActionRef.current = action;
+    clearError();
+    void executeAction();
+  };
 
   useEffect(() => {
     if (!open || !bookingId) {
       setBooking(null);
       return;
     }
-    setError(null);
+    clearError();
     adminRepository.getAmenityBookingById(bookingId).then((detail) => {
       setBooking(detail);
       setAdminNotes(detail?.adminNotes ?? "");
       setPaymentAmount(detail?.paymentAmount ?? defaultPartyRoomFee);
     });
-  }, [open, bookingId, defaultPartyRoomFee]);
-
-  const runAction = async (action: () => Promise<unknown>) => {
-    setSaving(true);
-    setError(null);
-    try {
-      await action();
-      onUpdated();
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Action failed.");
-    } finally {
-      setSaving(false);
-    }
-  };
+  }, [open, bookingId, defaultPartyRoomFee, clearError]);
 
   if (!booking) {
     return (
@@ -111,6 +116,13 @@ export function AmenityBookingDetailModal({
           <div>
             <p className="text-xs uppercase text-slate-500">Status</p>
             <p>{labelStatus(booking.status)}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase text-slate-500">Resource</p>
+            <p>
+              {booking.amenityResourceName ?? "Unassigned"}
+              {booking.amenityResourceLocation ? ` (${booking.amenityResourceLocation})` : ""}
+            </p>
           </div>
         </div>
 
@@ -158,7 +170,7 @@ export function AmenityBookingDetailModal({
           </div>
         ) : null}
 
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {error ? <FormAlert message={error} /> : null}
 
         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4">
           <button
@@ -170,65 +182,47 @@ export function AmenityBookingDetailModal({
           </button>
           {booking.status === "pending" && booking.bookingType === "elevator" ? (
             <>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() =>
-                  runAction(() => adminRepository.declineAmenityBooking(booking.id, adminNotes))
-                }
-                className="rounded bg-[#d9534f] px-3 py-2 text-sm text-white disabled:opacity-50"
-              >
-                Decline
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() =>
-                  runAction(() => adminRepository.approveElevatorBooking(booking.id, adminNotes))
-                }
-                className="rounded bg-[#5cb85c] px-3 py-2 text-sm text-white disabled:opacity-50"
-              >
-                Confirm
-              </button>
+              <ActionButton
+                label="Decline"
+                loading={saving}
+                variant="danger"
+                onClick={() => queueAction(() => adminRepository.declineAmenityBooking(booking.id, adminNotes))}
+              />
+              <ActionButton
+                label="Confirm"
+                loading={saving}
+                variant="success"
+                onClick={() => queueAction(() => adminRepository.approveElevatorBooking(booking.id, adminNotes))}
+              />
             </>
           ) : null}
           {booking.status === "pending" && booking.bookingType === "party_room" ? (
             <>
-              <button
-                type="button"
-                disabled={saving}
+              <ActionButton
+                label="Decline"
+                loading={saving}
+                variant="danger"
+                onClick={() => queueAction(() => adminRepository.declineAmenityBooking(booking.id, adminNotes))}
+              />
+              <ActionButton
+                label="Approve & Set Fee"
+                loading={saving}
+                variant="success"
                 onClick={() =>
-                  runAction(() => adminRepository.declineAmenityBooking(booking.id, adminNotes))
-                }
-                className="rounded bg-[#d9534f] px-3 py-2 text-sm text-white disabled:opacity-50"
-              >
-                Decline
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() =>
-                  runAction(() =>
+                  queueAction(() =>
                     adminRepository.approvePartyRoomBooking(booking.id, paymentAmount, adminNotes)
                   )
                 }
-                className="rounded bg-[#5cb85c] px-3 py-2 text-sm text-white disabled:opacity-50"
-              >
-                Approve &amp; Set Fee
-              </button>
+              />
             </>
           ) : null}
           {booking.status !== "cancelled" && booking.status !== "declined" && booking.status !== "pending" ? (
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() =>
-                runAction(() => adminRepository.cancelAmenityBookingAdmin(booking.id, adminNotes))
-              }
-              className="rounded border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"
-            >
-              Cancel Booking
-            </button>
+            <ActionButton
+              label="Cancel Booking"
+              loading={saving}
+              variant="secondary"
+              onClick={() => queueAction(() => adminRepository.cancelAmenityBookingAdmin(booking.id, adminNotes))}
+            />
           ) : null}
         </div>
       </div>

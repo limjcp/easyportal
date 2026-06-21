@@ -6,7 +6,7 @@ export const seedPublicPortalSettings: PublicPortalSettings = {
   aboutBuilding: "",
   buildingLogoUrl: undefined,
   enableLobbyDisplay: false,
-  lobbyDisplayUrl: "https://wncc87.mvpcondos.com/communities/login/tv/",
+  lobbyDisplayUrl: "https://wncc87.easyportal.ca/communities/login/tv/",
   twitterUrl: "",
   facebookUrl: "https://www.facebook.com/mvpcondo",
   instaUrl: "https://www.instagram.com/mvpcondos/",

@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { StatusBadge } from "../components/AdminBadges";
 import { AdminPanelHeader } from "../components/AdminPanelTable";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { adminRepository } from "../data/adminRepository";
 import { AdminPageActions } from "../components/AdminPageActions";
 import { EmailNoticesReportModal } from "../modals/EmailNoticesReportModal";
@@ -56,6 +59,32 @@ export function NewsNoticeEditPage({ route, onNavigate, onRefresh }: NewsNoticeE
   useEffect(() => {
     adminRepository.getNewsById(route.id).then(setItem);
   }, [route.id]);
+
+  const { run: handleSave, loading: saving, error: saveError } = useAsyncAction(
+    useCallback(async () => {
+      if (!item) return;
+      const now = new Date();
+      const dateStr = `${now.toISOString().slice(0, 10)}\n${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      const historyEntry = {
+        status: item.status,
+        date: dateStr,
+        user: "Claudio Owner",
+        action: item.status === "draft" ? "Draft Saved" : "Edited Notice",
+        notification: item.noNotifications
+          ? undefined
+          : "Saved with Send Notifications Selected",
+      };
+      await adminRepository.updateNews(route.id, {
+        ...item,
+        lastUpdatedBy: "Claudio Owner",
+        lastUpdatedAt: now.toLocaleString(),
+        editHistory: [...(item.editHistory ?? []), historyEntry],
+      });
+      onRefresh();
+      onNavigate({ page: "news-notices", tab: item.status === "archived" ? "archived" : "current" });
+    }, [item, route.id, onRefresh, onNavigate]),
+    { successMessage: "News/notice saved." }
+  );
 
   if (!item) {
     return <div className="py-8 text-center text-slate-500">Loading...</div>;
@@ -113,27 +142,7 @@ export function NewsNoticeEditPage({ route, onNavigate, onRefresh }: NewsNoticeE
     }
   };
 
-  const handleSave = async () => {
-    const now = new Date();
-    const dateStr = `${now.toISOString().slice(0, 10)}\n${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-    const historyEntry = {
-      status: item.status,
-      date: dateStr,
-      user: "Claudio Owner",
-      action: item.status === "draft" ? "Draft Saved" : "Edited Notice",
-      notification: item.noNotifications
-        ? undefined
-        : "Saved with Send Notifications Selected",
-    };
-    await adminRepository.updateNews(route.id, {
-      ...item,
-      lastUpdatedBy: "Claudio Owner",
-      lastUpdatedAt: now.toLocaleString(),
-      editHistory: [...(item.editHistory ?? []), historyEntry],
-    });
-    onRefresh();
-    onNavigate({ page: "news-notices", tab: item.status === "archived" ? "archived" : "current" });
-  };
+  const handleSaveClick = () => void handleSave();
 
   const stats = item.emailStats ?? {
     sent: item.emailTotal,
@@ -152,14 +161,18 @@ export function NewsNoticeEditPage({ route, onNavigate, onRefresh }: NewsNoticeE
         route={route}
         onNavigate={onNavigate}
         primaryAction={
-          <button type="button" onClick={handleSave} className="rounded bg-[#3476ef] px-4 py-1.5 text-sm text-white">
-            Save
-          </button>
+          <ActionButton
+            label="Save"
+            loadingLabel="Saving…"
+            loading={saving}
+            onClick={handleSaveClick}
+          />
         }
       />
       <div className="overflow-hidden rounded-sm border border-slate-300 bg-white shadow-sm">
         <AdminPanelHeader title="Edit News/Notice" />
         <div className="space-y-6 p-4">
+          {saveError ? <FormAlert message={saveError} /> : null}
           {item.lastUpdatedBy && (
             <p className="rounded bg-blue-50 px-3 py-2 text-sm text-[#3476ef]">
               Last Updated by: {item.lastUpdatedBy}

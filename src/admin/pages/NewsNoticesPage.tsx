@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { DeliveryBadge, OptionsDropdown, StatusBadge } from "../components/AdminBadges";
 import { AdminPanelTable, AdminTabs } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
@@ -34,6 +37,7 @@ export function NewsNoticesPage({ route, onNavigate, refreshKey, onRefresh }: Ne
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("all");
   const [emailReportItem, setEmailReportItem] = useState<AdminNewsItem | null>(null);
+  const pendingIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setPage(1);
@@ -51,15 +55,44 @@ export function NewsNoticesPage({ route, onNavigate, refreshKey, onRefresh }: Ne
     onNavigate({ page: "news-notice-edit", id: row.id });
   };
 
-  async function handleArchive(id: string) {
-    await adminRepository.archiveNews(id);
-    onRefresh();
-  }
+  const { run: archiveNewsRun } = useAsyncAction(
+    useCallback(async () => {
+      const id = pendingIdRef.current;
+      if (!id) return;
+      await adminRepository.archiveNews(id);
+      onRefresh();
+    }, [onRefresh]),
+    { successMessage: "Notice archived." }
+  );
 
-  async function handleRestore(id: string) {
-    await adminRepository.unarchiveNews(id);
-    onRefresh();
-  }
+  const { run: restoreNewsRun } = useAsyncAction(
+    useCallback(async () => {
+      const id = pendingIdRef.current;
+      if (!id) return;
+      await adminRepository.unarchiveNews(id);
+      onRefresh();
+    }, [onRefresh]),
+    { successMessage: "Notice restored." }
+  );
+
+  const { run: createNewsRun, loading: creating, error: createError } = useAsyncAction(
+    useCallback(async () => {
+      const item = await adminRepository.createNews("New News/Notice");
+      onRefresh();
+      onNavigate({ page: "news-notice-edit", id: item.id });
+    }, [onRefresh, onNavigate]),
+    { successMessage: "News/notice created." }
+  );
+
+  const handleArchive = (id: string) => {
+    pendingIdRef.current = id;
+    void archiveNewsRun();
+  };
+
+  const handleRestore = (id: string) => {
+    pendingIdRef.current = id;
+    void restoreNewsRun();
+  };
 
   return (
     <>
@@ -67,17 +100,15 @@ export function NewsNoticesPage({ route, onNavigate, refreshKey, onRefresh }: Ne
         route={route}
         onNavigate={onNavigate}
         primaryAction={
-          <button
-            type="button"
-            onClick={async () => {
-              const item = await adminRepository.createNews("New News/Notice");
-              onRefresh();
-              onNavigate({ page: "news-notice-edit", id: item.id });
-            }}
-            className="rounded bg-[#3476ef] px-3 py-1.5 text-sm text-white"
-          >
-            + Add News/Notice
-          </button>
+          <>
+            {createError ? <FormAlert message={createError} className="mb-2 w-full" /> : null}
+            <ActionButton
+              label="+ Add News/Notice"
+              loading={creating}
+              loadingLabel="Creating…"
+              onClick={() => void createNewsRun()}
+            />
+          </>
         }
       />
       <AdminTabs

@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { companyRepository } from "../data/companyRepository";
 import type { CompanyRole, PermissionModuleRow } from "../../resident/data/types";
 
@@ -21,11 +24,24 @@ type PermissionDefaultsModalProps = {
 export function PermissionDefaultsModal({ open, onClose, onSaved }: PermissionDefaultsModalProps) {
   const [role, setRole] = useState<CompanyRole>("Company Administrator");
   const [permissions, setPermissions] = useState<PermissionModuleRow[]>([]);
-  const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const { run, loading, error, clearError } = useAsyncAction(
+    useCallback(async () => {
+      await companyRepository.saveRolePermissions(role, permissions);
+    }, [role, permissions]),
+    {
+      successMessage: "Permission defaults saved.",
+      onSuccess: () => {
+        onSaved();
+        onClose();
+      },
+    }
+  );
 
   useEffect(() => {
     if (!open) return;
+    clearError();
     setLoadError(null);
     companyRepository
       .getRolePermissions(role)
@@ -34,7 +50,7 @@ export function PermissionDefaultsModal({ open, onClose, onSaved }: PermissionDe
         setPermissions([]);
         setLoadError(err instanceof Error ? err.message : "Failed to load permission defaults.");
       });
-  }, [open, role]);
+  }, [open, role, clearError]);
 
   const toggleAll = (value: boolean) => {
     setPermissions(
@@ -55,13 +71,11 @@ export function PermissionDefaultsModal({ open, onClose, onSaved }: PermissionDe
     setPermissions(next);
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    await companyRepository.saveRolePermissions(role, permissions);
-    setSaving(false);
-    onSaved();
-    onClose();
-  };
+  const loadErrorMessage =
+    loadError &&
+    (loadError.includes("schema cache") || loadError.includes("Could not find the table")
+      ? "Permissions tables are not migrated yet. Run `bun run db:push` and reload the page."
+      : loadError);
 
   return (
     <Modal
@@ -71,17 +85,8 @@ export function PermissionDefaultsModal({ open, onClose, onSaved }: PermissionDe
       size="xl"
       footer={
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded border border-slate-300 px-4 py-2 text-sm">
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white"
-          >
-            Save
-          </button>
+          <ActionButton label="Cancel" variant="secondary" onClick={onClose} disabled={loading} />
+          <ActionButton label="Save" loading={loading} onClick={() => void run()} />
         </div>
       }
     >
@@ -99,13 +104,8 @@ export function PermissionDefaultsModal({ open, onClose, onSaved }: PermissionDe
           ))}
         </select>
       </label>
-      {loadError ? (
-        <div className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          {loadError.includes("schema cache") || loadError.includes("Could not find the table")
-            ? "Permissions tables are not migrated yet. Run `bun run db:push` and reload the page."
-            : loadError}
-        </div>
-      ) : null}
+      {loadErrorMessage ? <FormAlert message={loadErrorMessage} className="mb-3" /> : null}
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <div className="mb-2 flex gap-4 text-sm">
         <button type="button" onClick={() => toggleAll(true)} className="text-[#3476ef] hover:underline">
           Select All

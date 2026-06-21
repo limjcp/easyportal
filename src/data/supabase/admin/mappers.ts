@@ -11,6 +11,8 @@ import type {
   BoardMemberApplication,
   BuildingDefinition,
   BuildingAmenitySettings,
+  BuildingAmenityResource,
+  BuildingAmenityResourceType,
   BuildingLockerGroup,
   BuildingParkingGroup,
   BuildingReminder,
@@ -341,13 +343,28 @@ export function mapParkingRequest(row: Record<string, unknown>): ParkingRequest 
   };
 }
 
+export function mapBuildingAmenityResource(row: Record<string, unknown>): BuildingAmenityResource {
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    locationLabel: (row.location_label as string) ?? "",
+    resourceType: row.resource_type as BuildingAmenityResource["resourceType"],
+    isActive: row.is_active !== false,
+    sortOrder: Number(row.sort_order ?? 0),
+  };
+}
+
 export function mapAmenityBooking(row: Record<string, unknown>): AmenityBooking {
+  const resource = row.building_amenity_resources as Record<string, unknown> | null | undefined;
   return {
     id: row.id as string,
     residentId: (row.profile_id as string) ?? "",
     residentName: row.resident_name as string,
     unit: row.unit as string,
     bookingType: row.booking_type as AmenityBooking["bookingType"],
+    amenityResourceId: (row.amenity_resource_id as string) ?? undefined,
+    amenityResourceName: resource?.name as string | undefined,
+    amenityResourceLocation: resource?.location_label as string | undefined,
     bookingDate: String(row.booking_date),
     startTime: row.start_time as string,
     endTime: row.end_time as string,

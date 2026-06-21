@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
-import { FaArrowRight } from "react-icons/fa";
+import { useCallback, useEffect, useState } from "react";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
-import { companyRepository } from "../data/companyRepository";
+import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useAuth } from "../../auth/AuthProvider";
+import { companyRepository, requiresExplicitBuildingAssignments } from "../data/companyRepository";
 import type { CompanyBuilding, CompanyRole } from "../../resident/data/types";
 
 const ROLES: CompanyRole[] = [
@@ -20,6 +23,7 @@ type AddEmployeeModalProps = {
 };
 
 export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalProps) {
+  const auth = useAuth();
   const [step, setStep] = useState(1);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -29,8 +33,31 @@ export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalPro
   const [role, setRole] = useState<CompanyRole>("Property Administrator");
   const [buildingIds, setBuildingIds] = useState<string[]>([]);
   const [buildings, setBuildings] = useState<CompanyBuilding[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  const { run, loading, error, clearError } = useAsyncAction(
+    useCallback(async () => {
+      if (requiresExplicitBuildingAssignments(role) && buildingIds.length === 0) {
+        throw new Error("Select at least one building assignment for this role.");
+      }
+      await companyRepository.createEmployee({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim(),
+        role,
+        assignedBuildingIds: buildingIds,
+        password,
+      });
+      await auth.refreshAuth();
+    }, [firstName, lastName, email, role, buildingIds, password, auth]),
+    {
+      successMessage: "Employee created.",
+      onSuccess: () => {
+        onSaved();
+        onClose();
+      },
+    }
+  );
 
   useEffect(() => {
     if (open) {
@@ -42,47 +69,35 @@ export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalPro
       setPasswordConfirm("");
       setRole("Property Administrator");
       setBuildingIds([]);
-      setError(null);
+      setValidationError(null);
+      clearError();
       companyRepository.getBuildings().then(setBuildings);
     }
-  }, [open]);
+  }, [open, clearError]);
+
+  const displayError = validationError ?? error;
 
   const handleContinue = () => {
     if (!firstName.trim() || !lastName.trim() || !email.trim()) {
-      setError("Please fill in all required fields.");
+      setValidationError("Please fill in all required fields.");
       return;
     }
     if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+      setValidationError("Password must be at least 8 characters.");
       return;
     }
     if (password !== passwordConfirm) {
-      setError("Passwords do not match.");
+      setValidationError("Passwords do not match.");
       return;
     }
-    setError(null);
+    setValidationError(null);
+    clearError();
     setStep(2);
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      await companyRepository.createEmployee({
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        email: email.trim(),
-        role,
-        assignedBuildingIds: buildingIds,
-        password,
-      });
-      onSaved();
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create employee.");
-    } finally {
-      setSaving(false);
-    }
+  const handleSave = () => {
+    setValidationError(null);
+    void run();
   };
 
   const toggleBuilding = (id: string) => {
@@ -98,37 +113,26 @@ export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalPro
       footer={
         <div className="flex justify-end gap-2">
           {step === 2 && (
-            <button type="button" onClick={() => setStep(1)} className="rounded border border-slate-300 px-4 py-2 text-sm">
-              Back
-            </button>
+            <ActionButton label="Back" variant="secondary" onClick={() => setStep(1)} />
           )}
-          <button type="button" onClick={onClose} className="rounded border border-slate-300 px-4 py-2 text-sm">
-            Cancel
-          </button>
+          <ActionButton label="Cancel" variant="secondary" onClick={onClose} disabled={loading} />
           {step === 1 ? (
-            <button
-              type="button"
+            <ActionButton
+              label="Continue"
               onClick={handleContinue}
-              className="inline-flex items-center gap-2 rounded bg-[#3476ef] px-4 py-2 text-sm text-white"
-            >
-              Continue <FaArrowRight />
-            </button>
+              className="inline-flex items-center gap-2"
+            />
           ) : (
-            <button
-              type="button"
+            <ActionButton
+              label="Save Employee"
+              loading={loading}
               onClick={handleSave}
-              disabled={saving}
-              className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white disabled:opacity-60"
-            >
-              {saving ? "Saving…" : "Save Employee"}
-            </button>
+            />
           )}
         </div>
       }
     >
-      {error ? (
-        <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
-      ) : null}
+      {displayError ? <FormAlert message={displayError} className="mb-3" /> : null}
       {step === 1 ? (
         <div className="space-y-3">
           <label className="block text-sm">
@@ -195,6 +199,11 @@ export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalPro
               ))}
             </select>
           </label>
+          {!requiresExplicitBuildingAssignments(role) ? (
+            <p className="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+              Company Owners and Administrators with no assignments have access to all buildings.
+            </p>
+          ) : null}
           <div className="text-sm">
             <p className="mb-2 font-medium text-slate-700">Assigned Buildings</p>
             <div className="max-h-48 overflow-y-auto rounded border border-slate-200 p-2">

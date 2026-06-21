@@ -116,11 +116,8 @@ export async function loadPortalConfig(): Promise<PortalConfig> {
   };
 }
 
-/** @deprecated Use loadPortalConfig() — sync accessor kept for legacy callers during transition */
-let cachedPortalConfig: PortalConfig | null = null;
-
+/** Fallback empty config for legacy callers without React context */
 export function getPortalConfig(): PortalConfig {
-  if (cachedPortalConfig) return cachedPortalConfig;
   return {
     publicPortalSettings: defaultPublicPortalSettings,
     portalImages: [],
@@ -132,10 +129,6 @@ export function getPortalConfig(): PortalConfig {
     registrationFieldOptions: [],
     profileFieldOptions: [],
   };
-}
-
-export function setCachedPortalConfig(config: PortalConfig) {
-  cachedPortalConfig = config;
 }
 
 export function syncPortalSettingsFromModules(modules: PortalModuleConfig[], tile: PortalTileSettings) {

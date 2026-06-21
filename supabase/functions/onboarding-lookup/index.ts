@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { verifyRecaptchaToken } from "../_shared/recaptcha.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +12,7 @@ type LookupPayload = {
   city?: string;
   unitNumber?: string;
   firstName?: string;
+  recaptchaToken?: string | null;
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -45,6 +47,7 @@ Deno.serve(async (req) => {
     }
 
     const payload = (await req.json()) as LookupPayload;
+    await verifyRecaptchaToken(payload.recaptchaToken, "onboarding_lookup");
     const corpNumber = payload.corpNumber?.trim() ?? "";
     const city = payload.city?.trim() ?? "";
     const unitNumber = payload.unitNumber?.trim() ?? "";

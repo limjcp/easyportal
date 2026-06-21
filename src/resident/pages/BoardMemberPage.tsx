@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaUserCircle } from "react-icons/fa";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { formatDisplayDate, isTermExpiringSoon } from "../data/fireSafetyUtils";
 import { residentRepo } from "../data/mockRepository";
@@ -17,7 +20,6 @@ export function BoardMemberPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [statement, setStatement] = useState("");
-  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
@@ -34,23 +36,32 @@ export function BoardMemberPage() {
 
   const myApplication = applications.find((a) => a.unit === unit);
 
+  const { run: submitApplication, loading: submitting, error, clearError, setError } = useAsyncAction(
+    useCallback(async () => {
+      await residentRepo.submitBoardApplication({
+        residentName: name.trim(),
+        unit: unit.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        statement: statement.trim(),
+      });
+      const updated = await residentRepo.getBoardApplications();
+      setApplications(updated);
+    }, [email, name, phone, statement, unit]),
+    {
+      successMessage: "Application submitted.",
+      errorMessage: "Unable to submit application.",
+      onSuccess: () => setSubmitted(true),
+    }
+  );
+
   const handleSubmit = async () => {
+    clearError();
     if (!name.trim() || !unit.trim() || !email.trim() || !statement.trim()) {
-      alert("Please fill in all required fields.");
+      setError("Please fill in all required fields.");
       return;
     }
-    setSubmitting(true);
-    await residentRepo.submitBoardApplication({
-      residentName: name.trim(),
-      unit: unit.trim(),
-      email: email.trim(),
-      phone: phone.trim(),
-      statement: statement.trim(),
-    });
-    const updated = await residentRepo.getBoardApplications();
-    setApplications(updated);
-    setSubmitting(false);
-    setSubmitted(true);
+    await submitApplication();
   };
 
   return (
@@ -160,15 +171,14 @@ export function BoardMemberPage() {
                 placeholder="Tell us about your experience and interest in board service..."
               />
             </label>
+            {error ? <FormAlert message={error} /> : null}
             <div>
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf] disabled:opacity-60"
-              >
-                {submitting ? "Submitting..." : "Submit Application"}
-              </button>
+              <ActionButton
+                label="Submit Application"
+                loadingLabel="Submitting…"
+                loading={submitting}
+                onClick={() => void handleSubmit()}
+              />
             </div>
           </div>
         )}

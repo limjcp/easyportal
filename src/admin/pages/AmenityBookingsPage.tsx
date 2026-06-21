@@ -1,5 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminPanelTable, AdminTabs } from "../components/AdminPanelTable";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
+import {
+  useAdminAmenityBookings,
+  useAdminBuildingAmenitySettings,
+} from "../../shared/queries/adminListQueries";
+import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { AdminPageActions } from "../components/AdminPageActions";
 import { adminRepository } from "../data/adminRepository";
 import { AmenityBookingDetailModal } from "../modals/AmenityBookingDetailModal";
@@ -42,32 +50,45 @@ function labelStatus(status: AmenityBooking["status"]) {
 }
 
 export function AmenityBookingsPage({ route, onNavigate, refreshKey, onRefresh }: AmenityBookingsPageProps) {
-  const [bookings, setBookings] = useState<AmenityBooking[]>([]);
-  const [settings, setSettings] = useState<BuildingAmenitySettings>({
+  const { invalidateBuilding } = useInvalidatePortalQueries();
+  const isSettingsTab = route.tab === "settings";
+  const { data: bookings = [] } = useAdminAmenityBookings(route.tab);
+  const { data: loadedSettings } = useAdminBuildingAmenitySettings();
+  const defaultSettings: BuildingAmenitySettings = {
     partyRoomFee: "",
     elevatorInstructions: "",
     partyRoomInstructions: "",
-  });
-  const [draftSettings, setDraftSettings] = useState(settings);
+  };
+  const [settings, setSettings] = useState<BuildingAmenitySettings>(defaultSettings);
+  const [draftSettings, setDraftSettings] = useState<BuildingAmenitySettings>(defaultSettings);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    adminRepository.getBuildingAmenitySettings().then(setSettings);
-  }, [refreshKey]);
+  void refreshKey;
+
+  const handleRefresh = useCallback(() => {
+    invalidateBuilding();
+    onRefresh();
+  }, [invalidateBuilding, onRefresh]);
 
   useEffect(() => {
-    if (route.tab === "settings") {
-      adminRepository.getBuildingAmenitySettings().then((loaded) => {
-        setSettings(loaded);
-        setDraftSettings(loaded);
-      });
-      return;
+    if (loadedSettings) {
+      setSettings(loadedSettings);
+      if (isSettingsTab) setDraftSettings(loadedSettings);
     }
-    adminRepository.getAmenityBookings(route.tab).then(setBookings);
-  }, [route.tab, refreshKey]);
+  }, [loadedSettings, isSettingsTab]);
+
+  const { run: handleSaveSettings, loading: savingSettings, error: settingsError } = useAsyncAction(
+    useCallback(async () => {
+      const saved = await adminRepository.saveBuildingAmenitySettings(draftSettings);
+      setSettings(saved);
+      setDraftSettings(saved);
+      setSettingsMessage("Settings saved.");
+      handleRefresh();
+    }, [draftSettings, handleRefresh]),
+    { successMessage: "Amenity settings saved.", showErrorToast: false }
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -76,25 +97,10 @@ export function AmenityBookingsPage({ route, onNavigate, refreshKey, onRefresh }
       (row) =>
         row.residentName.toLowerCase().includes(q) ||
         row.unit.toLowerCase().includes(q) ||
-        labelType(row.bookingType).toLowerCase().includes(q)
+        labelType(row.bookingType).toLowerCase().includes(q) ||
+        (row.amenityResourceName ?? "").toLowerCase().includes(q)
     );
   }, [bookings, search]);
-
-  const handleSaveSettings = async () => {
-    setSavingSettings(true);
-    setSettingsMessage(null);
-    try {
-      const saved = await adminRepository.saveBuildingAmenitySettings(draftSettings);
-      setSettings(saved);
-      setDraftSettings(saved);
-      setSettingsMessage("Settings saved.");
-      onRefresh();
-    } catch (err) {
-      setSettingsMessage(err instanceof Error ? err.message : "Failed to save settings.");
-    } finally {
-      setSavingSettings(false);
-    }
-  };
 
   return (
     <div className="space-y-4">
@@ -114,6 +120,10 @@ export function AmenityBookingsPage({ route, onNavigate, refreshKey, onRefresh }
       {route.tab === "settings" ? (
         <div className="rounded border border-slate-300 bg-white p-4">
           <h3 className="mb-4 text-lg font-semibold text-slate-800">Amenity Booking Settings</h3>
+          <p className="mb-4 max-w-2xl text-sm text-slate-600">
+            Party rooms and elevators are managed under{" "}
+            <strong>Building Definition → Amenities</strong>. Use this tab for fees and booking instructions only.
+          </p>
           <div className="grid max-w-2xl gap-4">
             <label className="block space-y-1 text-sm">
               <span className="font-medium text-slate-700">Default Party Room Fee</span>
@@ -148,16 +158,21 @@ export function AmenityBookingsPage({ route, onNavigate, refreshKey, onRefresh }
                 className="w-full rounded border border-slate-300 px-3 py-2"
               />
             </label>
-            {settingsMessage ? <p className="text-sm text-slate-600">{settingsMessage}</p> : null}
+            {settingsError ? (
+              <FormAlert message={settingsError} />
+            ) : settingsMessage ? (
+              <FormAlert message={settingsMessage} variant="success" />
+            ) : null}
             <div>
-              <button
-                type="button"
-                disabled={savingSettings}
-                onClick={() => void handleSaveSettings()}
-                className="rounded bg-[#7D5DA7] px-4 py-2 text-sm text-white disabled:opacity-50"
-              >
-                Save Settings
-              </button>
+              <ActionButton
+                label="Save Settings"
+                loadingLabel="Saving…"
+                loading={savingSettings}
+                onClick={() => {
+                  setSettingsMessage(null);
+                  void handleSaveSettings();
+                }}
+              />
             </div>
           </div>
         </div>
@@ -173,6 +188,11 @@ export function AmenityBookingsPage({ route, onNavigate, refreshKey, onRefresh }
           onPageChange={() => undefined}
           columns={[
             { key: "type", header: "Type", render: (row) => labelType(row.bookingType) },
+            {
+              key: "resource",
+              header: "Resource",
+              render: (row) => row.amenityResourceName ?? "Unassigned",
+            },
             { key: "unit", header: "Unit", render: (row) => row.unit },
             { key: "resident", header: "Resident", render: (row) => row.residentName },
             {
@@ -209,7 +229,7 @@ export function AmenityBookingsPage({ route, onNavigate, refreshKey, onRefresh }
         bookingId={detailId}
         open={!!detailId}
         onClose={() => setDetailId(null)}
-        onUpdated={onRefresh}
+        onUpdated={handleRefresh}
         defaultPartyRoomFee={settings.partyRoomFee}
       />
     </div>

@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaEdit } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { adminRepository } from "../data/adminRepository";
 import { BUILDING_ADMIN_ROLES } from "../data/mock/buildingPermissions";
 import type { PermissionModuleRow } from "../../resident/data/types";
@@ -18,7 +21,16 @@ export function BuildingPermissionDefaultsModal({
 }: BuildingPermissionDefaultsModalProps) {
   const [role, setRole] = useState("");
   const [permissions, setPermissions] = useState<PermissionModuleRow[]>([]);
-  const [saving, setSaving] = useState(false);
+
+  const { run: handleSave, loading: saving, error } = useAsyncAction(
+    useCallback(async () => {
+      if (!role) return;
+      await adminRepository.saveBuildingRolePermissions(role, permissions);
+      onSaved?.();
+      onClose();
+    }, [role, permissions, onSaved, onClose]),
+    { successMessage: "Permission defaults saved." }
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -53,18 +65,6 @@ export function BuildingPermissionDefaultsModal({
     setPermissions(next);
   };
 
-  const handleSave = async () => {
-    if (!role) return;
-    setSaving(true);
-    try {
-      await adminRepository.saveBuildingRolePermissions(role, permissions);
-      onSaved?.();
-      onClose();
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <Modal
       open={open}
@@ -82,18 +82,12 @@ export function BuildingPermissionDefaultsModal({
             Close
           </button>
           {role ? (
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf] disabled:opacity-60"
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
+            <ActionButton label="Save" loadingLabel="Saving…" loading={saving} onClick={() => void handleSave()} />
           ) : null}
         </div>
       }
     >
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <label className="mb-4 block text-sm">
         <span className="font-medium text-slate-700">
           Select Role: <span className="text-red-600">*</span>

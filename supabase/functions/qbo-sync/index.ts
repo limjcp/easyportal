@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { canAccessBuilding } from "../_shared/buildingAccess.ts";
+import { buildQuickBooksQueryUrl } from "../_shared/intuitEnv.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -50,10 +51,7 @@ async function refreshToken(args: { clientId: string; clientSecret: string; refr
 }
 
 async function qboQuery(args: { realmId: string; accessToken: string; query: string }) {
-  const url =
-    `https://quickbooks.api.intuit.com/v3/company/${encodeURIComponent(args.realmId)}/query` +
-    `?query=${encodeURIComponent(args.query)}` +
-    `&minorversion=75`;
+  const url = buildQuickBooksQueryUrl(args.realmId, args.query);
   const res = await fetch(url, {
     headers: {
       Authorization: `Bearer ${args.accessToken}`,

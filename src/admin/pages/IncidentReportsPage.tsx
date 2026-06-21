@@ -1,4 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormAlert } from "../../shared/FormAlert";
+import { ConfirmModal } from "../../shared/ConfirmModal";
+import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useAdminIncidentReports } from "../../shared/queries/adminListQueries";
+import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import {
   OptionsDropdown,
   SeverityBadge,
@@ -55,9 +60,14 @@ export function IncidentReportsPage({
   refreshKey,
   onRefresh,
 }: IncidentReportsPageProps) {
-  const [reports, setReports] = useState<AdminIncidentReport[]>([]);
-  const [categories, setCategories] = useState<IncidentReportCategory[]>([]);
-  const [emails, setEmails] = useState<IncidentContactEmail[]>([]);
+  const { invalidateBuilding } = useInvalidatePortalQueries();
+  const { data: tabData = [] } = useAdminIncidentReports(route.tab);
+  const reports =
+    route.tab === "current" || route.tab === "archived"
+      ? (tabData as AdminIncidentReport[])
+      : [];
+  const categories = route.tab === "categories" ? (tabData as IncidentReportCategory[]) : [];
+  const emails = route.tab === "contact-emails" ? (tabData as IncidentContactEmail[]) : [];
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
@@ -71,14 +81,87 @@ export function IncidentReportsPage({
   const [detailId, setDetailId] = useState<string | null>(null);
   const [contactEdit, setContactEdit] = useState<IncidentContactEmail | null | "new">(null);
   const [categoryEdit, setCategoryEdit] = useState<IncidentReportCategory | null | "new">(null);
+  const [deleteContactOpen, setDeleteContactOpen] = useState(false);
+  const pendingIdRef = useRef<string | null>(null);
+  const pendingCreateRef = useRef<Parameters<typeof adminRepository.createIncidentReport>[0] | null>(null);
+  const pendingContactRef = useRef<{ email: string; status: "active" | "inactive"; id?: string; isNew: boolean } | null>(null);
+  const pendingCategorySubmitRef = useRef<{ name: string; status: "active" | "inactive"; id?: string; isNew: boolean } | null>(null);
+
+  void refreshKey;
+
+  const handleRefresh = useCallback(() => {
+    invalidateBuilding();
+    onRefresh();
+  }, [invalidateBuilding, onRefresh]);
 
   useEffect(() => {
     setPage(1);
-    if (route.tab === "current") adminRepository.getIncidentReports(false).then(setReports);
-    else if (route.tab === "archived") adminRepository.getIncidentReports(true).then(setReports);
-    else if (route.tab === "categories") adminRepository.getIncidentCategories().then(setCategories);
-    else if (route.tab === "contact-emails") adminRepository.getIncidentContactEmails().then(setEmails);
-  }, [route.tab, refreshKey]);
+  }, [route.tab]);
+
+  const { run: archiveReportRun, error: archiveError } = useAsyncAction(
+    useCallback(async () => {
+      const id = pendingIdRef.current;
+      if (!id) return;
+      await adminRepository.archiveIncidentReport(id);
+      handleRefresh();
+    }, [handleRefresh]),
+    { successMessage: "Report archived." }
+  );
+
+  const { run: deleteContactRun, loading: deletingContact, error: contactDeleteError } = useAsyncAction(
+    useCallback(async () => {
+      const id = pendingIdRef.current;
+      if (!id) return;
+      await adminRepository.deleteIncidentContactEmail(id);
+      setDeleteContactOpen(false);
+      pendingIdRef.current = null;
+      handleRefresh();
+    }, [handleRefresh]),
+    { successMessage: "Contact deleted." }
+  );
+
+  const { run: createReportRun } = useAsyncAction(
+    useCallback(async () => {
+      const input = pendingCreateRef.current;
+      if (!input) return;
+      await adminRepository.createIncidentReport(input);
+      handleRefresh();
+    }, [handleRefresh]),
+    { successMessage: "Incident report created." }
+  );
+
+  const { run: submitContactRun } = useAsyncAction(
+    useCallback(async () => {
+      const pending = pendingContactRef.current;
+      if (!pending) return;
+      if (pending.isNew) {
+        await adminRepository.createIncidentContactEmail(pending.email);
+      } else if (pending.id) {
+        await adminRepository.updateIncidentContactEmail(pending.id, {
+          email: pending.email,
+          status: pending.status,
+        });
+      }
+      handleRefresh();
+    }, [handleRefresh]),
+    { successMessage: "Contact saved." }
+  );
+
+  const { run: submitCategoryRun } = useAsyncAction(
+    useCallback(async () => {
+      const pending = pendingCategorySubmitRef.current;
+      if (!pending) return;
+      if (pending.isNew) {
+        await adminRepository.createIncidentCategory(pending.name, pending.status);
+      } else if (pending.id) {
+        await adminRepository.updateIncidentCategory(pending.id, { name: pending.name, status: pending.status });
+      }
+      handleRefresh();
+    }, [handleRefresh]),
+    { successMessage: "Category saved." }
+  );
+
+  const actionError = archiveError ?? contactDeleteError;
 
   const filteredReports = useMemo(() => {
     return reports.filter((row) => {
@@ -120,7 +203,7 @@ export function IncidentReportsPage({
 
   const openDetail = (row: AdminIncidentReport) => {
     if (row.unread) {
-      adminRepository.markIncidentReportRead(row.id).then(onRefresh);
+      adminRepository.markIncidentReportRead(row.id).then(handleRefresh);
     }
     setDetailId(row.id);
   };
@@ -174,6 +257,8 @@ export function IncidentReportsPage({
           ) : undefined
         }
       />
+
+      {actionError ? <FormAlert message={actionError} className="mb-3" /> : null}
 
       <AdminTabs
         tabs={tabs}
@@ -332,8 +417,10 @@ export function IncidentReportsPage({
                       ? [
                           {
                             label: "Archive",
-                            onClick: () =>
-                              adminRepository.archiveIncidentReport(row.id).then(onRefresh),
+                            onClick: () => {
+                              pendingIdRef.current = row.id;
+                              void archiveReportRun();
+                            },
                           },
                         ]
                       : []),
@@ -385,9 +472,8 @@ export function IncidentReportsPage({
                       {
                         label: "Delete",
                         onClick: () => {
-                          if (confirm("Delete this contact email?")) {
-                            adminRepository.deleteIncidentContactEmail(row.id).then(onRefresh);
-                          }
+                          pendingIdRef.current = row.id;
+                          setDeleteContactOpen(true);
                         },
                       },
                     ]}
@@ -449,8 +535,8 @@ export function IncidentReportsPage({
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onSubmit={async (input) => {
-          await adminRepository.createIncidentReport(input);
-          onRefresh();
+          pendingCreateRef.current = input;
+          await createReportRun();
         }}
       />
 
@@ -460,7 +546,7 @@ export function IncidentReportsPage({
         open={!!detailId}
         reportId={detailId}
         onClose={() => setDetailId(null)}
-        onUpdated={onRefresh}
+        onUpdated={handleRefresh}
         archived={route.tab === "archived"}
         onViewRelated={(unit, owner) => {
           setUnitFilter(unit);
@@ -475,12 +561,13 @@ export function IncidentReportsPage({
         contact={contactEdit === "new" ? null : contactEdit}
         onClose={() => setContactEdit(null)}
         onSubmit={async (email, status) => {
-          if (contactEdit === "new") {
-            await adminRepository.createIncidentContactEmail(email);
-          } else if (contactEdit) {
-            await adminRepository.updateIncidentContactEmail(contactEdit.id, { email, status });
-          }
-          onRefresh();
+          pendingContactRef.current = {
+            email,
+            status,
+            id: contactEdit === "new" ? undefined : contactEdit?.id,
+            isNew: contactEdit === "new",
+          };
+          await submitContactRun();
         }}
       />
 
@@ -489,13 +576,28 @@ export function IncidentReportsPage({
         category={categoryEdit === "new" ? null : categoryEdit}
         onClose={() => setCategoryEdit(null)}
         onSubmit={async (name, status) => {
-          if (categoryEdit === "new") {
-            await adminRepository.createIncidentCategory(name, status);
-          } else if (categoryEdit) {
-            await adminRepository.updateIncidentCategory(categoryEdit.id, { name, status });
-          }
-          onRefresh();
+          pendingCategorySubmitRef.current = {
+            name,
+            status,
+            id: categoryEdit === "new" ? undefined : categoryEdit?.id,
+            isNew: categoryEdit === "new",
+          };
+          await submitCategoryRun();
         }}
+      />
+
+      <ConfirmModal
+        open={deleteContactOpen}
+        onClose={() => {
+          if (deletingContact) return;
+          setDeleteContactOpen(false);
+          pendingIdRef.current = null;
+        }}
+        title="Delete Contact Email"
+        message="Delete this contact email?"
+        variant="danger"
+        loading={deletingContact}
+        onConfirm={() => void deleteContactRun()}
       />
     </>
   );

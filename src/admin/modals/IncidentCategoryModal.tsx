@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaList } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import type { IncidentReportCategory } from "../../resident/data/types";
 
 type IncidentCategoryModalProps = {
   open: boolean;
   category: IncidentReportCategory | null;
   onClose: () => void;
-  onSubmit: (name: string, status: "active" | "inactive") => void;
+  onSubmit: (name: string, status: "active" | "inactive") => Promise<void>;
 };
 
 export function IncidentCategoryModal({
@@ -29,14 +32,20 @@ export function IncidentCategoryModal({
     }
   }, [category, open]);
 
-  const handleSubmit = () => {
-    if (!name.trim()) {
-      alert("Category name is required.");
-      return;
+  const { run: handleSubmit, loading, error } = useAsyncAction(
+    useCallback(async () => {
+      if (!name.trim()) {
+        alert("Category name is required.");
+        return;
+      }
+      await onSubmit(name.trim(), status);
+      onClose();
+    }, [name, status, onSubmit, onClose]),
+    {
+      successMessage: category ? "Category updated." : "Category added.",
+      showErrorToast: false,
     }
-    onSubmit(name.trim(), status);
-    onClose();
-  };
+  );
 
   return (
     <Modal
@@ -49,12 +58,17 @@ export function IncidentCategoryModal({
           <button type="button" onClick={onClose} className="rounded border border-slate-300 px-4 py-2 text-sm">
             Cancel
           </button>
-          <button type="button" onClick={handleSubmit} className="rounded bg-red-600 px-4 py-2 text-sm text-white">
-            Save
-          </button>
+          <ActionButton
+            label="Save"
+            loadingLabel="Saving…"
+            loading={loading}
+            variant="danger"
+            onClick={() => void handleSubmit()}
+          />
         </>
       }
     >
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <div className="space-y-3">
         <label className="block text-sm">
           Category *

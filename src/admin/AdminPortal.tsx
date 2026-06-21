@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { getPersistedAdminRoute, setPersistedAdminRoute } from "../auth/persistedAdminRoute";
-import { getEffectiveBuildingAdminModuleAccessForUser } from "../data/supabase/portalModulePermissions";
 import { AdminLayout } from "./AdminLayout";
 import { adminRepository } from "./data/adminRepository";
 import type { AdminRoute } from "./navigation";
 import { isAdminRouteAllowed } from "./navigation";
+import { useBuildingBadgeCounts, useBuildingNavAccess } from "../shared/queries/buildingQueries";
+import { useInvalidatePortalQueries } from "../shared/queries/useInvalidatePortalQueries";
 import { AdminPageActions } from "./components/AdminPageActions";
 import { AdminDocumentsPage } from "./pages/AdminDocumentsPage";
 import { AdminEventsPage } from "./pages/AdminEventsPage";
@@ -38,11 +39,11 @@ import { AgmMeetingsPage } from "./pages/AgmMeetingsPage";
 import { ComplianceDashboardPage } from "./pages/ComplianceDashboardPage";
 import { ConsultationLeadsPage } from "./pages/ConsultationLeadsPage";
 import type { CompanyBuilding } from "../resident/data/types";
-import { ToastProvider } from "../shared/Toast";
 
 type AdminPortalProps = {
   onSwitchToResident?: () => void;
   onLogout?: () => void;
+  onGoToWebsite?: () => void;
   buildingLabel?: string;
   buildings?: CompanyBuilding[];
   activeBuildingId?: string;
@@ -56,6 +57,7 @@ type AdminPortalProps = {
 export function AdminPortal({
   onSwitchToResident,
   onLogout,
+  onGoToWebsite,
   buildingLabel,
   buildings,
   activeBuildingId,
@@ -66,6 +68,7 @@ export function AdminPortal({
   embedded = false,
 }: AdminPortalProps) {
   const auth = useAuth();
+  const { invalidateBuilding } = useInvalidatePortalQueries();
   const [route, setRouteState] = useState<AdminRoute>(
     () => getPersistedAdminRoute() ?? { page: "dashboard" }
   );
@@ -74,31 +77,27 @@ export function AdminPortal({
     setPersistedAdminRoute(next);
   }, []);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [navAccess, setNavAccess] = useState<Map<string, boolean> | null>(null);
-  const [unreadSuggestions, setUnreadSuggestions] = useState(0);
-  const [pendingApprovals, setPendingApprovals] = useState(0);
-  const [unreadBoardApplications, setUnreadBoardApplications] = useState(0);
-  const [unreadConsultationLeads, setUnreadConsultationLeads] = useState(0);
 
-  const bumpRefresh = () => setRefreshKey((k) => k + 1);
+  const bumpRefresh = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+    invalidateBuilding();
+  }, [invalidateBuilding]);
+
+  const { data: badgeCounts } = useBuildingBadgeCounts();
+  const unreadSuggestions = badgeCounts?.unreadSuggestions ?? 0;
+  const pendingApprovals = badgeCounts?.pendingApprovals ?? 0;
+  const unreadBoardApplications = badgeCounts?.unreadBoardApplications ?? 0;
+  const unreadConsultationLeads = badgeCounts?.unreadConsultationLeads ?? 0;
+
+  const { data: navAccess = null } = useBuildingNavAccess();
 
   useEffect(() => {
-    adminRepository.getUnreadSuggestionCount().then(setUnreadSuggestions);
-    adminRepository.getPendingBoardApprovalCount().then(setPendingApprovals);
-    adminRepository.getUnreadBoardApplicationCount().then(setUnreadBoardApplications);
-    adminRepository.getUnreadConsultationLeadCount().then(setUnreadConsultationLeads);
-  }, [refreshKey]);
-
-  useEffect(() => {
-    const userId = auth.session?.user?.id;
-    if (!userId || !activeBuildingId) {
-      setNavAccess(null);
-      return;
-    }
-    getEffectiveBuildingAdminModuleAccessForUser(userId, activeBuildingId)
-      .then(setNavAccess)
-      .catch(() => setNavAccess(null));
-  }, [auth.session?.user?.id, activeBuildingId]);
+    if (!activeBuildingId) return;
+    setRefreshKey((k) => k + 1);
+    const dashboardRoute: AdminRoute = { page: "dashboard" };
+    setRouteState(dashboardRoute);
+    setPersistedAdminRoute(dashboardRoute);
+  }, [activeBuildingId]);
 
   useEffect(() => {
     if (!isAdminRouteAllowed(route, navAccess)) {
@@ -109,12 +108,12 @@ export function AdminPortal({
   }, [route, navAccess]);
 
   return (
-    <ToastProvider>
     <AdminLayout
       route={route}
       onNavigate={navigate}
       onSwitchToResident={onSwitchToResident}
       onLogout={onLogout}
+      onGoToWebsite={onGoToWebsite}
       buildingLabel={buildingLabel}
       buildings={buildings}
       activeBuildingId={activeBuildingId}
@@ -129,6 +128,7 @@ export function AdminPortal({
         <>
           <AdminPageActions route={route} onNavigate={navigate} />
           <DashboardPage
+            refreshKey={refreshKey}
             onNavigate={navigate}
             unreadSuggestions={unreadSuggestions}
             pendingApprovals={pendingApprovals}
@@ -311,6 +311,5 @@ export function AdminPortal({
         <AdminChatPage activeBuildingId={activeBuildingId} embedded={embedded} />
       )}
     </AdminLayout>
-    </ToastProvider>
   );
 }

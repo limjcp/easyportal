@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { FaExclamationTriangle, FaInfoCircle } from "react-icons/fa";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { FaExclamationTriangle } from "react-icons/fa";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
 import { SectionHeader } from "../../shared/SectionHeader";
 import { FileUploadZone } from "../../shared/FileUploadZone";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { validateAttachmentFile } from "../../shared/attachmentUtils";
 import type { CreateIncidentReportInput } from "../data/types";
 import { residentRepo } from "../data/mockRepository";
@@ -32,7 +35,6 @@ export function IncidentReportModal({ open, onClose, onSubmit }: IncidentReportM
   const [form, setForm] = useState(initialFormState);
   const [slotFiles, setSlotFiles] = useState<Record<number, File>>({});
   const [reportTypeOptions, setReportTypeOptions] = useState<string[]>([]);
-  const [submitting, setSubmitting] = useState(false);
 
   const {
     incidentDate,
@@ -83,26 +85,10 @@ export function IncidentReportModal({ open, onClose, onSubmit }: IncidentReportM
     return Array.from(new Set(options));
   }, [location]);
 
-  const handleSubmit = async () => {
-    if (!incidentDate || !incidentTime || !severity || !reportType || !description) {
-      alert("Please fill in all required fields.");
-      return;
-    }
-    const resolvedType = reportType === "Other" ? customReportType.trim() : reportType;
-    if (!resolvedType) {
-      alert("Please enter a custom incident type.");
-      return;
-    }
-    const files = Object.values(slotFiles);
-    for (const file of files) {
-      const error = validateAttachmentFile(file);
-      if (error) {
-        alert(error);
-        return;
-      }
-    }
-    setSubmitting(true);
-    try {
+  const { run: submitReport, loading: submitting, error, clearError, setError } = useAsyncAction(
+    useCallback(async () => {
+      const resolvedType = reportType === "Other" ? customReportType.trim() : reportType;
+      const files = Object.values(slotFiles);
       await onSubmit({
         incidentDate,
         incidentTime,
@@ -114,11 +100,45 @@ export function IncidentReportModal({ open, onClose, onSubmit }: IncidentReportM
         files: files.length ? files : undefined,
       });
       onClose();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to submit incident report.");
-    } finally {
-      setSubmitting(false);
+    }, [
+      customReportType,
+      description,
+      incidentDate,
+      incidentTime,
+      location,
+      onClose,
+      onSubmit,
+      reportType,
+      severity,
+      slotFiles,
+      visibility,
+    ]),
+    {
+      successMessage: "Incident report submitted.",
+      errorMessage: "Failed to submit incident report.",
     }
+  );
+
+  const handleSubmit = async () => {
+    clearError();
+    if (!incidentDate || !incidentTime || !severity || !reportType || !description) {
+      setError("Please fill in all required fields.");
+      return;
+    }
+    const resolvedType = reportType === "Other" ? customReportType.trim() : reportType;
+    if (!resolvedType) {
+      setError("Please enter a custom incident type.");
+      return;
+    }
+    const files = Object.values(slotFiles);
+    for (const file of files) {
+      const attachmentError = validateAttachmentFile(file);
+      if (attachmentError) {
+        setError(attachmentError);
+        return;
+      }
+    }
+    await submitReport();
   };
 
   return (
@@ -133,18 +153,16 @@ export function IncidentReportModal({ open, onClose, onSubmit }: IncidentReportM
           <button type="button" onClick={onClose} className="rounded border border-slate-300 px-4 py-2 text-sm text-black hover:bg-slate-50">
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="inline-flex items-center gap-2 rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf] disabled:opacity-50"
-          >
-            Submit For Review
-            <FaInfoCircle />
-          </button>
+          <ActionButton
+            label="Submit For Review"
+            loadingLabel="Submitting…"
+            loading={submitting}
+            onClick={() => void handleSubmit()}
+          />
         </>
       }
     >
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <SectionHeader title="Incident Report Details" />
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <Field label="Incident Date *" type="date" value={incidentDate} onChange={(value) => setForm((current) => ({ ...current, incidentDate: value }))} />

@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaEdit } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { adminRepository } from "../data/adminRepository";
 import { BUILDING_ADMIN_ROLES } from "../data/mock/buildingPermissions";
 import type { BuildingAdmin } from "../../resident/data/types";
@@ -20,7 +23,22 @@ export function EditBuildingAdminModal({ open, adminId, onClose, onSaved }: Edit
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"active" | "inactive">("active");
-  const [saving, setSaving] = useState(false);
+
+  const { run: submitAdmin, loading: saving, error } = useAsyncAction(
+    useCallback(async () => {
+      if (!adminId) return;
+      await adminRepository.updateBuildingAdmin(adminId, {
+        role,
+        firstName,
+        lastName,
+        email,
+        status,
+      });
+      onSaved();
+      onClose();
+    }, [adminId, role, firstName, lastName, email, status, onSaved, onClose]),
+    { successMessage: "Administrator updated." }
+  );
 
   useEffect(() => {
     if (!open || !adminId) return;
@@ -37,21 +55,7 @@ export function EditBuildingAdminModal({ open, adminId, onClose, onSaved }: Edit
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!adminId) return;
-    setSaving(true);
-    try {
-      await adminRepository.updateBuildingAdmin(adminId, {
-        role,
-        firstName,
-        lastName,
-        email,
-        status,
-      });
-      onSaved();
-      onClose();
-    } finally {
-      setSaving(false);
-    }
+    await submitAdmin();
   };
 
   return (
@@ -70,17 +74,17 @@ export function EditBuildingAdminModal({ open, adminId, onClose, onSaved }: Edit
           >
             Cancel
           </button>
-          <button
+          <ActionButton
+            label="Save Changes"
+            loadingLabel="Saving…"
+            loading={saving}
             type="submit"
             form="edit-building-admin-form"
-            disabled={saving}
-            className="rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf] disabled:opacity-60"
-          >
-            {saving ? "Saving…" : "Save Changes"}
-          </button>
+          />
         </div>
       }
     >
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <form id="edit-building-admin-form" onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label className="text-sm font-medium text-slate-700">Select Role</label>

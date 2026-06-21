@@ -19,6 +19,11 @@ import { companyRepository } from "./company/data/companyRepository";
 import { formatBuildingOptionLabel } from "./admin/navigation";
 import { scrollPageToTop } from "./utils/scroll";
 import { QboConnectedPage } from "./auth/QboConnectedPage";
+import { ToastProvider } from "./shared/Toast";
+import { CookieConsentProvider } from "./shared/CookieConsentProvider";
+import { portalRoleToView, resolvePortalForUser } from "./auth/portalNavigation";
+import { useAccessibleBuildings } from "./shared/queries/companyQueries";
+import { removeBuildingQueries } from "./shared/queryInvalidation";
 
 type AppView = "marketing" | "login" | "resident" | "admin" | "company" | "vendor" | "prototype";
 
@@ -42,6 +47,7 @@ const getInitialView = (): AppView => {
 
 export default function App() {
   const auth = useAuth();
+  const { data: cachedBuildings = [] } = useAccessibleBuildings();
   const [view, setView] = useState<AppView>(getInitialView);
   const [publicPathname, setPublicPathname] = useState<string>(
     typeof window === "undefined" ? "/" : window.location.pathname
@@ -66,6 +72,7 @@ export default function App() {
 
   useEffect(() => {
     if (auth.initializing || !auth.session || !auth.activePortal) return;
+    if (view === "marketing" || view === "login") return;
     setView(
       auth.activePortal === "company"
         ? "company"
@@ -75,7 +82,7 @@ export default function App() {
             ? "vendor"
             : "resident"
     );
-  }, [auth.initializing, auth.session, auth.activePortal]);
+  }, [auth.initializing, auth.session, auth.activePortal, view]);
 
   useEffect(() => {
     if (auth.initializing || !auth.session) return;
@@ -91,6 +98,16 @@ export default function App() {
     auth.setActivePortal("resident");
     setView("resident");
   }, [auth.initializing, auth.session, auth.portalAccess?.portals, auth.portalAccess?.isSuperAdmin, view, auth.setActivePortal]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const portalViews: AppView[] = ["resident", "admin", "company", "vendor"];
+    const isAuthenticatedPortal = Boolean(auth.session) && portalViews.includes(view);
+    document.body.dataset.recaptchaContext = isAuthenticatedPortal ? "authenticated" : "public";
+    return () => {
+      delete document.body.dataset.recaptchaContext;
+    };
+  }, [auth.session, view]);
 
   const handleSwitchToAdmin = async () => {
     if (!auth.portalAccess?.isSuperAdmin && !auth.portalAccess?.portals.includes("building")) {
@@ -113,11 +130,16 @@ export default function App() {
         const building =
           (buildingId ? buildings.find((b) => b.id === buildingId) : null) ?? buildings[0] ?? null;
         if (building) {
+          await companyRepository.assertBuildingAccess(building.id);
           setActiveBuilding(building);
           setActiveBuildingId(building.id);
+        } else {
+          setActiveBuilding(null);
+          setActiveBuildingId(null);
         }
       } catch {
-        // Company portal still opens; user can select a building from the list.
+        setActiveBuilding(null);
+        setActiveBuildingId(null);
       }
       return;
     }
@@ -128,38 +150,35 @@ export default function App() {
 
   useEffect(() => {
     if (view !== "admin" || !auth.session) return;
-    let cancelled = false;
-    companyRepository
-      .getBuildings()
-      .then((buildings) => {
-        if (cancelled) return;
-        setAdminBuildings(buildings);
-        const activeId = getActiveBuildingId();
-        if (!activeId && buildings[0]) {
-          setActiveBuildingId(buildings[0].id);
-          setAdminActiveBuildingId(buildings[0].id);
-        } else if (activeId) {
-          setAdminActiveBuildingId(activeId);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setAdminBuildings([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [view, auth.session]);
+    const buildings = cachedBuildings;
+    setAdminBuildings(buildings);
+    const activeId = getActiveBuildingId();
+    const allowed = buildings.some((b) => b.id === activeId);
+    if (!activeId || !allowed) {
+      const nextId = buildings[0]?.id ?? null;
+      setActiveBuildingId(nextId);
+      setAdminActiveBuildingId(nextId);
+    } else {
+      setAdminActiveBuildingId(activeId);
+    }
+  }, [view, auth.session, cachedBuildings]);
 
   const activeAdminBuilding =
     adminBuildings.find((b) => b.id === adminActiveBuildingId) ?? adminBuildings[0] ?? null;
 
-  const handleSwitchAdminBuilding = (building: CompanyBuilding) => {
+  const handleSwitchAdminBuilding = async (building: CompanyBuilding) => {
+    try {
+      await companyRepository.assertBuildingAccess(building.id);
+    } catch {
+      window.alert("You do not have access to this building.");
+      return;
+    }
+    const previousId = getActiveBuildingId();
+    if (previousId && previousId !== building.id) {
+      removeBuildingQueries(previousId);
+    }
     setActiveBuildingId(building.id);
     setAdminActiveBuildingId(building.id);
-    setAdminBuildings((prev) => {
-      const exists = prev.some((b) => b.id === building.id);
-      return exists ? prev : [...prev, building];
-    });
   };
 
   const handleOpenResidentPortal = () => {
@@ -184,8 +203,34 @@ export default function App() {
   const handleLogin = (portal: LoginPortalRole) => {
     auth.setActivePortal(portal);
     setActiveBuilding(null);
-    const nextView =
-      portal === "company" ? "company" : portal === "building" ? "admin" : portal === "vendor" ? "vendor" : "resident";
+    const nextView = portalRoleToView(portal);
+    setPersistedPortalView(nextView);
+    setView(nextView);
+  };
+
+  const handleGoToWebsite = (path = "/") => {
+    navigatePublic(path);
+  };
+
+  const handleGoToPortal = () => {
+    if (!auth.session) {
+      navigatePublic("/login");
+      return;
+    }
+    const portal = resolvePortalForUser({
+      activePortal: auth.activePortal,
+      portalAccess: auth.portalAccess,
+      preferCompanyPortal: true,
+    });
+    if (!portal) {
+      navigatePublic("/login");
+      return;
+    }
+    if (portal === "company") {
+      setActiveBuilding(null);
+    }
+    auth.setActivePortal(portal);
+    const nextView = portalRoleToView(portal);
     setPersistedPortalView(nextView);
     setView(nextView);
   };
@@ -201,10 +246,20 @@ export default function App() {
     navigatePublic("/login");
   };
 
-  const handleOpenBuilding = (building: CompanyBuilding | null) => {
-    setActiveBuilding(building);
-    if (building) setActiveBuildingId(building.id);
-    else setActiveBuildingId(null);
+  const handleOpenBuilding = async (building: CompanyBuilding | null) => {
+    if (building) {
+      try {
+        await companyRepository.assertBuildingAccess(building.id);
+      } catch {
+        window.alert("You do not have access to this building.");
+        return;
+      }
+      setActiveBuilding(building);
+      setActiveBuildingId(building.id);
+      return;
+    }
+    setActiveBuilding(null);
+    setActiveBuildingId(null);
   };
 
   const portalSwitcher = auth.portalAccess?.isSuperAdmin ? (
@@ -231,20 +286,36 @@ export default function App() {
   ) : null;
 
   if (typeof window !== "undefined" && window.location.pathname === "/qbo-connected") {
-    return <QboConnectedPage />;
+    return (
+      <ToastProvider>
+        <CookieConsentProvider>
+          <QboConnectedPage />
+        </CookieConsentProvider>
+      </ToastProvider>
+    );
   }
 
   if (auth.initializing && view !== "marketing" && view !== "login") {
-    return <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">Loading…</div>;
+    return (
+      <ToastProvider>
+        <CookieConsentProvider>
+          <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">Loading…</div>
+        </CookieConsentProvider>
+      </ToastProvider>
+    );
   }
 
   return (
+    <ToastProvider>
+    <CookieConsentProvider>
     <div className="min-h-screen bg-background text-foreground">
       {view === "marketing" && (
         <MarketingPortal
           pathname={publicPathname}
           onNavigate={navigatePublic}
           onOpenLogin={() => navigatePublic("/login")}
+          isLoggedIn={Boolean(auth.session)}
+          onGoToPortal={handleGoToPortal}
         />
       )}
       {view === "login" && (
@@ -259,7 +330,11 @@ export default function App() {
         />
       )}
       {view === "resident" && (
-        <ResidentPortal onSwitchToAdmin={handleSwitchToAdmin} onLogout={handleLogout} />
+        <ResidentPortal
+          onSwitchToAdmin={handleSwitchToAdmin}
+          onLogout={handleLogout}
+          onGoToWebsite={handleGoToWebsite}
+        />
       )}
       {view === "company" && (
         <CompanyPortal
@@ -268,10 +343,12 @@ export default function App() {
           onCloseBuilding={() => handleOpenBuilding(null)}
           onOpenResidentPortal={handleOpenResidentPortal}
           onLogout={handleLogout}
+          onGoToWebsite={handleGoToWebsite}
         />
       )}
       {view === "admin" && (
         <BuildingAdmin
+          key={activeAdminBuilding?.id ?? adminActiveBuildingId ?? "none"}
           onSwitchToResident={() => {
             if (activeAdminBuilding) {
               setActiveBuildingId(activeAdminBuilding.id);
@@ -281,6 +358,7 @@ export default function App() {
             setView("resident");
           }}
           onLogout={handleLogout}
+          onGoToWebsite={handleGoToWebsite}
           buildingLabel={
             activeAdminBuilding ? formatBuildingOptionLabel(activeAdminBuilding) : undefined
           }
@@ -302,5 +380,7 @@ export default function App() {
         </>
       )}
     </div>
+    </CookieConsentProvider>
+    </ToastProvider>
   );
 }

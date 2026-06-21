@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaEnvelope, FaTimes, FaUser } from "react-icons/fa";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { PurplePanel } from "../components/PurplePanel";
 import { companyRepository } from "../data/companyRepository";
 import { TIMEZONE_OPTIONS } from "../data/mock/timezoneOptions";
@@ -27,7 +30,27 @@ export function CompanyProfileModal({ open, onClose, user, onSaved }: CompanyPro
   const [telMobile, setTelMobile] = useState(user.telMobile ?? "");
   const [telWork, setTelWork] = useState(user.telWork ?? "");
   const [avatarPreview, setAvatarPreview] = useState<string | undefined>(user.avatarUrl);
-  const [saving, setSaving] = useState(false);
+
+  const { run, loading, error, clearError } = useAsyncAction(
+    useCallback(async () => {
+      return companyRepository.updateCompanyUser({
+        firstName,
+        lastName,
+        email,
+        timezone,
+        telHome,
+        telMobile,
+        telWork,
+      });
+    }, [firstName, lastName, email, timezone, telHome, telMobile, telWork]),
+    {
+      successMessage: "Profile saved.",
+      onSuccess: (updated) => {
+        onSaved?.(updated);
+        onClose();
+      },
+    }
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -40,7 +63,8 @@ export function CompanyProfileModal({ open, onClose, user, onSaved }: CompanyPro
     setTelMobile(user.telMobile ?? "");
     setTelWork(user.telWork ?? "");
     setAvatarPreview(user.avatarUrl);
-  }, [open, user]);
+    clearError();
+  }, [open, user, clearError]);
 
   useEffect(() => {
     if (!open) return;
@@ -56,24 +80,9 @@ export function CompanyProfileModal({ open, onClose, user, onSaved }: CompanyPro
     setAvatarPreview(url);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setSaving(true);
-    try {
-      const updated = await companyRepository.updateCompanyUser({
-        firstName,
-        lastName,
-        email,
-        timezone,
-        telHome,
-        telMobile,
-        telWork,
-      });
-      onSaved?.(updated);
-      onClose();
-    } finally {
-      setSaving(false);
-    }
+    void run();
   };
 
   if (!open) return null;
@@ -122,6 +131,7 @@ export function CompanyProfileModal({ open, onClose, user, onSaved }: CompanyPro
         {tab === "profile" ? (
           <form onSubmit={handleSubmit}>
             <div className="max-h-[65vh] overflow-y-auto p-4">
+              {error ? <FormAlert message={error} className="mb-4" /> : null}
               <div className="grid gap-4 md:grid-cols-2">
                 <PurplePanel title="Avatar">
                   <div className="flex flex-col items-center gap-3">
@@ -239,20 +249,8 @@ export function CompanyProfileModal({ open, onClose, user, onSaved }: CompanyPro
             </div>
 
             <div className="flex justify-end gap-2 border-t border-slate-200 px-4 py-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf] disabled:opacity-60"
-              >
-                {saving ? "Saving…" : "Save Changes"}
-              </button>
+              <ActionButton label="Cancel" variant="secondary" onClick={onClose} disabled={loading} />
+              <ActionButton label="Save Changes" type="submit" loading={loading} />
             </div>
           </form>
         ) : (
@@ -261,13 +259,7 @@ export function CompanyProfileModal({ open, onClose, user, onSaved }: CompanyPro
               ? "Notification preferences will be available when connected to the legacy profile API."
               : "Email history will be available when connected to the legacy profile API."}
             <div className="mt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
-              >
-                Close
-              </button>
+              <ActionButton label="Close" variant="secondary" onClick={onClose} />
             </div>
           </div>
         )}

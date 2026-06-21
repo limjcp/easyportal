@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { consultationRepository } from "../../data/consultationRepository";
+import { executeRecaptcha } from "../../../shared/recaptcha";
 import { EDITORIAL_CONTAINER, EDITORIAL_PROSE, EDITORIAL_SECTION_PY } from "../../editorialLayout";
 import { ScrollReveal } from "../ScrollReveal";
 import { pe } from "../../typography";
@@ -219,7 +220,8 @@ export function ConsultationIntakeSection({ onNavigate, leading = false }: Consu
 
     setIsSubmitting(true);
     try {
-      await consultationRepository.submitConsultation(payload);
+      const recaptchaToken = await executeRecaptcha("consultation_submit");
+      await consultationRepository.submitConsultation(payload, recaptchaToken);
       setIsSubmitted(true);
       setError(null);
     } catch {

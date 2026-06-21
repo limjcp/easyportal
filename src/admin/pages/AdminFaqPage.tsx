@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { OptionsDropdown } from "../components/AdminBadges";
 import { AdminPanelTable } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
@@ -20,10 +22,44 @@ export function AdminFaqPage({ route, onNavigate, refreshKey, onRefresh }: Admin
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
   const [addOpen, setAddOpen] = useState(false);
+  const pendingFaqRef = useRef<{ id: string; answer?: string } | null>(null);
+  const pendingCreateRef = useRef<{ question: string; answer: string } | null>(null);
 
   useEffect(() => {
     adminRepository.getFaqs().then(setItems);
   }, [refreshKey]);
+
+  const { run: createFaqRun } = useAsyncAction(
+    useCallback(async () => {
+      const pending = pendingCreateRef.current;
+      if (!pending) return;
+      await adminRepository.createFaq(pending);
+      onRefresh();
+    }, [onRefresh]),
+    { successMessage: "FAQ added." }
+  );
+
+  const { run: updateFaqRun, error: updateError } = useAsyncAction(
+    useCallback(async () => {
+      const pending = pendingFaqRef.current;
+      if (!pending?.answer) return;
+      await adminRepository.updateFaq(pending.id, { answer: pending.answer });
+      onRefresh();
+    }, [onRefresh]),
+    { successMessage: "FAQ updated.", showErrorToast: false }
+  );
+
+  const { run: deleteFaqRun, error: deleteError } = useAsyncAction(
+    useCallback(async () => {
+      const pending = pendingFaqRef.current;
+      if (!pending) return;
+      await adminRepository.deleteFaq(pending.id);
+      onRefresh();
+    }, [onRefresh]),
+    { successMessage: "FAQ deleted." }
+  );
+
+  const actionError = updateError ?? deleteError;
 
   return (
     <>
@@ -36,6 +72,7 @@ export function AdminFaqPage({ route, onNavigate, refreshKey, onRefresh }: Admin
           </button>
         }
       />
+      {actionError ? <FormAlert message={actionError} className="mb-3" /> : null}
       <AdminPanelTable
         title="FAQ"
         data={items}
@@ -58,10 +95,19 @@ export function AdminFaqPage({ route, onNavigate, refreshKey, onRefresh }: Admin
                     label: "Edit",
                     onClick: () => {
                       const answer = prompt("Edit answer:", row.answer);
-                      if (answer !== null) adminRepository.updateFaq(row.id, { answer }).then(onRefresh);
+                      if (answer !== null) {
+                        pendingFaqRef.current = { id: row.id, answer };
+                        void updateFaqRun();
+                      }
                     },
                   },
-                  { label: "Delete", onClick: () => adminRepository.deleteFaq(row.id).then(onRefresh) },
+                  {
+                    label: "Delete",
+                    onClick: () => {
+                      pendingFaqRef.current = { id: row.id };
+                      void deleteFaqRun();
+                    },
+                  },
                 ]}
               />
             ),
@@ -72,8 +118,8 @@ export function AdminFaqPage({ route, onNavigate, refreshKey, onRefresh }: Admin
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onSubmit={async (faq) => {
-          await adminRepository.createFaq(faq);
-          onRefresh();
+          pendingCreateRef.current = faq;
+          await createFaqRun();
         }}
       />
     </>

@@ -14,6 +14,7 @@ type AdminLayoutProps = {
   onNavigate: (route: AdminRoute) => void;
   onSwitchToResident?: () => void;
   onLogout?: () => void;
+  onGoToWebsite?: () => void;
   buildingLabel?: string;
   buildings?: CompanyBuilding[];
   activeBuildingId?: string;
@@ -31,6 +32,7 @@ export function AdminLayout({
   onNavigate,
   onSwitchToResident,
   onLogout,
+  onGoToWebsite,
   buildingLabel,
   buildings,
   activeBuildingId,
@@ -222,24 +224,29 @@ export function AdminLayout({
       <div className="bg-[#3476ef] text-white shadow-sm">
         <div className="mx-auto flex max-w-[2048px] items-center justify-between px-4 py-2 text-xs sm:px-6 sm:text-sm">
           <div className="flex items-center gap-3 font-semibold tracking-[0.12em] text-white/95">
-            <div className="grid h-5 w-5 place-items-center rounded-sm border border-white/60 text-[10px] font-bold">
-              MVP
-            </div>
-            <div className="leading-none">
-              <div>MVP</div>
-              <div className="text-[9px] font-medium tracking-[0.15em] text-white/80 sm:text-[10px]">
-                CONDOS.COM
-              </div>
-            </div>
+            <MvpLogo variant="navbar" />
           </div>
           <div className="flex items-center gap-3 text-white/90">
-            <button
-              type="button"
+            {onGoToWebsite ? (
+              <>
+                <button
+                  type="button"
+                  onClick={onGoToWebsite}
+                  className="transition hover:text-white"
+                >
+                  Website
+                </button>
+                <span className="text-white/50">|</span>
+              </>
+            ) : null}
+            <a
+              href="https://www.mvpmgmt.ca/"
+              target="_blank"
+              rel="noreferrer"
               className="transition hover:text-white"
-              onClick={() => alert("Change Log — coming soon.")}
             >
               Change Log
-            </button>
+            </a>
             <span className="text-white/50">|</span>
             <div className="relative" ref={menuRef}>
               <button

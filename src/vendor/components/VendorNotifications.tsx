@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { FaBell } from "react-icons/fa";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { cn } from "../../utils/cn";
 import { vendorRepository } from "../data/vendorRepository";
 import type { VendorNotification } from "../../resident/data/types";
@@ -15,6 +17,30 @@ export function VendorNotifications({ refreshKey, onNavigate }: VendorNotificati
   const [notifications, setNotifications] = useState<VendorNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  const markReadTargetRef = useRef<VendorNotification | null>(null);
+
+  const { run: markReadAndNavigate, error: markReadError } = useAsyncAction(
+    async () => {
+      const n = markReadTargetRef.current;
+      if (!n) return;
+      await vendorRepository.markNotificationRead(n.id);
+      const list = await vendorRepository.getNotifications();
+      const count = await vendorRepository.getUnreadNotificationCount();
+      setNotifications(list);
+      setUnreadCount(count);
+      setOpen(false);
+      onNavigate({ page: "purchase-order-detail", id: n.poId });
+    },
+    {
+      errorMessage: "Unable to mark notification as read.",
+      showSuccessToast: false,
+    }
+  );
+
+  const handleMarkRead = (n: VendorNotification) => {
+    markReadTargetRef.current = n;
+    void markReadAndNavigate();
+  };
 
   useEffect(() => {
     vendorRepository.getNotifications().then(setNotifications);
@@ -31,16 +57,6 @@ export function VendorNotifications({ refreshKey, onNavigate }: VendorNotificati
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [open]);
-
-  const handleMarkRead = async (n: VendorNotification) => {
-    await vendorRepository.markNotificationRead(n.id);
-    const list = await vendorRepository.getNotifications();
-    const count = await vendorRepository.getUnreadNotificationCount();
-    setNotifications(list);
-    setUnreadCount(count);
-    setOpen(false);
-    onNavigate({ page: "purchase-order-detail", id: n.poId });
-  };
 
   return (
     <div className="relative" ref={ref}>
@@ -62,6 +78,11 @@ export function VendorNotifications({ refreshKey, onNavigate }: VendorNotificati
           <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">
             Notifications
           </div>
+          {markReadError ? (
+            <div className="px-3 pt-2">
+              <FormAlert message={markReadError} />
+            </div>
+          ) : null}
           {notifications.length === 0 ? (
             <p className="px-3 py-4 text-sm text-slate-500">No notifications.</p>
           ) : (

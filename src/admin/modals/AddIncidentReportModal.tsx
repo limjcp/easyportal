@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaExclamationTriangle } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { adminRepository } from "../data/adminRepository";
 import type { CreateAdminIncidentReportInput, IncidentReportCategory } from "../../resident/data/types";
 
 type AddIncidentReportModalProps = {
   open: boolean;
   onClose: () => void;
-  onSubmit: (input: CreateAdminIncidentReportInput) => void;
+  onSubmit: (input: CreateAdminIncidentReportInput) => Promise<void>;
 };
 
 export function AddIncidentReportModal({ open, onClose, onSubmit }: AddIncidentReportModalProps) {
@@ -45,30 +48,46 @@ export function AddIncidentReportModal({ open, onClose, onSubmit }: AddIncidentR
     setStatus("Pending");
   };
 
-  const handleSubmit = () => {
-    if (!incidentDate.trim() || !reportType || !location.trim() || !description.trim()) {
-      alert("Date, type, location, and description are required.");
-      return;
-    }
-    if (reportType === "Other" && !customReportType.trim()) {
-      alert("Please enter a custom incident type.");
-      return;
-    }
-    const resolvedType = reportType === "Other" ? customReportType.trim() : reportType;
-    onSubmit({
-      incidentDate: incidentDate.trim(),
-      incidentTime: incidentTime.trim() || "—",
+  const { run: handleSubmit, loading, error } = useAsyncAction(
+    useCallback(async () => {
+      if (!incidentDate.trim() || !reportType || !location.trim() || !description.trim()) {
+        alert("Date, type, location, and description are required.");
+        return;
+      }
+      if (reportType === "Other" && !customReportType.trim()) {
+        alert("Please enter a custom incident type.");
+        return;
+      }
+      const resolvedType = reportType === "Other" ? customReportType.trim() : reportType;
+      await onSubmit({
+        incidentDate: incidentDate.trim(),
+        incidentTime: incidentTime.trim() || "—",
+        severity,
+        reportType: resolvedType,
+        location: location.trim(),
+        description: description.trim(),
+        status,
+        unit: unit.trim() || undefined,
+        assignedToAdmin: assignedToAdmin.trim() || undefined,
+      });
+      reset();
+      onClose();
+    }, [
+      incidentDate,
+      incidentTime,
       severity,
-      reportType: resolvedType,
-      location: location.trim(),
-      description: description.trim(),
+      reportType,
+      customReportType,
+      location,
+      description,
+      unit,
+      assignedToAdmin,
       status,
-      unit: unit.trim() || undefined,
-      assignedToAdmin: assignedToAdmin.trim() || undefined,
-    });
-    reset();
-    onClose();
-  };
+      onSubmit,
+      onClose,
+    ]),
+    { successMessage: "Incident report saved.", showErrorToast: false }
+  );
 
   return (
     <Modal
@@ -84,12 +103,17 @@ export function AddIncidentReportModal({ open, onClose, onSubmit }: AddIncidentR
           <button type="button" onClick={onClose} className="rounded border border-slate-300 px-4 py-2 text-sm">
             Cancel
           </button>
-          <button type="button" onClick={handleSubmit} className="rounded bg-red-600 px-4 py-2 text-sm text-white">
-            Save
-          </button>
+          <ActionButton
+            label="Save"
+            loadingLabel="Saving…"
+            loading={loading}
+            variant="danger"
+            onClick={() => void handleSubmit()}
+          />
         </>
       }
     >
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">
           Incident Date *

@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FaEdit } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { portalModulesSnapshot } from "../../shared/formDirty";
-import { useToast } from "../../shared/Toast";
 import { adminRepository } from "../data/adminRepository";
 import type { UnitsUsersResidentType } from "../../resident/data/types";
 import type { ResidentPortalModulePermission } from "../../data/supabase/portalModulePermissions";
@@ -26,12 +28,20 @@ export function ResidentTypePortalModulesModal({
   onClose,
   onSaved,
 }: ResidentTypePortalModulesModalProps) {
-  const { showToast } = useToast();
   const [residentType, setResidentType] = useState<UnitsUsersResidentType>("Owner");
   const [modules, setModules] = useState<ResidentPortalModulePermission[]>([]);
   const [baselineSnapshot, setBaselineSnapshot] = useState("");
-  const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const { run: handleSave, loading: saving, error: saveError } = useAsyncAction(
+    useCallback(async () => {
+      await adminRepository.saveResidentTypePortalModules(residentType, modules);
+      setBaselineSnapshot(portalModulesSnapshot(modules));
+      onSaved?.();
+      onClose();
+    }, [residentType, modules, onSaved, onClose]),
+    { successMessage: "Resident type module defaults saved." }
+  );
 
   const isDirty = useMemo(
     () => portalModulesSnapshot(modules) !== baselineSnapshot,
@@ -81,22 +91,6 @@ export function ResidentTypePortalModulesModal({
     );
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await adminRepository.saveResidentTypePortalModules(residentType, modules);
-      setBaselineSnapshot(portalModulesSnapshot(modules));
-      showToast({ message: "Resident type module defaults saved.", variant: "success" });
-      onSaved?.();
-      onClose();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save module defaults.";
-      showToast({ message, variant: "error" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <Modal
       open={open}
@@ -113,14 +107,13 @@ export function ResidentTypePortalModulesModal({
           >
             Close
           </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || !isDirty || modules.length === 0}
-            className="rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
+          <ActionButton
+            label="Save"
+            loadingLabel="Saving…"
+            loading={saving}
+            disabled={!isDirty || modules.length === 0}
+            onClick={() => void handleSave()}
+          />
         </div>
       }
     >
@@ -145,6 +138,8 @@ export function ResidentTypePortalModulesModal({
         Choose which resident portal modules are visible by default for each resident type. Individual users can be
         overridden on the Permissions tab.
       </p>
+
+      {saveError ? <FormAlert message={saveError} className="mb-3" /> : null}
 
       {loadError ? (
         <div className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">

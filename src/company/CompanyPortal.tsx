@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AdminPortal } from "../admin/AdminPortal";
 import { CompanyLayout } from "./CompanyLayout";
-import { companyRepository } from "./data/companyRepository";
 import { AccountPage } from "./pages/AccountPage";
 import { BuildingsPage } from "./pages/BuildingsPage";
 import { EmployeesPage } from "./pages/EmployeesPage";
@@ -11,7 +11,11 @@ import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
 import { VendorsPage } from "./pages/VendorsPage";
 import { CompanyChatPage } from "./pages/CompanyChatPage";
 import type { CompanyRoute } from "./navigation";
-import type { CompanyBuilding, CompanyUser } from "../resident/data/types";
+import type { CompanyBuilding } from "../resident/data/types";
+import { useAuth } from "../auth/AuthProvider";
+import { useCompanyBuildings, useCompanyUser } from "../shared/queries/companyQueries";
+import { useInvalidatePortalQueries } from "../shared/queries/useInvalidatePortalQueries";
+import { companyRepository } from "./data/companyRepository";
 
 type CompanyPortalProps = {
   activeBuilding: CompanyBuilding | null;
@@ -19,6 +23,7 @@ type CompanyPortalProps = {
   onCloseBuilding: () => void;
   onOpenResidentPortal?: () => void;
   onLogout: () => void;
+  onGoToWebsite?: () => void;
 };
 
 export function CompanyPortal({
@@ -27,26 +32,67 @@ export function CompanyPortal({
   onCloseBuilding,
   onOpenResidentPortal,
   onLogout,
+  onGoToWebsite,
 }: CompanyPortalProps) {
+  const auth = useAuth();
+  const queryClient = useQueryClient();
+  const { invalidateCompany } = useInvalidatePortalQueries();
   const [route, setRoute] = useState<CompanyRoute>({ page: "buildings" });
-  const [user, setUser] = useState<CompanyUser | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const bumpRefresh = () => setRefreshKey((k) => k + 1);
 
-  const [buildings, setBuildings] = useState<CompanyBuilding[]>([]);
+  const { data: buildings = [], refetch: refetchBuildings } = useCompanyBuildings();
+  const { data: user, isLoading: userLoading } = useCompanyUser();
+
+  const refreshBuildings = useCallback(async () => {
+    const result = await refetchBuildings();
+    return result.data ?? [];
+  }, [refetchBuildings]);
+
+  const handleOpenBuilding = useCallback(
+    async (building: CompanyBuilding) => {
+      try {
+        await companyRepository.assertBuildingAccess(building.id);
+      } catch {
+        window.alert("You do not have access to this building.");
+        return;
+      }
+      onOpenBuilding(building);
+      queryClient.setQueryData(
+        ["accessibleBuildings", auth.session?.user?.id ?? "none"],
+        (prev: CompanyBuilding[] | undefined) => {
+          if (!prev) return [building];
+          const index = prev.findIndex((b) => b.id === building.id);
+          if (index === -1) return [...prev, building];
+          const next = [...prev];
+          next[index] = building;
+          return next;
+        }
+      );
+    },
+    [onOpenBuilding, queryClient, auth.session?.user?.id]
+  );
+
+  const handleCloseBuilding = useCallback(() => {
+    onCloseBuilding();
+    void refreshBuildings();
+  }, [onCloseBuilding, refreshBuildings]);
 
   const handleNavigate = (next: CompanyRoute) => {
     if (activeBuilding) {
-      onCloseBuilding();
+      handleCloseBuilding();
     }
     setRoute(next);
   };
 
   useEffect(() => {
-    companyRepository.getCompanyUser().then(setUser);
-    companyRepository.getBuildings().then(setBuildings);
-  }, []);
+    if (!activeBuilding) return;
+    const allowed = buildings.some((b) => b.id === activeBuilding.id);
+    if (!allowed && buildings.length > 0) {
+      onCloseBuilding();
+    }
+  }, [activeBuilding, buildings, onCloseBuilding]);
 
   const handleOpenResidentPortal = () => {
     if (onOpenResidentPortal) {
@@ -58,10 +104,18 @@ export function CompanyPortal({
     }
   };
 
-  if (!user) {
+  if (userLoading && !user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#e7edf3] text-slate-600">
         Loading…
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#e7edf3] text-red-700">
+        Unable to load company profile.
       </div>
     );
   }
@@ -71,24 +125,37 @@ export function CompanyPortal({
       route={route}
       onNavigate={handleNavigate}
       onLogout={onLogout}
+      onGoToWebsite={onGoToWebsite}
       user={user}
-      onUserUpdated={setUser}
+      onUserUpdated={() => void auth.refreshAuth()}
       refreshKey={refreshKey}
       activeBuilding={activeBuilding}
-      onCloseBuilding={onCloseBuilding}
+      onCloseBuilding={handleCloseBuilding}
     >
       {activeBuilding ? (
         <AdminPortal
+          key={activeBuilding.id}
           embedded
           buildingLabel={`(${activeBuilding.code}) ${activeBuilding.address} - ${activeBuilding.code}`}
           buildings={buildings}
           activeBuildingId={activeBuilding.id}
-          onSwitchBuilding={onOpenBuilding}
+          onSwitchBuilding={handleOpenBuilding}
           onOpenResidentPortal={handleOpenResidentPortal}
         />
       ) : (
         <>
-          {route.page === "buildings" && <BuildingsPage onOpenBuilding={onOpenBuilding} />}
+          {route.page === "buildings" && (
+            <BuildingsPage
+              onOpenBuilding={(building) => void handleOpenBuilding(building)}
+              onRefreshBuildings={refreshBuildings}
+              activeBuildingId={activeBuilding?.id}
+              onBuildingArchived={() => handleCloseBuilding()}
+              onBuildingCreated={() => {
+                invalidateCompany();
+                void auth.refreshAuth();
+              }}
+            />
+          )}
           {route.page === "master-reports" && <MasterReportsPage onNavigate={setRoute} />}
           {route.page === "master-report-detail" && (
             <MasterReportDetailPage route={route} onNavigate={setRoute} />

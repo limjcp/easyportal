@@ -1,5 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FaCamera, FaFolderOpen } from "react-icons/fa";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import {
   formatDisplayDate,
@@ -18,7 +21,6 @@ export function FireSafetyPlanPage() {
   const [latest, setLatest] = useState<FireSafetySubmission | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
-  const [submitting, setSubmitting] = useState(false);
   const [saved, setSaved] = useState(false);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -50,24 +52,35 @@ export function FireSafetyPlanPage() {
     setSaved(false);
   };
 
+  const { run: submitPhoto, loading: submitting, error, clearError, setError } = useAsyncAction(
+    useCallback(async () => {
+      if (!previewUrl) return;
+      await residentRepo.submitFireSafetyPhoto({
+        unit,
+        photoDataUrl: previewUrl,
+        notes: notes.trim() || undefined,
+      });
+      setPreviewUrl(null);
+      setNotes("");
+      if (cameraInputRef.current) cameraInputRef.current.value = "";
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      await load(unit);
+    }, [notes, previewUrl, unit]),
+    {
+      successMessage: "Upload saved successfully.",
+      errorMessage: "Unable to submit photo.",
+      onSuccess: () => setSaved(true),
+    }
+  );
+
   const handleSubmit = async () => {
+    clearError();
     if (!previewUrl) {
-      alert("Please take or choose a photo first.");
+      setError("Please take or choose a photo first.");
       return;
     }
-    setSubmitting(true);
-    await residentRepo.submitFireSafetyPhoto({
-      unit,
-      photoDataUrl: previewUrl,
-      notes: notes.trim() || undefined,
-    });
-    setPreviewUrl(null);
-    setNotes("");
-    if (cameraInputRef.current) cameraInputRef.current.value = "";
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    await load(unit);
-    setSubmitting(false);
-    setSaved(true);
+    setSaved(false);
+    await submitPhoto();
   };
 
   return (
@@ -161,16 +174,17 @@ export function FireSafetyPlanPage() {
           />
         </label>
 
+        {error ? <FormAlert message={error} className="mb-4" /> : null}
+
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting || !previewUrl}
-            className="rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf] disabled:opacity-60"
-          >
-            {submitting ? "Uploading..." : "Submit Photo"}
-          </button>
-          {saved && <span className="text-sm text-green-600">Upload saved successfully.</span>}
+          <ActionButton
+            label="Submit Photo"
+            loadingLabel="Uploading…"
+            loading={submitting}
+            disabled={!previewUrl}
+            onClick={() => void handleSubmit()}
+          />
+          {saved && !submitting ? <span className="text-sm text-green-600">Upload saved successfully.</span> : null}
         </div>
       </div>
 

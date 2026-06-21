@@ -1,4 +1,7 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { vendorRepository } from "../data/vendorRepository";
 import type { Vendor } from "../../resident/data/types";
 
@@ -13,36 +16,55 @@ export function ProfilePage({ onRefresh }: ProfilePageProps) {
   const [notes, setNotes] = useState("");
   const [saved, setSaved] = useState(false);
 
-  const load = () => {
+  const load = useCallback(() => {
     vendorRepository.getVendor().then((s) => {
       setVendor(s);
       setContactName(s.contactName);
       setPhone(s.phone);
       setNotes(s.notes ?? "");
     });
-  };
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
-  const handleSave = async (e: FormEvent) => {
+  const { run: saveProfile, loading: saving, error: saveError } = useAsyncAction(
+    useCallback(async () => {
+      await vendorRepository.updateProfile({ contactName, phone, notes: notes || undefined });
+      onRefresh();
+      load();
+    }, [contactName, load, notes, onRefresh, phone]),
+    {
+      successMessage: "Profile saved.",
+      errorMessage: "Unable to save profile.",
+      onSuccess: () => {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      },
+    }
+  );
+
+  const { run: completeInvite, loading: completingInvite, error: inviteError } = useAsyncAction(
+    useCallback(async () => {
+      await vendorRepository.completeInvitation();
+      onRefresh();
+      load();
+    }, [load, onRefresh]),
+    {
+      successMessage: "Registration complete. Your account is now active.",
+      errorMessage: "Unable to complete registration.",
+    }
+  );
+
+  const handleSave = (e: FormEvent) => {
     e.preventDefault();
-    await vendorRepository.updateProfile({ contactName, phone, notes: notes || undefined });
-    setSaved(true);
-    onRefresh();
-    load();
-    setTimeout(() => setSaved(false), 2000);
-  };
-
-  const handleCompleteInvite = async () => {
-    await vendorRepository.completeInvitation();
-    onRefresh();
-    load();
-    alert("Registration complete. Your account is now active.");
+    void saveProfile();
   };
 
   if (!vendor) return <p className="text-sm text-slate-600">Loading profile…</p>;
+
+  const displayError = saveError ?? inviteError;
 
   return (
     <div>
@@ -50,17 +72,19 @@ export function ProfilePage({ onRefresh }: ProfilePageProps) {
         Company Profile
       </div>
 
+      {displayError ? <FormAlert message={displayError} className="mb-4" /> : null}
+
       {vendor.status === "pending_invite" && (
         <div className="mb-4 rounded border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <p className="font-medium">Complete your registration</p>
           <p className="mt-1">You were invited to join the vendor registry. Confirm to activate your account.</p>
-          <button
-            type="button"
-            onClick={handleCompleteInvite}
-            className="mt-2 rounded bg-[#0d9488] px-4 py-2 text-sm text-white"
-          >
-            Complete registration
-          </button>
+          <ActionButton
+            label="Complete registration"
+            loadingLabel="Completing…"
+            loading={completingInvite}
+            className="mt-2 bg-[#0d9488] hover:bg-[#0b7a70]"
+            onClick={() => void completeInvite()}
+          />
         </div>
       )}
 
@@ -108,10 +132,14 @@ export function ProfilePage({ onRefresh }: ProfilePageProps) {
           />
         </label>
         <div className="flex items-center gap-3">
-          <button type="submit" className="rounded bg-[#0d9488] px-4 py-2 text-sm text-white">
-            Save changes
-          </button>
-          {saved && <span className="text-sm text-green-600">Saved.</span>}
+          <ActionButton
+            type="submit"
+            label="Save changes"
+            loadingLabel="Saving…"
+            loading={saving}
+            className="bg-[#0d9488] hover:bg-[#0b7a70]"
+          />
+          {saved && !saving ? <span className="text-sm text-green-600">Saved.</span> : null}
         </div>
       </form>
     </div>

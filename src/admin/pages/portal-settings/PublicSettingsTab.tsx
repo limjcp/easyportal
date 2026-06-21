@@ -1,17 +1,27 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaPalette, FaHome, FaParagraph, FaDesktop, FaTwitter } from "react-icons/fa";
 import { AdminFormPanel } from "../../components/AdminFormPanel";
 import { adminRepository } from "../../data/adminRepository";
 import { PORTAL_THEME_COLORS } from "../../data/mock/publicPortalSettings";
 import type { PublicPortalSettings } from "../../../resident/data/types";
 import { FileUploadZone } from "../../../shared/FileUploadZone";
+import { SaveBar } from "../../../shared/SaveBar";
+import { useAsyncAction } from "../../../shared/useAsyncAction";
+import { buildLobbyDisplayUrl, PORTAL_SUBDOMAIN_DOMAIN } from "../../../shared/portalDomain";
 import { PortalSettingsAlert } from "./PortalSettingsAlert";
-import { SaveBar } from "./SaveBar";
 
 export function PublicSettingsTab() {
   const [form, setForm] = useState<PublicPortalSettings | null>(null);
   const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
+
+  const { run: handleSave, loading: saving, error } = useAsyncAction(
+    useCallback(async () => {
+      if (!form) return;
+      await adminRepository.updatePublicPortalSettings(form);
+      setSaved(true);
+    }, [form]),
+    { successMessage: "Public portal settings saved." }
+  );
 
   useEffect(() => {
     adminRepository.getPublicPortalSettings().then(setForm);
@@ -36,11 +46,14 @@ export function PublicSettingsTab() {
     alert(`Copied ${form.lobbyDisplayUrl} to your clipboard`);
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    await adminRepository.updatePublicPortalSettings(form);
-    setSaving(false);
-    setSaved(true);
+  const updateSubdomain = (value: string) => {
+    const subdomain = value.replace(/[^a-zA-Z0-9-]/g, "");
+    setForm({
+      ...form,
+      subdomain,
+      lobbyDisplayUrl: buildLobbyDisplayUrl(subdomain),
+    });
+    setSaved(false);
   };
 
   const subdomainOk = form.subdomain.length >= 2;
@@ -85,12 +98,12 @@ export function PublicSettingsTab() {
               <input
                 type="text"
                 value={form.subdomain}
-                onChange={(e) => update("subdomain", e.target.value.replace(/[^a-zA-Z0-9-]/g, ""))}
+                onChange={(e) => updateSubdomain(e.target.value)}
                 className="w-40 rounded border border-slate-300 px-3 py-2 text-sm"
                 placeholder="Sub-Domain"
                 required
               />
-              <span className="text-sm font-semibold text-teal-700">.mvpcondos.com</span>
+              <span className="text-sm font-semibold text-teal-700">.{PORTAL_SUBDOMAIN_DOMAIN}</span>
               {subdomainOk && (
                 <span className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-800">Available</span>
               )}
@@ -185,7 +198,7 @@ export function PublicSettingsTab() {
           </AdminFormPanel>
         </div>
       </div>
-      <SaveBar onSave={handleSave} saved={saved} saving={saving} />
+      <SaveBar onSave={() => void handleSave()} saved={saved} saving={saving} error={error} />
     </div>
   );
 }

@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "../../shared/EmptyState";
 import { Modal } from "../../shared/Modal";
+import { SaveBar } from "../../shared/SaveBar";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { usePortalConfig } from "../context/PortalConfigContext";
 import { residentRepo } from "../data/mockRepository";
@@ -36,7 +38,6 @@ export function ResidentDetailPage({ section }: ResidentDetailPageProps) {
 
   const [details, setDetails] = useState<ResidentProfileDetails | null>(null);
   const [draft, setDraft] = useState<ResidentDetailSectionData | null>(null);
-  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
@@ -80,16 +81,20 @@ export function ResidentDetailPage({ section }: ResidentDetailPageProps) {
     });
   }, [section]);
 
-  const handleSave = async () => {
-    if (!editable || draft === null) return;
-    setSaving(true);
-    await residentRepo.updateResidentDetailSection(section, draft);
-    const updated = await residentRepo.getResidentDetails();
-    setDetails(updated);
-    setDraft(structuredClone(updated[section]));
-    setSaving(false);
-    setSaved(true);
-  };
+  const { run: handleSave, loading: saving, error: saveError } = useAsyncAction(
+    useCallback(async () => {
+      if (!editable || draft === null) return;
+      await residentRepo.updateResidentDetailSection(section, draft);
+      const updated = await residentRepo.getResidentDetails();
+      setDetails(updated);
+      setDraft(structuredClone(updated[section]));
+    }, [draft, editable, section]),
+    {
+      successMessage: "Saved successfully.",
+      errorMessage: "Unable to save changes.",
+      onSuccess: () => setSaved(true),
+    }
+  );
 
   const applyCondoFeePayment = async (
     amount: number,
@@ -369,16 +374,15 @@ export function ResidentDetailPage({ section }: ResidentDetailPageProps) {
         </>
       )}
       {editable && section !== "parkingSpots" && (
-        <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-200 pt-4">
-          {saved && <span className="text-sm text-green-600">Saved successfully.</span>}
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf] disabled:opacity-60"
-          >
-            {saving ? "Saving..." : "Save"}
-          </button>
+        <div className="mt-6">
+          <SaveBar
+            onSave={() => void handleSave()}
+            saved={saved}
+            saving={saving}
+            error={saveError}
+            label="Save"
+            loadingLabel="Saving…"
+          />
         </div>
       )}
       <Modal

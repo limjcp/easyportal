@@ -1,15 +1,23 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaCheck } from "react-icons/fa";
 import { AdminFormPanel } from "../../components/AdminFormPanel";
 import { adminRepository } from "../../data/adminRepository";
 import type { RegistrationFieldOption } from "../../../resident/data/types";
+import { SaveBar } from "../../../shared/SaveBar";
+import { useAsyncAction } from "../../../shared/useAsyncAction";
 import { PortalSettingsAlert } from "./PortalSettingsAlert";
-import { SaveBar } from "./SaveBar";
 
 export function RegistrationTab() {
   const [fields, setFields] = useState<RegistrationFieldOption[]>([]);
   const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
+
+  const { run: handleSave, loading: saving, error } = useAsyncAction(
+    useCallback(async () => {
+      await adminRepository.updateRegistrationFieldOptions(fields);
+      setSaved(true);
+    }, [fields]),
+    { successMessage: "Registration settings saved." }
+  );
 
   useEffect(() => {
     adminRepository.getRegistrationFieldOptions().then(setFields);
@@ -26,13 +34,6 @@ export function RegistrationTab() {
       })
     );
     setSaved(false);
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    await adminRepository.updateRegistrationFieldOptions(fields);
-    setSaving(false);
-    setSaved(true);
   };
 
   return (
@@ -86,7 +87,7 @@ export function RegistrationTab() {
           </div>
         </AdminFormPanel>
       </div>
-      <SaveBar onSave={handleSave} saved={saved} saving={saving} />
+      <SaveBar onSave={() => void handleSave()} saved={saved} saving={saving} error={error} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FaBuilding, FaTh } from "react-icons/fa";
 import { AdminFormPanel } from "../../components/AdminFormPanel";
 import { PortalTileArrangeEditor } from "../../components/PortalTileArrangeEditor";
@@ -6,17 +6,27 @@ import { adminRepository } from "../../data/adminRepository";
 import type { CustomPortalTile, PortalModuleConfig, PortalTileSettings } from "../../../resident/data/types";
 import { getResidentBackgroundImage } from "../../../resident/data/portalConfig";
 import { applyArrangeTiles, toArrangeTiles } from "../../../resident/data/portalTileLayout";
+import { SaveBar } from "../../../shared/SaveBar";
+import { useAsyncAction } from "../../../shared/useAsyncAction";
 import { PortalSettingsAlert } from "./PortalSettingsAlert";
-import { SaveBar } from "./SaveBar";
 
 export function ModulesTab() {
   const [modules, setModules] = useState<PortalModuleConfig[]>([]);
   const [tileSettings, setTileSettings] = useState<PortalTileSettings | null>(null);
   const [customTiles, setCustomTiles] = useState<CustomPortalTile[]>([]);
   const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [bgUrl, setBgUrl] = useState<string | undefined>();
+
+  const { run: handleSave, loading: saving, error } = useAsyncAction(
+    useCallback(async () => {
+      await adminRepository.updatePortalModules(modules);
+      await adminRepository.updatePortalTileSettings(tileSettings!);
+      await adminRepository.updateCustomPortalTiles(customTiles);
+      setSaved(true);
+    }, [modules, tileSettings, customTiles]),
+    { successMessage: "Portal modules saved." }
+  );
 
   useEffect(() => {
     adminRepository.getPortalModules().then(setModules);
@@ -37,15 +47,6 @@ export function ModulesTab() {
   const updateModule = (moduleId: string, patch: Partial<PortalModuleConfig>) => {
     setModules((prev) => prev.map((m) => (m.moduleId === moduleId ? { ...m, ...patch } : m)));
     setSaved(false);
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    await adminRepository.updatePortalModules(modules);
-    await adminRepository.updatePortalTileSettings(tileSettings);
-    await adminRepository.updateCustomPortalTiles(customTiles);
-    setSaving(false);
-    setSaved(true);
   };
 
   const updateArrangement = (nextTiles: ReturnType<typeof toArrangeTiles>) => {
@@ -256,7 +257,7 @@ export function ModulesTab() {
           )}
         </AdminFormPanel>
       </div>
-      <SaveBar onSave={handleSave} saved={saved} saving={saving} />
+      <SaveBar onSave={() => void handleSave()} saved={saved} saving={saving} error={error} />
     </div>
   );
 }

@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
 import { StatusBadge } from "../../admin/components/AdminBadges";
 import { AdminPanelTable, AdminTabs } from "../../admin/components/AdminPanelTable";
-import { companyRepository } from "../data/companyRepository";
+import {
+  useCompanyBuildings,
+  useCompanyPurchaseOrders,
+  useCompanyVendors,
+} from "../../shared/queries/companyQueries";
+import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { PurchaseOrderDetailModal } from "../modals/PurchaseOrderDetailModal";
 import { PurchaseOrderFormModal } from "../modals/PurchaseOrderFormModal";
 import type { CompanyRoute } from "../navigation";
-import type { CompanyBuilding, PurchaseOrder, Vendor } from "../../resident/data/types";
+import type { PurchaseOrder } from "../../resident/data/types";
 
 type PurchaseOrdersPageProps = {
   route: CompanyRoute & { page: "purchase-orders" };
@@ -14,9 +19,11 @@ type PurchaseOrdersPageProps = {
 };
 
 export function PurchaseOrdersPage({ route, onNavigate, onRefresh }: PurchaseOrdersPageProps) {
-  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [buildings, setBuildings] = useState<CompanyBuilding[]>([]);
+  const { invalidateCompany } = useInvalidatePortalQueries();
+  const tab = route.tab ?? "current";
+  const { data: orders = [], refetch: refetchOrders } = useCompanyPurchaseOrders(tab === "archived");
+  const { data: vendors = [] } = useCompanyVendors();
+  const { data: buildings = [] } = useCompanyBuildings();
   const [search, setSearch] = useState("");
   const [vendorFilter, setVendorFilter] = useState(route.vendorId ?? "all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -29,17 +36,12 @@ export function PurchaseOrdersPage({ route, onNavigate, onRefresh }: PurchaseOrd
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const tab = route.tab ?? "current";
 
   const load = () => {
-    companyRepository.getPurchaseOrders(tab === "archived").then(setOrders);
-    companyRepository.getVendors().then(setVendors);
-    companyRepository.getBuildings().then(setBuildings);
+    invalidateCompany();
+    void refetchOrders();
+    onRefresh();
   };
-
-  useEffect(() => {
-    load();
-  }, [tab]);
 
   useEffect(() => {
     setVendorFilter(route.vendorId ?? "all");

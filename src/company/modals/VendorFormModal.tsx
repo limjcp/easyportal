@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { companyRepository } from "../data/companyRepository";
 import type { CompanyBuilding, Vendor } from "../../resident/data/types";
 
@@ -30,13 +33,39 @@ export function VendorFormModal({ open, onClose, onSaved, vendor }: VendorFormMo
   const [notes, setNotes] = useState("");
   const [buildings, setBuildings] = useState<CompanyBuilding[]>([]);
   const [buildingIds, setBuildingIds] = useState<string[]>([]);
-  const [saving, setSaving] = useState(false);
+
+  const { run, loading, error, setError, clearError } = useAsyncAction(
+    useCallback(async () => {
+      const payload = {
+        companyName,
+        tradeCategory,
+        contactName,
+        phone,
+        email,
+        buildingIds,
+        notes,
+      };
+      if (vendor) {
+        await companyRepository.updateVendor(vendor.id, payload);
+      } else {
+        await companyRepository.createVendor(payload);
+      }
+    }, [vendor, companyName, tradeCategory, contactName, phone, email, buildingIds, notes]),
+    {
+      successMessage: vendor ? "Vendor updated." : "Vendor created.",
+      onSuccess: () => {
+        onSaved();
+        onClose();
+      },
+    }
+  );
 
   useEffect(() => {
     if (open) {
+      clearError();
       companyRepository.getBuildings().then(setBuildings);
     }
-  }, [open]);
+  }, [open, clearError]);
 
   useEffect(() => {
     if (open && vendor) {
@@ -58,36 +87,12 @@ export function VendorFormModal({ open, onClose, onSaved, vendor }: VendorFormMo
     }
   }, [open, vendor]);
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!companyName.trim() || !email.trim()) {
-      alert("Company name and email are required.");
+      setError("Company name and email are required.");
       return;
     }
-    setSaving(true);
-    if (vendor) {
-      await companyRepository.updateVendor(vendor.id, {
-        companyName,
-        tradeCategory,
-        contactName,
-        phone,
-        email,
-        buildingIds,
-        notes,
-      });
-    } else {
-      await companyRepository.createVendor({
-        companyName,
-        tradeCategory,
-        contactName,
-        phone,
-        email,
-        buildingIds,
-        notes,
-      });
-    }
-    setSaving(false);
-    onSaved();
-    onClose();
+    void run();
   };
 
   return (
@@ -98,20 +103,12 @@ export function VendorFormModal({ open, onClose, onSaved, vendor }: VendorFormMo
       size="md"
       footer={
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded border border-slate-300 px-4 py-2 text-sm">
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white"
-          >
-            Save
-          </button>
+          <ActionButton label="Cancel" variant="secondary" onClick={onClose} disabled={loading} />
+          <ActionButton label="Save" loading={loading} onClick={handleSave} />
         </div>
       }
     >
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <div className="space-y-3 text-sm">
         <label className="block">
           Company Name *

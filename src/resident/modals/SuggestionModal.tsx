@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { FaCommentDots, FaPaperPlane } from "react-icons/fa";
+import { useCallback, useState } from "react";
+import { FaCommentDots } from "react-icons/fa";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
 import { SectionHeader } from "../../shared/SectionHeader";
 import { FileUploadZone } from "../../shared/FileUploadZone";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 
 type SuggestionModalProps = {
   open: boolean;
@@ -12,18 +15,26 @@ type SuggestionModalProps = {
 
 export function SuggestionModal({ open, onClose, onSubmit }: SuggestionModalProps) {
   const [text, setText] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+
+  const { run: submitSuggestion, loading: submitting, error, clearError, setError } = useAsyncAction(
+    useCallback(async () => {
+      await onSubmit(text.trim());
+      setText("");
+      onClose();
+    }, [onClose, onSubmit, text]),
+    {
+      successMessage: "Suggestion submitted.",
+      errorMessage: "Failed to submit suggestion.",
+    }
+  );
 
   const handleSubmit = async () => {
+    clearError();
     if (!text.trim()) {
-      alert("Please enter a suggestion.");
+      setError("Please enter a suggestion.");
       return;
     }
-    setSubmitting(true);
-    await onSubmit(text);
-    setSubmitting(false);
-    setText("");
-    onClose();
+    await submitSuggestion();
   };
 
   return (
@@ -38,19 +49,17 @@ export function SuggestionModal({ open, onClose, onSubmit }: SuggestionModalProp
           <button type="button" onClick={onClose} className="rounded border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="inline-flex items-center gap-2 rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf] disabled:opacity-50"
-          >
-            Submit
-            <FaPaperPlane />
-          </button>
+          <ActionButton
+            label="Submit"
+            loadingLabel="Submitting…"
+            loading={submitting}
+            onClick={() => void handleSubmit()}
+          />
         </>
       }
     >
       <SectionHeader title="Suggestion" />
+      {error ? <FormAlert message={error} className="mt-3" /> : null}
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}

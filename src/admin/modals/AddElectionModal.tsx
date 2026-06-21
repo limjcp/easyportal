@@ -1,24 +1,31 @@
-import { useState } from "react";
-import { FaArrowCircleRight, FaVoteYea } from "react-icons/fa";
+import { useCallback, useState } from "react";
+import { FaVoteYea } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 
 type AddElectionModalProps = {
   open: boolean;
   onClose: () => void;
-  onContinue: (title: string) => void;
+  onContinue: (title: string) => Promise<void>;
 };
 
 export function AddElectionModal({ open, onClose, onContinue }: AddElectionModalProps) {
   const [title, setTitle] = useState("");
 
-  const handleContinue = () => {
-    if (!title.trim()) {
-      alert("Election title is required.");
-      return;
-    }
-    onContinue(title.trim());
-    setTitle("");
-  };
+  const { run: handleContinue, loading, error } = useAsyncAction(
+    useCallback(async () => {
+      if (!title.trim()) {
+        alert("Election title is required.");
+        return;
+      }
+      await onContinue(title.trim());
+      setTitle("");
+      onClose();
+    }, [title, onContinue, onClose]),
+    { showSuccessToast: false, showErrorToast: false }
+  );
 
   return (
     <Modal
@@ -36,17 +43,16 @@ export function AddElectionModal({ open, onClose, onContinue }: AddElectionModal
           >
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={handleContinue}
-            className="inline-flex items-center gap-2 rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white"
-          >
-            Continue
-            <FaArrowCircleRight />
-          </button>
+          <ActionButton
+            label="Continue"
+            loadingLabel="Continuing…"
+            loading={loading}
+            onClick={() => void handleContinue()}
+          />
         </>
       }
     >
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <label className="block text-sm font-medium text-slate-700">
         Election Title <span className="text-red-500">*</span>
         <input

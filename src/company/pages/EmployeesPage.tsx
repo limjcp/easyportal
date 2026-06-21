@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaEnvelope, FaInfoCircle, FaUserCircle } from "react-icons/fa";
 import { AdminPanelTable } from "../../admin/components/AdminPanelTable";
 import type { SortDirection } from "../../admin/components/AdminPanelTable";
+import { FormAlert } from "../../shared/FormAlert";
 import { RowActionsMenu } from "../../shared/RowActionsMenu";
 import { Tooltip } from "../../shared/Tooltip";
+import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useCompanyBuildings, useCompanyEmployees } from "../../shared/queries/companyQueries";
+import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { companyRepository } from "../data/companyRepository";
 import { AddEmployeeModal } from "../modals/AddEmployeeModal";
 import { EditEmployeeModal } from "../modals/EditEmployeeModal";
@@ -44,8 +48,9 @@ function exportEmployeesCsv(employees: CompanyEmployee[], buildings: CompanyBuil
 }
 
 export function EmployeesPage() {
-  const [employees, setEmployees] = useState<CompanyEmployee[]>([]);
-  const [buildings, setBuildings] = useState<CompanyBuilding[]>([]);
+  const { invalidateCompany } = useInvalidatePortalQueries();
+  const { data: employees = [], error: employeesError, refetch: refetchEmployees } = useCompanyEmployees();
+  const { data: buildings = [], refetch: refetchBuildings } = useCompanyBuildings();
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
@@ -57,22 +62,29 @@ export function EmployeesPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<CompanyEmployee | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    setLoadError(null);
-    void companyRepository
-      .getEmployees()
-      .then(setEmployees)
-      .catch((err) => {
-        setEmployees([]);
-        setLoadError(err instanceof Error ? err.message : "Failed to load employees.");
-      });
-    void companyRepository.getBuildings().then(setBuildings).catch(() => setBuildings([]));
-  }, []);
+  const pendingEmployeeIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (employeesError instanceof Error) {
+      setLoadError(employeesError.message);
+    } else {
+      setLoadError(null);
+    }
+  }, [employeesError]);
+
+  const load = useCallback(() => {
+    invalidateCompany();
+    void refetchEmployees();
+    void refetchBuildings();
+  }, [invalidateCompany, refetchEmployees, refetchBuildings]);
+
+  const { run: emailLoginDetails } = useAsyncAction(
+    useCallback(async () => {
+      if (!pendingEmployeeIdRef.current) return;
+      await companyRepository.emailEmployeeLoginDetails(pendingEmployeeIdRef.current);
+    }, []),
+    { successMessage: "Login details emailed." }
+  );
 
   const buildingById = useMemo(() => {
     const map = new Map<string, CompanyBuilding>();
@@ -121,9 +133,9 @@ export function EmployeesPage() {
     setEditOpen(true);
   };
 
-  const handleEmailLoginDetails = async (employee: CompanyEmployee) => {
-    const result = await companyRepository.emailEmployeeLoginDetails(employee.id);
-    alert(result.message);
+  const handleEmailLoginDetails = (employee: CompanyEmployee) => {
+    pendingEmployeeIdRef.current = employee.id;
+    void emailLoginDetails();
   };
 
   const filteredForExport = useMemo(() => {
@@ -134,11 +146,7 @@ export function EmployeesPage() {
 
   return (
     <div>
-      {loadError && (
-        <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {loadError}
-        </div>
-      )}
+      {loadError ? <FormAlert message={loadError} className="mb-4" /> : null}
       <div className="mb-4 flex flex-wrap gap-2">
         <button
           type="button"

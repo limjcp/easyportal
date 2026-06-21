@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaBuilding } from "react-icons/fa";
 import { Modal } from "../../../shared/Modal";
+import { ActionButton } from "../../../shared/ActionButton";
+import { FormAlert } from "../../../shared/FormAlert";
+import { useAsyncAction } from "../../../shared/useAsyncAction";
 import { AdminFormPanel, InfoBanner } from "../../components/AdminFormPanel";
 import { adminRepository } from "../../data/adminRepository";
 import type { BuildingUnitGroup, BuildingUnitGroupDefinition } from "../../../resident/data/types";
@@ -28,17 +31,19 @@ export function UnitGroupsTab({ refreshKey, onRefresh }: UnitGroupsTabProps) {
 
   const allUnits = units.flatMap((g) => g.units.map((u) => ({ floor: g.floorArea, unit: u })));
 
-  const handleCreate = async () => {
-    if (!name.trim()) {
-      alert("Group name is required.");
-      return;
-    }
-    await adminRepository.createBuildingUnitGroup(name.trim(), selectedUnits);
-    setShowModal(false);
-    setName("");
-    setSelectedUnits([]);
-    onRefresh();
-  };
+  const { run: handleCreate, loading: creating, error, setError } = useAsyncAction(
+    useCallback(async () => {
+      if (!name.trim()) {
+        throw new Error("Group name is required.");
+      }
+      await adminRepository.createBuildingUnitGroup(name.trim(), selectedUnits);
+      setShowModal(false);
+      setName("");
+      setSelectedUnits([]);
+      onRefresh();
+    }, [name, selectedUnits, onRefresh]),
+    { successMessage: "Unit group created." }
+  );
 
   return (
     <div className="space-y-4">
@@ -81,10 +86,11 @@ export function UnitGroupsTab({ refreshKey, onRefresh }: UnitGroupsTabProps) {
         footer={
           <>
             <button type="button" onClick={() => setShowModal(false)} className="rounded border px-4 py-2 text-sm">Cancel</button>
-            <button type="button" onClick={handleCreate} className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white">Create</button>
+            <ActionButton label="Create" loadingLabel="Creating…" loading={creating} onClick={() => void handleCreate()} />
           </>
         }
       >
+        {error ? <FormAlert message={error} className="mb-3" /> : null}
         <div className="space-y-3">
           <label className="block text-sm">
             Group Name

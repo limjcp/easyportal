@@ -17,10 +17,12 @@ function BuildingActions({
   building,
   onView,
   onCopy,
+  onArchive,
 }: {
   building: CompanyBuilding;
   onView: (b: CompanyBuilding) => void;
   onCopy?: (b: CompanyBuilding) => void;
+  onArchive?: (b: CompanyBuilding) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -60,26 +62,10 @@ function BuildingActions({
               className="w-full px-3 py-2 text-left hover:bg-slate-50"
               onClick={() => {
                 setOpen(false);
-                alert(
-                  "Are you sure you want to archive this condo and all of the MVP Condo Property Management admins associated with it?\n\n(This will only remove your company from administering this condo; the condo itself is not archived.)"
-                );
+                onArchive?.(building);
               }}
             >
               Archive
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              className="w-full px-3 py-2 text-left hover:bg-slate-50"
-              onClick={() => {
-                setOpen(false);
-                alert(
-                  "Are you sure you want to delete this condo and all of the MVP Condo Property Management admins associated with it?"
-                );
-              }}
-            >
-              Delete
             </button>
           </li>
           <li>
@@ -100,24 +86,62 @@ function BuildingActions({
   );
 }
 
+function ArchivedBuildingActions({
+  building,
+  onRestore,
+}: {
+  building: CompanyBuilding;
+  onRestore?: (b: CompanyBuilding) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onRestore?.(building)}
+      className="rounded bg-[#3476ef] px-2.5 py-1 text-xs text-white hover:bg-[#2d68cf]"
+    >
+      Restore
+    </button>
+  );
+}
+
+type BuildingColumnsOptions = {
+  mode?: "active" | "archived";
+  onView: (b: CompanyBuilding) => void;
+  onCopy?: (b: CompanyBuilding) => void;
+  onArchive?: (b: CompanyBuilding) => void;
+  onRestore?: (b: CompanyBuilding) => void;
+};
+
 export function getBuildingColumns(
-  onView: (b: CompanyBuilding) => void,
-  onCopy?: (b: CompanyBuilding) => void
+  onViewOrOptions: ((b: CompanyBuilding) => void) | BuildingColumnsOptions,
+  onCopyLegacy?: (b: CompanyBuilding) => void,
+  onArchiveLegacy?: (b: CompanyBuilding) => void
 ): AdminTableColumn<CompanyBuilding>[] {
+  const options: BuildingColumnsOptions =
+    typeof onViewOrOptions === "function"
+      ? { mode: "active", onView: onViewOrOptions, onCopy: onCopyLegacy, onArchive: onArchiveLegacy }
+      : onViewOrOptions;
+
+  const { mode = "active", onView, onCopy: copyHandler, onArchive, onRestore } = options;
+  const isArchived = mode === "archived";
+
   return [
     {
       key: "image",
       header: "",
       className: "text-center w-28",
-      render: (b) => (
-        <button type="button" onClick={() => onView(b)} className="inline-block">
-          <img
-            src={b.imageUrl}
-            alt=""
-            className="h-16 w-24 border border-slate-300 object-cover"
-          />
-        </button>
-      ),
+      render: (b) =>
+        isArchived ? (
+          <img src={b.imageUrl} alt="" className="mx-auto h-16 w-24 border border-slate-300 object-cover" />
+        ) : (
+          <button type="button" onClick={() => onView(b)} className="inline-block">
+            <img
+              src={b.imageUrl}
+              alt=""
+              className="h-16 w-24 border border-slate-300 object-cover"
+            />
+          </button>
+        ),
     },
     {
       key: "condo",
@@ -159,7 +183,12 @@ export function getBuildingColumns(
       key: "actions",
       header: "",
       className: "text-center",
-      render: (b) => <BuildingActions building={b} onView={onView} onCopy={onCopy} />,
+      render: (b) =>
+        isArchived ? (
+          <ArchivedBuildingActions building={b} onRestore={onRestore} />
+        ) : (
+          <BuildingActions building={b} onView={onView} onCopy={copyHandler} onArchive={onArchive} />
+        ),
     },
   ];
 }

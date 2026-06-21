@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaCalendarAlt } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import type { AdminEventType, CreateCalendarEventInput } from "../../resident/data/types";
 
 type AddEventModalProps = {
   open: boolean;
   eventType: AdminEventType;
   onClose: () => void;
-  onSubmit: (event: CreateCalendarEventInput) => void;
+  onSubmit: (event: CreateCalendarEventInput) => Promise<void>;
 };
 
 export function AddEventModal({ open, eventType, onClose, onSubmit }: AddEventModalProps) {
@@ -34,31 +37,47 @@ export function AddEventModal({ open, eventType, onClose, onSubmit }: AddEventMo
     setDay("Monday");
   }, [open, eventType]);
 
-  const handleSubmit = () => {
-    if (!title.trim()) {
-      alert("Title is required.");
-      return;
-    }
-    const created = new Date().toLocaleDateString("en-US", {
-      month: "2-digit",
-      day: "2-digit",
-      year: "numeric",
-    });
-    onSubmit({
-      title: title.trim(),
+  const { run: handleSubmit, loading, error } = useAsyncAction(
+    useCallback(async () => {
+      if (!title.trim()) {
+        alert("Title is required.");
+        return;
+      }
+      const created = new Date().toLocaleDateString("en-US", {
+        month: "2-digit",
+        day: "2-digit",
+        year: "numeric",
+      });
+      await onSubmit({
+        title: title.trim(),
+        date,
+        description: description.trim() || undefined,
+        eventType,
+        status,
+        created,
+        location: eventType === "once" ? location.trim() || undefined : undefined,
+        showTo,
+        adminOnly,
+        occurrence: eventType !== "once" ? occurrence : undefined,
+        day: eventType !== "once" ? day : undefined,
+      });
+      onClose();
+    }, [
+      title,
       date,
-      description: description.trim() || undefined,
+      description,
       eventType,
       status,
-      created,
-      location: eventType === "once" ? location.trim() || undefined : undefined,
+      location,
       showTo,
       adminOnly,
-      occurrence: eventType !== "once" ? occurrence : undefined,
-      day: eventType !== "once" ? day : undefined,
-    });
-    onClose();
-  };
+      occurrence,
+      day,
+      onSubmit,
+      onClose,
+    ]),
+    { successMessage: "Event created.", showErrorToast: false }
+  );
 
   const typeLabel =
     eventType === "once" ? "One-Time" : eventType === "recurring" ? "Recurring" : "Paid";
@@ -74,16 +93,17 @@ export function AddEventModal({ open, eventType, onClose, onSubmit }: AddEventMo
           <button type="button" onClick={onClose} className="rounded border border-slate-300 px-4 py-2 text-sm">
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            className="rounded bg-[#7D5DA7] px-4 py-2 text-sm text-white"
-          >
-            Save
-          </button>
+          <ActionButton
+            label="Save"
+            loadingLabel="Saving…"
+            loading={loading}
+            className="bg-[#7D5DA7] hover:bg-[#6b4f91]"
+            onClick={() => void handleSubmit()}
+          />
         </>
       }
     >
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <div className="space-y-3">
         <label className="block text-sm">
           Title *

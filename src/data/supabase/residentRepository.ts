@@ -23,6 +23,7 @@ import type {
   ResidentVehicle,
   SubmitElevatorBookingInput,
   SubmitPartyRoomBookingInput,
+  BuildingAmenityResourceType,
 } from "../../resident/data/types";
 import {
   mapAgmMeeting,
@@ -30,6 +31,7 @@ import {
   mapBoardElection,
   mapBoardMember,
   mapBoardMemberApplication,
+  mapBuildingAmenityResource,
   mapBuildingAmenitySettings,
   mapElectionBallot,
   mapElectionCandidate,
@@ -44,7 +46,7 @@ import {
 } from "./admin/mappers";
 import { ensureDefaultDocumentFolders } from "./admin/documentFolders";
 import { buildingIdOrThrow, mapDbError, nowIso, sb, todayIsoDate } from "./base";
-import { getBuildingDocumentSignedUrl } from "./storage";
+import { getBuildingDocumentSignedUrl, formatFileSize, inferDocumentFileType, removeBuildingDocument, uploadBuildingDocument } from "./storage";
 import { supabaseChatRepository } from "./chatRepository";
 import { ensureActiveBuildingForUser } from "./buildingContext";
 import { ensureIncidentCategory, insertComment, insertIncidentReportAttachment, insertServiceRequestAttachment, loadIncidentReportAttachments, loadServiceRequestAttachments } from "./admin/shared";
@@ -140,6 +142,31 @@ async function computeWaitlistPositions(requests: ParkingRequest[]): Promise<Par
     const queue = byType.get(request.requestType) ?? [];
     return withResidentWaitlistPosition(request, queue);
   });
+}
+
+const AMENITY_BOOKING_SELECT = "*, building_amenity_resources(name, location_label)";
+
+async function assertActiveAmenityResource(
+  buildingId: string,
+  resourceId: string,
+  resourceType: BuildingAmenityResourceType
+) {
+  if (!resourceId.trim()) {
+    throw new Error("Please select an amenity.");
+  }
+  const { data, error } = await sb()
+    .from("building_amenity_resources")
+    .select("id, resource_type, is_active")
+    .eq("id", resourceId)
+    .eq("building_id", buildingId)
+    .maybeSingle();
+  mapDbError(error);
+  if (!data || data.is_active === false) {
+    throw new Error("Selected amenity is not available.");
+  }
+  if (data.resource_type !== resourceType) {
+    throw new Error("Invalid amenity selection.");
+  }
 }
 
 export const supabaseResidentRepository: ResidentRepository = {
@@ -329,6 +356,35 @@ export const supabaseResidentRepository: ResidentRepository = {
       throw new Error("This document is not available to residents.");
     }
     return getBuildingDocumentSignedUrl(String(data.storage_path));
+  },
+
+  async createDocument(
+    file: File,
+    input: { folderId: string; title: string }
+  ): Promise<{ id: string }> {
+    const buildingId = await bid();
+    const storagePath = await uploadBuildingDocument(buildingId, file);
+    const { data, error } = await sb()
+      .from("document_files")
+      .insert({
+        building_id: buildingId,
+        folder_id: input.folderId,
+        file_type: inferDocumentFileType(file.name, file.type),
+        title: input.title.trim() || file.name,
+        file_date: todayIsoDate(),
+        filename: file.name,
+        storage_path: storagePath,
+        size_label: formatFileSize(file.size),
+        shown_to: "All Residents",
+        download_count: 0,
+      })
+      .select("id")
+      .single();
+    if (error) {
+      await removeBuildingDocument(storagePath).catch(() => undefined);
+      mapDbError(error);
+    }
+    return { id: data!.id as string };
   },
 
   async getFaqs() {
@@ -1457,13 +1513,30 @@ export const supabaseResidentRepository: ResidentRepository = {
     const userId = await authUserId();
     const { data, error } = await sb()
       .from("amenity_bookings")
-      .select("*")
+      .select(AMENITY_BOOKING_SELECT)
       .eq("building_id", buildingId)
       .eq("profile_id", userId)
       .order("booking_date", { ascending: false })
       .order("requested_at", { ascending: false });
     mapDbError(error);
     return (data ?? []).map((row) => mapAmenityBooking(row as Record<string, unknown>));
+  },
+
+  async getBuildingAmenityResources(resourceType?: BuildingAmenityResourceType) {
+    const buildingId = await bid();
+    let query = sb()
+      .from("building_amenity_resources")
+      .select("*")
+      .eq("building_id", buildingId)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true });
+    if (resourceType) {
+      query = query.eq("resource_type", resourceType);
+    }
+    const { data, error } = await query;
+    mapDbError(error);
+    return (data ?? []).map((row) => mapBuildingAmenityResource(row as Record<string, unknown>));
   },
 
   async getBuildingAmenitySettings() {
@@ -1491,6 +1564,7 @@ export const supabaseResidentRepository: ResidentRepository = {
     if (!input.bookingDate.trim() || !input.startTime.trim() || !input.endTime.trim()) {
       throw new Error("Date and time range are required.");
     }
+    await assertActiveAmenityResource(buildingId, input.amenityResourceId, "elevator");
     const { data, error } = await sb()
       .from("amenity_bookings")
       .insert({
@@ -1499,13 +1573,14 @@ export const supabaseResidentRepository: ResidentRepository = {
         resident_name: user.name,
         unit: user.unit,
         booking_type: "elevator",
+        amenity_resource_id: input.amenityResourceId,
         booking_date: input.bookingDate.trim(),
         start_time: input.startTime.trim(),
         end_time: input.endTime.trim(),
         notes: input.notes?.trim() ?? "",
         status: "pending",
       })
-      .select("*")
+      .select(AMENITY_BOOKING_SELECT)
       .single();
     mapDbError(error);
     return mapAmenityBooking(data as Record<string, unknown>);
@@ -1518,6 +1593,7 @@ export const supabaseResidentRepository: ResidentRepository = {
     if (!input.bookingDate.trim() || !input.startTime.trim() || !input.endTime.trim()) {
       throw new Error("Date and time range are required.");
     }
+    await assertActiveAmenityResource(buildingId, input.amenityResourceId, "party_room");
     const { data, error } = await sb()
       .from("amenity_bookings")
       .insert({
@@ -1526,6 +1602,7 @@ export const supabaseResidentRepository: ResidentRepository = {
         resident_name: user.name,
         unit: user.unit,
         booking_type: "party_room",
+        amenity_resource_id: input.amenityResourceId,
         booking_date: input.bookingDate.trim(),
         start_time: input.startTime.trim(),
         end_time: input.endTime.trim(),
@@ -1533,7 +1610,7 @@ export const supabaseResidentRepository: ResidentRepository = {
         notes: input.notes?.trim() ?? "",
         status: "pending",
       })
-      .select("*")
+      .select(AMENITY_BOOKING_SELECT)
       .single();
     mapDbError(error);
     return mapAmenityBooking(data as Record<string, unknown>);

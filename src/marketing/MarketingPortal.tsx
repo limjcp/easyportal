@@ -18,13 +18,27 @@ type MarketingPortalProps = {
   pathname: string;
   onNavigate: (path: string) => void;
   onOpenLogin: () => void;
+  isLoggedIn?: boolean;
+  onGoToPortal?: () => void;
 };
 
-export function MarketingPortal({ pathname, onNavigate, onOpenLogin }: MarketingPortalProps) {
+export function MarketingPortal({
+  pathname,
+  onNavigate,
+  onOpenLogin,
+  isLoggedIn = false,
+  onGoToPortal,
+}: MarketingPortalProps) {
   const page = resolveMarketingPage(pathname);
 
   return (
-    <MarketingLayout currentPage={page} onNavigate={onNavigate} onOpenLogin={onOpenLogin}>
+    <MarketingLayout
+      currentPage={page}
+      onNavigate={onNavigate}
+      onOpenLogin={onOpenLogin}
+      isLoggedIn={isLoggedIn}
+      onGoToPortal={onGoToPortal}
+    >
       {page === "home" && <HomePage onNavigate={onNavigate} />}
       {page === "inside-mvp" && <InsideMvpPage onNavigate={onNavigate} />}
       {page === "contact-us" && <ContactUsPage onNavigate={onNavigate} />}

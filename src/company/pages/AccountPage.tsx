@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FaCheck, FaQuestion } from "react-icons/fa";
 import { AdminPanelTable, AdminTabs } from "../../admin/components/AdminPanelTable";
 import { StatusBadge } from "../../admin/components/AdminBadges";
+import { Modal } from "../../shared/Modal";
 import { companyRepository } from "../data/companyRepository";
 import type { CompanyRoute } from "../navigation";
 import type { BuildingSubscription, CompanySubscription, StripePayout } from "../../resident/data/types";
@@ -19,6 +20,8 @@ export function AccountPage({ route, onNavigate }: AccountPageProps) {
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(5);
   const [page, setPage] = useState(1);
+  const [optionsSub, setOptionsSub] = useState<BuildingSubscription | null>(null);
+  const [payoutDetail, setPayoutDetail] = useState<StripePayout | null>(null);
 
   useEffect(() => {
     if (tab === "building-subscriptions") {
@@ -82,11 +85,11 @@ export function AccountPage({ route, onNavigate }: AccountPageProps) {
             {
               key: "options",
               header: "",
-              render: () => (
+              render: (s) => (
                 <button
                   type="button"
                   className="rounded bg-[#3476ef] px-2 py-1 text-xs text-white"
-                  onClick={() => alert("Subscription options — demo.")}
+                  onClick={() => setOptionsSub(s)}
                 >
                   Options ▾
                 </button>
@@ -107,6 +110,7 @@ export function AccountPage({ route, onNavigate }: AccountPageProps) {
           onPageSizeChange={setPageSize}
           page={page}
           onPageChange={setPage}
+          emptyMessage="No management company subscriptions on file."
           columns={[
             { key: "plan", header: "Plan", render: (s) => s.planName },
             { key: "status", header: "Status", render: (s) => <StatusBadge status={s.status} /> },
@@ -155,11 +159,11 @@ export function AccountPage({ route, onNavigate }: AccountPageProps) {
               {
                 key: "actions",
                 header: "",
-                render: () => (
+                render: (p) => (
                   <button
                     type="button"
                     className="rounded bg-[#3476ef] px-2 py-1 text-xs text-white"
-                    onClick={() => alert("View transactions — demo.")}
+                    onClick={() => setPayoutDetail(p)}
                   >
                     View Transactions
                   </button>
@@ -169,6 +173,42 @@ export function AccountPage({ route, onNavigate }: AccountPageProps) {
           />
         </>
       )}
+
+      <Modal open={!!optionsSub} onClose={() => setOptionsSub(null)} title="Building Subscription" size="md">
+        {optionsSub ? (
+          <div className="space-y-2 text-sm text-slate-700">
+            <p>
+              <strong>Building:</strong> {optionsSub.buildingName}
+            </p>
+            <p>
+              <strong>Address:</strong> {optionsSub.address}
+            </p>
+            <p>
+              <strong>Package:</strong> {optionsSub.package}
+            </p>
+            <p>
+              <strong>Status:</strong> {optionsSub.active ? "Active" : "Inactive"}
+            </p>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal open={!!payoutDetail} onClose={() => setPayoutDetail(null)} title="Payout Details" size="md">
+        {payoutDetail ? (
+          <div className="space-y-2 text-sm text-slate-700">
+            <p>
+              <strong>Date:</strong> {payoutDetail.payoutDate}
+            </p>
+            <p>
+              <strong>Status:</strong> {payoutDetail.status}
+            </p>
+            <p>
+              <strong>Total:</strong> ${payoutDetail.total.toFixed(2)} {payoutDetail.currency}
+            </p>
+            <p className="text-slate-500">Individual transaction details are not available for this payout.</p>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

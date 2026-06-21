@@ -16,6 +16,7 @@ type ResidentLayoutProps = {
   onSwitchToAdmin: () => void;
   onOpenProfile: () => void;
   onLogout: () => void;
+  onGoToWebsite?: () => void;
   navAction?: ReactNode;
   children: ReactNode;
   fullWidth?: boolean;
@@ -27,6 +28,7 @@ export function ResidentLayout({
   onSwitchToAdmin,
   onOpenProfile,
   onLogout,
+  onGoToWebsite,
   navAction,
   children,
   fullWidth,
@@ -46,6 +48,7 @@ export function ResidentLayout({
       <div className="relative z-10 flex min-h-screen flex-col">
         <UtilityBar
           onSwitchToAdmin={onSwitchToAdmin}
+          onGoToWebsite={onGoToWebsite}
           facebookUrl={publicPortalSettings.facebookUrl}
           instaUrl={publicPortalSettings.instaUrl}
           twitterUrl={publicPortalSettings.twitterUrl}
@@ -93,6 +96,7 @@ function HeroBackground({ imageUrl, themeColor }: { imageUrl?: string; themeColo
 
 function UtilityBar({
   onSwitchToAdmin,
+  onGoToWebsite,
   facebookUrl,
   instaUrl,
   twitterUrl,
@@ -101,6 +105,7 @@ function UtilityBar({
   showBuildingAdmin,
 }: {
   onSwitchToAdmin: () => void;
+  onGoToWebsite?: () => void;
   facebookUrl: string;
   instaUrl: string;
   twitterUrl: string;
@@ -131,6 +136,15 @@ function UtilityBar({
             <FaYoutube />
           </a>
         )}
+        {onGoToWebsite ? (
+          <button
+            type="button"
+            onClick={onGoToWebsite}
+            className="inline-flex items-center gap-2 rounded border border-white/20 px-3 py-1.5 text-xs font-medium text-white/90 transition hover:border-white/40 hover:text-white sm:text-sm"
+          >
+            Website
+          </button>
+        ) : null}
         {showBuildingAdmin ? (
           <button
             type="button"

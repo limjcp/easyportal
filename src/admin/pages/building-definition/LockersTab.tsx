@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaLock } from "react-icons/fa";
 import { AdminFormPanel, InfoBanner, StepCard } from "../../components/AdminFormPanel";
 import { adminRepository } from "../../data/adminRepository";
+import { ActionButton } from "../../../shared/ActionButton";
+import { FormAlert } from "../../../shared/FormAlert";
+import { useAsyncAction } from "../../../shared/useAsyncAction";
 import type { AddUnitRangeType, BuildingLockerGroup } from "../../../resident/data/types";
 
 type LockersTabProps = {
@@ -16,21 +19,23 @@ export function LockersTab({ refreshKey, onRefresh }: LockersTabProps) {
   const [end, setEnd] = useState("");
   const [addType, setAddType] = useState<AddUnitRangeType>("all");
 
+  const { run: handleAdd, loading: adding, error } = useAsyncAction(
+    useCallback(async () => {
+      if (!floor.trim() || !start.trim() || !end.trim()) {
+        throw new Error("Floor/Area, Start, and End are required.");
+      }
+      await adminRepository.addBuildingLockers({ floorArea: floor.trim(), start, end, addType });
+      setFloor("");
+      setStart("");
+      setEnd("");
+      onRefresh();
+    }, [floor, start, end, addType, onRefresh]),
+    { successMessage: "Lockers added." }
+  );
+
   useEffect(() => {
     adminRepository.getBuildingLockers().then(setGroups);
   }, [refreshKey]);
-
-  const handleAdd = async () => {
-    if (!floor.trim() || !start.trim() || !end.trim()) {
-      alert("Floor/Area, Start, and End are required.");
-      return;
-    }
-    await adminRepository.addBuildingLockers({ floorArea: floor.trim(), start, end, addType });
-    setFloor("");
-    setStart("");
-    setEnd("");
-    onRefresh();
-  };
 
   return (
     <div className="space-y-4">
@@ -69,9 +74,15 @@ export function LockersTab({ refreshKey, onRefresh }: LockersTabProps) {
             </select>
           </label>
         </div>
-        <button type="button" onClick={handleAdd} className="mt-4 rounded bg-[#89c64c] px-4 py-2 text-sm text-white">
-          Add Lockers
-        </button>
+        {error ? <FormAlert message={error} className="mt-3" /> : null}
+        <ActionButton
+          label="Add Lockers"
+          loadingLabel="Adding…"
+          loading={adding}
+          variant="success"
+          className="mt-4"
+          onClick={() => void handleAdd()}
+        />
       </AdminFormPanel>
 
       <AdminFormPanel title="Current Lockers:" headerColor="primary">

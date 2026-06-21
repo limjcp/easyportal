@@ -33,6 +33,7 @@ export type BuildingDefinitionTab =
   | "unit-groups"
   | "parking"
   | "lockers"
+  | "amenities"
   | "reminders";
 
 export type { ExternalDataTab };
@@ -438,6 +439,8 @@ export function getPageTitle(route: AdminRoute): string {
           return "Define Parking";
         case "lockers":
           return "Define Lockers";
+        case "amenities":
+          return "Define Amenities";
         case "reminders":
           return "Reminders";
         default:
@@ -532,6 +535,7 @@ export function getBreadcrumbTrail(route: AdminRoute): { label: string; route?: 
         "unit-groups": "Unit Groups",
         parking: "Parking",
         lockers: "Lockers",
+        amenities: "Amenities",
         reminders: "Reminders",
       };
       return [

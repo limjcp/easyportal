@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FaCheckCircle, FaLink, FaSync, FaTimes } from "react-icons/fa";
 import { AdminSectionPanel } from "../../components/AdminSectionPanel";
 import { Modal } from "../../../shared/Modal";
+import { ConfirmModal } from "../../../shared/ConfirmModal";
+import { ActionButton } from "../../../shared/ActionButton";
+import { useAsyncAction } from "../../../shared/useAsyncAction";
 import { adminRepository } from "../../data/adminRepository";
 import type { BuildingExternalData } from "../../../resident/data/types";
 
@@ -11,11 +14,37 @@ const QBO_POLL_TIMEOUT_MS = 120_000;
 export function QuickBooksTab() {
   const [data, setData] = useState<BuildingExternalData | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [disconnecting, setDisconnecting] = useState(false);
-  const [connecting, setConnecting] = useState(false);
+  const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
+
+  const { run: handleImport, loading: importing } = useAsyncAction(
+    useCallback(async () => {
+      const result = await adminRepository.importQuickBooksUsers();
+      setImportOpen(false);
+      setLastSync(new Date().toLocaleString());
+      alert(`Synced ${result.imported} customers and ${result.invoices ?? 0} open invoices from QuickBooks.`);
+    }, []),
+    { successMessage: "QuickBooks data imported." }
+  );
+
+  const { run: handleConnect, loading: connecting } = useAsyncAction(
+    useCallback(async () => {
+      const url = await adminRepository.getQuickBooksOAuthUrl();
+      window.open(url, "_blank", "width=900,height=720");
+      startPollingForConnection();
+    }, []),
+    { showSuccessToast: false }
+  );
+
+  const { run: handleDisconnect, loading: disconnecting } = useAsyncAction(
+    useCallback(async () => {
+      const updated = await adminRepository.disconnectQuickBooksOnline();
+      setData(updated);
+      setDisconnectOpen(false);
+    }, []),
+    { successMessage: "QuickBooks disconnected." }
+  );
 
   const refreshExternalData = () => adminRepository.getBuildingExternalData();
 
@@ -65,40 +94,6 @@ export function QuickBooksTab() {
     };
   }, []);
 
-  const handleImport = async () => {
-    setImporting(true);
-    try {
-      const result = await adminRepository.importQuickBooksUsers();
-      setImportOpen(false);
-      setLastSync(new Date().toLocaleString());
-      alert(`Synced ${result.imported} customers and ${result.invoices ?? 0} open invoices from QuickBooks.`);
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  const handleConnect = async () => {
-    setConnecting(true);
-    try {
-      const url = await adminRepository.getQuickBooksOAuthUrl();
-      window.open(url, "_blank", "width=900,height=720");
-      startPollingForConnection();
-    } finally {
-      setConnecting(false);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    if (!confirm("Disconnect QuickBooks Online from this building?")) return;
-    setDisconnecting(true);
-    try {
-      const updated = await adminRepository.disconnectQuickBooksOnline();
-      setData(updated);
-    } finally {
-      setDisconnecting(false);
-    }
-  };
-
   if (!data) return <p className="text-sm text-slate-500">Loading…</p>;
 
   return (
@@ -134,34 +129,26 @@ export function QuickBooksTab() {
                     <FaCheckCircle />
                     QB Link Current
                   </span>
-                  <button
-                    type="button"
+                  <ActionButton
+                    label="Sync balances & invoices"
+                    loading={importing}
                     onClick={() => setImportOpen(true)}
-                    className="inline-flex items-center gap-2 rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf]"
-                  >
-                    <FaSync />
-                    Sync balances & invoices
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDisconnect}
-                    disabled={disconnecting}
-                    className="inline-flex items-center gap-2 rounded border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                  >
-                    <FaTimes />
-                    {disconnecting ? "Disconnecting…" : "Disconnect"}
-                  </button>
+                  />
+                  <ActionButton
+                    label={disconnecting ? "Disconnecting…" : "Disconnect"}
+                    loading={disconnecting}
+                    loadingLabel="Disconnecting…"
+                    variant="secondary"
+                    onClick={() => setDisconnectOpen(true)}
+                  />
                 </>
               ) : (
-                <button
-                  type="button"
-                  onClick={handleConnect}
-                  disabled={connecting}
-                  className="inline-flex items-center gap-2 rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf]"
-                >
-                  <FaLink />
-                  {connecting ? "Opening QuickBooks…" : "Connect to QuickBooks Online"}
-                </button>
+                <ActionButton
+                  label={connecting ? "Opening QuickBooks…" : "Connect to QuickBooks Online"}
+                  loading={connecting}
+                  loadingLabel="Opening QuickBooks…"
+                  onClick={() => void handleConnect()}
+                />
               )}
             </div>
             {lastSync && (
@@ -195,14 +182,12 @@ export function QuickBooksTab() {
             >
               Cancel
             </button>
-            <button
-              type="button"
-              onClick={handleImport}
-              disabled={importing}
-              className="rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf] disabled:opacity-60"
-            >
-              {importing ? "Importing…" : "Start Import"}
-            </button>
+            <ActionButton
+              label="Start Import"
+              loadingLabel="Importing…"
+              loading={importing}
+              onClick={() => void handleImport()}
+            />
           </div>
         }
       >
@@ -211,6 +196,19 @@ export function QuickBooksTab() {
           invoices can be displayed.
         </p>
       </Modal>
+
+      <ConfirmModal
+        open={disconnectOpen}
+        onClose={() => {
+          if (disconnecting) return;
+          setDisconnectOpen(false);
+        }}
+        title="Disconnect QuickBooks"
+        message="Disconnect QuickBooks Online from this building?"
+        variant="danger"
+        loading={disconnecting}
+        onConfirm={() => void handleDisconnect()}
+      />
     </>
   );
 }

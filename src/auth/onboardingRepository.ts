@@ -23,6 +23,7 @@ export type OnboardingRegisterPayload = {
   buildingId: string;
   quickbooksMatched: boolean;
   quickbooksBalance: string | null;
+  recaptchaToken?: string | null;
 };
 
 export type OnboardingRegisterResult = {
@@ -35,6 +36,7 @@ export async function lookupOnboardingBuilding(input: {
   city: string;
   unitNumber: string;
   firstName: string;
+  recaptchaToken?: string | null;
 }): Promise<OnboardingLookupResult> {
   const { data, error } = await requireSupabase().functions.invoke("onboarding-lookup", {
     body: input,

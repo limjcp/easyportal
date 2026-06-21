@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { FaPaperPlane, FaWrench } from "react-icons/fa";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { FaWrench } from "react-icons/fa";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
 import { SectionHeader } from "../../shared/SectionHeader";
 import { FileUploadZone } from "../../shared/FileUploadZone";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { validateAttachmentFile } from "../../shared/attachmentUtils";
 import type { CreateServiceRequestInput } from "../data/types";
 import { residentRepo } from "../data/mockRepository";
@@ -34,7 +37,6 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
   const [form, setForm] = useState(initialFormState);
   const [slotFiles, setSlotFiles] = useState<Record<number, File>>({});
   const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
-  const [submitting, setSubmitting] = useState(false);
 
   const {
     contact,
@@ -90,26 +92,10 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
     return Array.from(new Set(options));
   }, [location]);
 
-  const handleSubmit = async () => {
-    if (!contact || !permissionToEnter || !severity || !category || !description) {
-      alert("Please fill in all required fields.");
-      return;
-    }
-    const resolvedCategory = category === "Other" ? customCategory.trim() : category;
-    if (!resolvedCategory) {
-      alert("Please enter a custom category name.");
-      return;
-    }
-    const files = Object.values(slotFiles);
-    for (const file of files) {
-      const error = validateAttachmentFile(file);
-      if (error) {
-        alert(error);
-        return;
-      }
-    }
-    setSubmitting(true);
-    try {
+  const { run: submitRequest, loading: submitting, error, clearError, setError } = useAsyncAction(
+    useCallback(async () => {
+      const resolvedCategory = category === "Other" ? customCategory.trim() : category;
+      const files = Object.values(slotFiles);
       await onSubmit({
         contact,
         location,
@@ -122,11 +108,46 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
         files: files.length ? files : undefined,
       });
       onClose();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to submit service request.");
-    } finally {
-      setSubmitting(false);
+    }, [
+      category,
+      contact,
+      customCategory,
+      description,
+      location,
+      onClose,
+      onSubmit,
+      permissionNotes,
+      permissionToEnter,
+      severity,
+      slotFiles,
+      visibility,
+    ]),
+    {
+      successMessage: "Service request submitted.",
+      errorMessage: "Failed to submit service request.",
     }
+  );
+
+  const handleSubmit = async () => {
+    clearError();
+    if (!contact || !permissionToEnter || !severity || !category || !description) {
+      setError("Please fill in all required fields.");
+      return;
+    }
+    const resolvedCategory = category === "Other" ? customCategory.trim() : category;
+    if (!resolvedCategory) {
+      setError("Please enter a custom category name.");
+      return;
+    }
+    const files = Object.values(slotFiles);
+    for (const file of files) {
+      const attachmentError = validateAttachmentFile(file);
+      if (attachmentError) {
+        setError(attachmentError);
+        return;
+      }
+    }
+    await submitRequest();
   };
 
   const now = new Date();
@@ -145,18 +166,16 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
           <button type="button" onClick={onClose} className="rounded border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="inline-flex items-center gap-2 rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf] disabled:opacity-50"
-          >
-            Submit Request
-            <FaPaperPlane />
-          </button>
+          <ActionButton
+            label="Submit Request"
+            loadingLabel="Submitting…"
+            loading={submitting}
+            onClick={() => void handleSubmit()}
+          />
         </>
       }
     >
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <SectionHeader title="Request Details" />
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <FormField label="Created By" value={createdBy} readOnly />

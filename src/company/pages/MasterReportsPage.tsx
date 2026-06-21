@@ -1,26 +1,37 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FaBuilding,
-  FaCheck,
   FaDownload,
   FaEye,
-  FaSave,
   FaThLarge,
   FaUsers,
 } from "react-icons/fa";
-import { AdminFormPanel } from "../../admin/components/AdminFormPanel";
-import { PortalTileArrangeEditor } from "../../admin/components/PortalTileArrangeEditor";
 import { AdminPanelTable } from "../../admin/components/AdminPanelTable";
 import { MasterReportHubPanel } from "../components/MasterReportHubPanel";
 import { companyRepository } from "../data/companyRepository";
+import { ColumnPrefsModal } from "../../shared/ColumnPrefsModal";
+import { downloadCsv } from "../../shared/exportCsv";
+import {
+  filterColumnsByKey,
+  loadVisibleColumnKeys,
+  saveVisibleColumnKeys,
+} from "../../shared/tableColumnPrefs";
 import type { CompanyRoute } from "../navigation";
 import type { BuildingTotalRow, CompanyMasterReportStats } from "../../resident/data/types";
-import type { CustomPortalTile, PortalModuleConfig } from "../../resident/data/types";
-import { applyArrangeTiles, toArrangeTiles } from "../../resident/data/portalTileLayout";
 
 type MasterReportsPageProps = {
   onNavigate: (route: CompanyRoute) => void;
 };
+
+const COMMUNITY_TOTALS_COLUMN_PREFS_KEY = "company-community-totals-columns";
+const COMMUNITY_TOTALS_COLUMNS = [
+  { key: "subscription", label: "Subscription" },
+  { key: "corp", label: "Corp" },
+  { key: "name", label: "Name" },
+  { key: "address", label: "Address" },
+  { key: "owners", label: "Owners" },
+  { key: "activatedUsers", label: "Activated Users" },
+];
 
 function StatCard({
   icon: Icon,
@@ -52,18 +63,67 @@ export function MasterReportsPage({ onNavigate }: MasterReportsPageProps) {
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState("address");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [masterModules, setMasterModules] = useState<PortalModuleConfig[]>([]);
-  const [masterCustomTiles, setMasterCustomTiles] = useState<CustomPortalTile[]>([]);
-  const [masterPrimaryTileLimit, setMasterPrimaryTileLimit] = useState(8);
-  const [savingMaster, setSavingMaster] = useState(false);
-  const [masterSaved, setMasterSaved] = useState(false);
+  const [columnPrefsOpen, setColumnPrefsOpen] = useState(false);
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState<Set<string>>(() =>
+    loadVisibleColumnKeys(
+      COMMUNITY_TOTALS_COLUMN_PREFS_KEY,
+      COMMUNITY_TOTALS_COLUMNS.map((column) => column.key)
+    )
+  );
+
+  const communityTotalsColumns = useMemo(
+    () => [
+      {
+        key: "subscription",
+        header: "Subscription",
+        className: "text-center",
+        render: (r: BuildingTotalRow) => r.subscription || "",
+        sortValue: (r: BuildingTotalRow) => r.subscription,
+      },
+      {
+        key: "corp",
+        header: "Corp",
+        render: (r: BuildingTotalRow) => r.corp,
+        sortValue: (r: BuildingTotalRow) => r.corp,
+      },
+      {
+        key: "name",
+        header: "Name",
+        render: (r: BuildingTotalRow) => r.name,
+        sortValue: (r: BuildingTotalRow) => r.name,
+      },
+      {
+        key: "address",
+        header: "Address",
+        render: (r: BuildingTotalRow) => r.address,
+        sortValue: (r: BuildingTotalRow) => r.address,
+      },
+      {
+        key: "owners",
+        header: "Owners",
+        className: "text-center",
+        render: (r: BuildingTotalRow) => r.owners,
+        sortValue: (r: BuildingTotalRow) => r.owners,
+      },
+      {
+        key: "activatedUsers",
+        header: "Activated Users",
+        className: "text-center",
+        render: (r: BuildingTotalRow) => r.activatedUsers,
+        sortValue: (r: BuildingTotalRow) => r.activatedUsers,
+      },
+    ],
+    []
+  );
+
+  const visibleCommunityTotalsColumns = useMemo(
+    () => filterColumnsByKey(communityTotalsColumns, visibleColumnKeys),
+    [communityTotalsColumns, visibleColumnKeys]
+  );
 
   useEffect(() => {
     companyRepository.getMasterReportStats().then(setStats);
     companyRepository.getBuildingTotals().then(setBuildingTotals);
-    companyRepository.getMasterPortalModules().then(setMasterModules);
-    companyRepository.getMasterCustomPortalTiles().then(setMasterCustomTiles);
-    companyRepository.getMasterPrimaryTileLimit().then(setMasterPrimaryTileLimit);
   }, []);
 
   const handleSortChange = (key: string) => {
@@ -74,25 +134,6 @@ export function MasterReportsPage({ onNavigate }: MasterReportsPageProps) {
       setSortDir(key === "address" ? "desc" : "asc");
     }
     setPage(1);
-  };
-
-  const arrangeTiles = toArrangeTiles(masterModules, masterCustomTiles, masterPrimaryTileLimit);
-  const updateArrangement = (nextTiles: ReturnType<typeof toArrangeTiles>) => {
-    const next = applyArrangeTiles(nextTiles, masterModules, masterCustomTiles, masterPrimaryTileLimit);
-    setMasterModules(next.modules);
-    setMasterCustomTiles(next.customTiles);
-    setMasterSaved(false);
-  };
-
-  const handleSaveMaster = async () => {
-    setSavingMaster(true);
-    await companyRepository.updateMasterPortalLayout({
-      modules: masterModules,
-      customTiles: masterCustomTiles,
-      primaryTileLimit: masterPrimaryTileLimit,
-    });
-    setSavingMaster(false);
-    setMasterSaved(true);
   };
 
   return (
@@ -106,50 +147,6 @@ export function MasterReportsPage({ onNavigate }: MasterReportsPageProps) {
           <StatCard icon={FaUsers} value={stats.activatedUsers} label="Activated Users" />
         </div>
       )}
-
-      <AdminFormPanel title="Master Arrange Resident Tiles" icon={<FaThLarge className="text-slate-500" />} headerColor="primary">
-        <p className="mb-3 text-sm text-slate-600">
-          This arrangement is the master default used by Building Admin when they enable master layout. Click
-          <strong> Edit Arrangement</strong>, then drag tiles by the handle to reorder. Overflow from the first two rows
-          is pushed into compact tiles.
-        </p>
-        <div className="mb-3 flex flex-wrap items-end gap-3">
-          <label className="text-sm">
-            <span className="font-medium text-slate-700">Primary Tile Capacity</span>
-            <input
-              type="number"
-              min={1}
-              max={20}
-              value={masterPrimaryTileLimit}
-              onChange={(e) => {
-                setMasterPrimaryTileLimit(Math.max(1, Math.min(20, Number(e.target.value) || 1)));
-                setMasterSaved(false);
-              }}
-              className="mt-1 block w-40 rounded border border-slate-300 px-3 py-1.5"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={handleSaveMaster}
-            disabled={savingMaster}
-            className="inline-flex items-center gap-2 rounded bg-[#3476ef] px-3 py-2 text-sm font-semibold text-white hover:bg-[#2c67d1] disabled:opacity-60"
-          >
-            <FaSave />
-            {savingMaster ? "Saving..." : "Save Master Arrangement"}
-          </button>
-          {masterSaved && (
-            <span className="inline-flex items-center gap-1 text-sm text-emerald-600">
-              <FaCheck />
-              Saved
-            </span>
-          )}
-        </div>
-        <PortalTileArrangeEditor
-          tiles={arrangeTiles}
-          primaryTileLimit={masterPrimaryTileLimit}
-          onChange={updateArrangement}
-        />
-      </AdminFormPanel>
 
       <div className="overflow-hidden rounded-sm border border-slate-300 bg-white shadow-sm">
         <div className="bg-[#7b4bb7] px-4 py-2">
@@ -175,7 +172,20 @@ export function MasterReportsPage({ onNavigate }: MasterReportsPageProps) {
               <button
                 type="button"
                 className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
-                onClick={() => alert("Export tools — coming soon.")}
+                onClick={() =>
+                  downloadCsv(
+                    "community-totals.csv",
+                    ["Subscription", "Corp", "Name", "Address", "Owners", "Activated Users"],
+                    buildingTotals.map((row) => [
+                      row.subscription || "",
+                      row.corp,
+                      row.name,
+                      row.address,
+                      String(row.owners),
+                      String(row.activatedUsers),
+                    ])
+                  )
+                }
               >
                 <FaDownload className="text-slate-500" />
                 Tools
@@ -183,56 +193,28 @@ export function MasterReportsPage({ onNavigate }: MasterReportsPageProps) {
               <button
                 type="button"
                 className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
-                onClick={() => alert("Toggle columns — coming soon.")}
+                onClick={() => setColumnPrefsOpen(true)}
               >
                 <FaEye className="text-slate-500" />
                 Toggle Columns
               </button>
             </div>
           }
-          columns={[
-            {
-              key: "subscription",
-              header: "Subscription",
-              className: "text-center",
-              render: (r) => r.subscription || "",
-              sortValue: (r) => r.subscription,
-            },
-            {
-              key: "corp",
-              header: "Corp",
-              render: (r) => r.corp,
-              sortValue: (r) => r.corp,
-            },
-            {
-              key: "name",
-              header: "Name",
-              render: (r) => r.name,
-              sortValue: (r) => r.name,
-            },
-            {
-              key: "address",
-              header: "Address",
-              render: (r) => r.address,
-              sortValue: (r) => r.address,
-            },
-            {
-              key: "owners",
-              header: "Owners",
-              className: "text-center",
-              render: (r) => r.owners,
-              sortValue: (r) => r.owners,
-            },
-            {
-              key: "activatedUsers",
-              header: "Activated Users",
-              className: "text-center",
-              render: (r) => r.activatedUsers,
-              sortValue: (r) => r.activatedUsers,
-            },
-          ]}
+          columns={visibleCommunityTotalsColumns}
         />
       </div>
+
+      <ColumnPrefsModal
+        open={columnPrefsOpen}
+        onClose={() => setColumnPrefsOpen(false)}
+        title="Toggle Columns"
+        columns={COMMUNITY_TOTALS_COLUMNS}
+        visibleKeys={visibleColumnKeys}
+        onSave={(keys) => {
+          saveVisibleColumnKeys(COMMUNITY_TOTALS_COLUMN_PREFS_KEY, keys);
+          setVisibleColumnKeys(new Set(keys));
+        }}
+      />
     </div>
   );
 }

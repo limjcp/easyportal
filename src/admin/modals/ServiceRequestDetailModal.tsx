@@ -1,6 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FaPrint, FaWrench } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
+import { ConfirmModal } from "../../shared/ConfirmModal";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { IncidentReportAttachmentGrid } from "../../shared/IncidentReportAttachmentThumb";
 import { validateAttachmentFile } from "../../shared/attachmentUtils";
 import { AdminSectionHeader, CommentSection } from "../components/CommentSection";
@@ -31,8 +35,92 @@ export function ServiceRequestDetailModal({
   const [poPrefill, setPoPrefill] = useState<PurchaseOrderPrefill | undefined>();
   const [serviceCategories, setServiceCategories] = useState<string[]>([]);
   const [customAdminCategory, setCustomAdminCategory] = useState("");
+  const [removeAttachmentOpen, setRemoveAttachmentOpen] = useState(false);
   const [commentAuthor, setCommentAuthor] = useState("Admin");
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const pendingMutationRef = useRef<(() => Promise<unknown>) | null>(null);
+  const pendingCommentRef = useRef<{ text: string; visibility: "admin" | "public" } | null>(null);
+  const pendingFileRef = useRef<File | null>(null);
+  const pendingAttachmentIdRef = useRef<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!requestId) return;
+    const updated = await adminRepository.getServiceRequestById(requestId);
+    if (updated) setRequest(updated);
+    const categories = await adminRepository.getServiceCategories();
+    const activeNames = categories
+      .filter((category) => category.status === "active")
+      .map((category) => category.name);
+    setServiceCategories(activeNames.includes("Other") ? activeNames : [...activeNames, "Other"]);
+    const related = await companyRepository.getPurchaseOrdersBySourceRequest(
+      "admin-service-request",
+      requestId
+    );
+    setRelatedPOs(related);
+    onUpdated();
+  }, [requestId, onUpdated]);
+
+  const { run: runMutation, loading: mutating, error, clearError } = useAsyncAction(
+    useCallback(async () => {
+      const mutation = pendingMutationRef.current;
+      if (!mutation) return;
+      await mutation();
+      await refresh();
+    }, [refresh]),
+    { showSuccessToast: false, showErrorToast: false }
+  );
+
+  const queueMutation = (mutation: () => Promise<unknown>) => {
+    pendingMutationRef.current = mutation;
+    clearError();
+    void runMutation();
+  };
+
+  const { run: addCommentRun, error: commentError } = useAsyncAction(
+    useCallback(async () => {
+      const pending = pendingCommentRef.current;
+      if (!request || !pending) return;
+      await adminRepository.addServiceRequestComment(
+        request.id,
+        {
+          author: commentAuthor,
+          text: pending.text,
+          createdAt: new Date().toLocaleString(),
+          visibility: pending.visibility,
+        },
+        pending.visibility
+      );
+      await refresh();
+    }, [request, commentAuthor, refresh]),
+    { successMessage: "Comment added.", showErrorToast: false }
+  );
+
+  const { run: addAttachmentRun, error: attachmentError } = useAsyncAction(
+    useCallback(async () => {
+      const file = pendingFileRef.current;
+      if (!file || !requestId) return;
+      const validationError = validateAttachmentFile(file);
+      if (validationError) {
+        alert(validationError);
+        return;
+      }
+      await adminRepository.addServiceRequestAttachment(requestId, file);
+      await refresh();
+    }, [requestId, refresh]),
+    { successMessage: "Attachment added.", showErrorToast: false }
+  );
+
+  const { run: removeAttachmentRun, loading: removingAttachment } = useAsyncAction(
+    useCallback(async () => {
+      const attachmentId = pendingAttachmentIdRef.current;
+      if (!attachmentId) return;
+      await adminRepository.removeServiceRequestAttachment(attachmentId);
+      await refresh();
+      setRemoveAttachmentOpen(false);
+      pendingAttachmentIdRef.current = null;
+    }, [refresh]),
+    { successMessage: "Attachment removed.", showErrorToast: false }
+  );
 
   useEffect(() => {
     if (open && requestId) {
@@ -53,58 +141,37 @@ export function ServiceRequestDetailModal({
   if (!open || !request) return null;
 
   const addComment = (text: string, visibility: "admin" | "public") => {
-    adminRepository
-      .addServiceRequestComment(
-        request.id,
-        { author: commentAuthor, text, createdAt: new Date().toLocaleString(), visibility },
-        visibility
-      )
-      .then(refresh)
-      .catch((err) => alert(err instanceof Error ? err.message : "Failed to save comment."));
+    pendingCommentRef.current = { text, visibility };
+    void addCommentRun();
   };
 
-  const refresh = async () => {
-    if (requestId) {
-      const updated = await adminRepository.getServiceRequestById(requestId);
-      if (updated) setRequest(updated);
-      const categories = await adminRepository.getServiceCategories();
-      const activeNames = categories
-        .filter((category) => category.status === "active")
-        .map((category) => category.name);
-      setServiceCategories(activeNames.includes("Other") ? activeNames : [...activeNames, "Other"]);
-      const related = await companyRepository.getPurchaseOrdersBySourceRequest(
-        "admin-service-request",
-        requestId
-      );
-      setRelatedPOs(related);
-      onUpdated();
-    }
+  const addAttachment = (file: File | null) => {
+    pendingFileRef.current = file;
+    void addAttachmentRun();
   };
 
-  const addAttachment = async (file: File | null) => {
-    if (!file || !requestId) return;
-    const validationError = validateAttachmentFile(file);
-    if (validationError) {
-      alert(validationError);
-      return;
-    }
-    try {
-      await adminRepository.addServiceRequestAttachment(requestId, file);
-      await refresh();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to upload attachment.");
-    }
+  const removeAttachment = (attachmentId: string) => {
+    pendingAttachmentIdRef.current = attachmentId;
+    setRemoveAttachmentOpen(true);
   };
 
-  const removeAttachment = async (attachmentId: string) => {
-    if (!window.confirm("Remove this attachment?")) return;
-    try {
-      await adminRepository.removeServiceRequestAttachment(attachmentId);
-      await refresh();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to remove attachment.");
-    }
+  const updateRequest = (updates: Partial<AdminServiceRequest>) => {
+    queueMutation(() => adminRepository.updateServiceRequest(request.id, updates));
   };
+
+  const markResolved = () => {
+    queueMutation(() =>
+      adminRepository.updateServiceRequest(request.id, {
+        status: "Resolved",
+        resolvedBy: commentAuthor,
+        resolvedAt: new Date().toLocaleDateString(),
+        pendingReply: false,
+        actionRequired: false,
+      })
+    );
+  };
+
+  const formError = error ?? commentError ?? attachmentError;
 
   const handleGeneratePO = () => {
     const notes = [
@@ -123,22 +190,8 @@ export function ServiceRequestDetailModal({
   };
 
   const categoryOptions = Array.from(
-    new Set([
-      ...serviceCategories,
-      request.adminCategory,
-    ].filter(Boolean))
+    new Set([...serviceCategories, request.adminCategory].filter(Boolean))
   );
-
-  const markResolved = () =>
-    adminRepository
-      .updateServiceRequest(request.id, {
-        status: "Resolved",
-        resolvedBy: commentAuthor,
-        resolvedAt: new Date().toLocaleDateString(),
-        pendingReply: false,
-        actionRequired: false,
-      })
-      .then(refresh);
 
   return (
     <Modal
@@ -151,18 +204,14 @@ export function ServiceRequestDetailModal({
         <div className="flex w-full flex-wrap justify-end gap-2">
           <button
             type="button"
-            onClick={() => adminRepository.updateServiceRequest(request.id, { pendingReply: true }).then(refresh)}
+            onClick={() => updateRequest({ pendingReply: true })}
             className="rounded bg-slate-700 px-3 py-1.5 text-sm text-white"
           >
             Set as Unread
           </button>
           <button
             type="button"
-            onClick={() =>
-              adminRepository
-                .updateServiceRequest(request.id, { status: "Pending", archived: false })
-                .then(refresh)
-            }
+            onClick={() => updateRequest({ status: "Pending", archived: false })}
             className="rounded bg-slate-700 px-3 py-1.5 text-sm text-white"
           >
             Reopen and Revert to Pending
@@ -176,13 +225,13 @@ export function ServiceRequestDetailModal({
             Print
           </button>
           {request.status === "Pending" ? (
-            <button
-              type="button"
+            <ActionButton
+              label="Resolve"
+              variant="success"
+              loading={mutating}
+              loadingLabel="Saving…"
               onClick={markResolved}
-              className="rounded bg-[#5cb85c] px-3 py-1.5 text-sm text-white"
-            >
-              Resolve
-            </button>
+            />
           ) : null}
           <button
             type="button"
@@ -194,6 +243,7 @@ export function ServiceRequestDetailModal({
         </div>
       }
     >
+      {formError ? <FormAlert message={formError} className="mb-4" /> : null}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {request.resolvedBy && (
           <span className="rounded bg-[#5cb85c] px-2 py-0.5 text-xs text-white">
@@ -210,10 +260,10 @@ export function ServiceRequestDetailModal({
           <div className="grid gap-3 p-3 sm:grid-cols-2">
             <ReadField label="Created By" value={request.createdBy} />
             <ReadField label="Date & Time" value={`${request.createdAt}`} />
-            <SelectField label="Assigned To *" value={request.assignedTo} field="assignedTo" request={request} onSave={refresh} />
+            <SelectField label="Assigned To *" value={request.assignedTo} field="assignedTo" request={request} onSave={updateRequest} />
             <ReadField label="Resident" value={request.resident} />
             <ReadField label="Unit" value={request.unit} />
-            <SelectField label="Who can view this Request *" value={request.visibility} field="visibility" request={request} onSave={refresh} />
+            <SelectField label="Who can view this Request *" value={request.visibility} field="visibility" request={request} onSave={updateRequest} />
           </div>
           {onViewRelated && request.unit && request.resident && (
             <div className="px-3 pb-2">
@@ -262,7 +312,7 @@ export function ServiceRequestDetailModal({
 
       <AdminSectionHeader title="Request Details" />
       <div className="grid gap-3 p-3 sm:grid-cols-2">
-        <SelectField label="Admin Severity" value={request.adminSeverity} field="adminSeverity" request={request} onSave={refresh} options={["Low", "Medium", "High", "Emergency"]} />
+        <SelectField label="Admin Severity" value={request.adminSeverity} field="adminSeverity" request={request} onSave={updateRequest} options={["Low", "Medium", "High", "Emergency"]} />
         <ReadField label="Resident Severity" value={request.severity} />
         <label className="text-sm">
           <span className="font-medium text-slate-700">Admin Category *</span>
@@ -275,11 +325,7 @@ export function ServiceRequestDetailModal({
                 return;
               }
               const resolved = await adminRepository.resolveServiceCategoryName(nextCategory);
-              await adminRepository.updateServiceRequest(request.id, {
-                adminCategory: resolved,
-                category: resolved,
-              });
-              await refresh();
+              updateRequest({ adminCategory: resolved, category: resolved });
             }}
             className="mt-1 block w-full rounded border border-slate-300 px-2 py-1"
           >
@@ -298,8 +344,10 @@ export function ServiceRequestDetailModal({
                 placeholder="Type custom category"
                 className="w-full rounded border border-slate-300 px-2 py-1"
               />
-              <button
-                type="button"
+              <ActionButton
+                label="Save Custom Category"
+                className="px-3 py-1 text-xs"
+                loading={mutating}
                 onClick={async () => {
                   if (!customAdminCategory.trim()) {
                     alert("Please enter a custom category name.");
@@ -310,16 +358,9 @@ export function ServiceRequestDetailModal({
                     customAdminCategory
                   );
                   setCustomAdminCategory("");
-                  await adminRepository.updateServiceRequest(request.id, {
-                    adminCategory: resolved,
-                    category: resolved,
-                  });
-                  await refresh();
+                  updateRequest({ adminCategory: resolved, category: resolved });
                 }}
-                className="rounded bg-[#3476ef] px-3 py-1 text-xs text-white"
-              >
-                Save Custom Category
-              </button>
+              />
             </div>
           )}
         </label>
@@ -388,6 +429,20 @@ export function ServiceRequestDetailModal({
         onClose={() => setCreatePOOpen(false)}
         onSaved={refresh}
       />
+
+      <ConfirmModal
+        open={removeAttachmentOpen}
+        onClose={() => {
+          if (removingAttachment) return;
+          setRemoveAttachmentOpen(false);
+          pendingAttachmentIdRef.current = null;
+        }}
+        title="Remove Attachment"
+        message="Remove this attachment?"
+        variant="danger"
+        loading={removingAttachment}
+        onConfirm={() => void removeAttachmentRun()}
+      />
     </Modal>
   );
 }
@@ -413,7 +468,7 @@ function SelectField({
   value: string;
   field: keyof AdminServiceRequest;
   request: AdminServiceRequest;
-  onSave: () => void;
+  onSave: (updates: Partial<AdminServiceRequest>) => void;
   options?: string[];
 }) {
   return (
@@ -421,9 +476,7 @@ function SelectField({
       <span className="font-medium text-slate-700">{label}</span>
       <select
         value={value}
-        onChange={(e) =>
-          adminRepository.updateServiceRequest(request.id, { [field]: e.target.value }).then(onSave)
-        }
+        onChange={(e) => onSave({ [field]: e.target.value })}
         className="mt-1 block w-full rounded border border-slate-300 px-2 py-1"
       >
         {options.map((o) => (

@@ -20,6 +20,7 @@ type CompanyLayoutProps = {
   route: CompanyRoute;
   onNavigate: (route: CompanyRoute) => void;
   onLogout: () => void;
+  onGoToWebsite?: () => void;
   user: CompanyUser;
   onUserUpdated?: (user: CompanyUser) => void;
   children: ReactNode;
@@ -32,6 +33,7 @@ export function CompanyLayout({
   route,
   onNavigate,
   onLogout,
+  onGoToWebsite,
   user,
   onUserUpdated,
   children,
@@ -83,16 +85,29 @@ export function CompanyLayout({
       <div className="bg-[#7D5DA7] text-white shadow-sm">
         <div className="mx-auto flex max-w-[1080px] items-center justify-between px-4 py-2 text-xs sm:px-6 sm:text-sm">
           <div className="flex items-center gap-2 font-semibold tracking-[0.08em]">
-            <span className="text-[11px] sm:text-xs">MVP CONDOS</span>
+            <MvpLogo variant="navbar" />
           </div>
           <div className="flex items-center gap-3 text-white/90">
-            <button
-              type="button"
+            {onGoToWebsite ? (
+              <>
+                <button
+                  type="button"
+                  onClick={onGoToWebsite}
+                  className="transition hover:text-white"
+                >
+                  Website
+                </button>
+                <span className="text-white/50">|</span>
+              </>
+            ) : null}
+            <a
+              href="https://www.mvpmgmt.ca/"
+              target="_blank"
+              rel="noreferrer"
               className="transition hover:text-white"
-              onClick={() => alert("Change Log — coming soon.")}
             >
               Change Log
-            </button>
+            </a>
             <span className="text-white/50">|</span>
             <div className="relative" ref={menuRef}>
               <button
@@ -250,13 +265,14 @@ export function CompanyLayout({
                   </div>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => alert("Help — coming soon.")}
+              <a
+                href="https://www.mvpmgmt.ca/contact-us"
+                target="_blank"
+                rel="noreferrer"
                 className="rounded border border-slate-400 bg-white px-3 py-1 text-slate-700 hover:bg-slate-50"
               >
                 Help
-              </button>
+              </a>
             </div>
           </div>
 

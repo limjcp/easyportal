@@ -1,9 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useResidentAmenityBookingsData } from "../../shared/queries/residentListQueries";
+import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { residentRepo } from "../data/mockRepository";
 import type {
   AmenityBooking,
-  BuildingAmenitySettings,
   SubmitElevatorBookingInput,
   SubmitPartyRoomBookingInput,
 } from "../data/types";
@@ -46,107 +50,127 @@ function statusClass(status: AmenityBooking["status"]) {
 }
 
 export function AmenityBookingsPage({ refreshKey = 0 }: { refreshKey?: number }) {
-  const [tab, setTab] = useState<TabId>("elevator");
-  const [settings, setSettings] = useState<BuildingAmenitySettings>({
+  const { invalidateBuilding } = useInvalidatePortalQueries();
+  const { data, refetch } = useResidentAmenityBookingsData();
+  const settings = data?.settings ?? {
     partyRoomFee: "",
     elevatorInstructions: "",
     partyRoomInstructions: "",
-  });
-  const [bookings, setBookings] = useState<AmenityBooking[]>([]);
+  };
+  const bookings = data?.bookings ?? [];
+  const elevators = data?.elevators ?? [];
+  const partyRooms = data?.partyRooms ?? [];
+  const [tab, setTab] = useState<TabId>("elevator");
   const [elevatorForm, setElevatorForm] = useState<SubmitElevatorBookingInput>({
+    amenityResourceId: "",
     bookingDate: "",
     startTime: "",
     endTime: "",
     notes: "",
   });
   const [partyForm, setPartyForm] = useState<SubmitPartyRoomBookingInput>({
+    amenityResourceId: "",
     bookingDate: "",
     startTime: "",
     endTime: "",
     guestCount: undefined,
     notes: "",
   });
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [actionId, setActionId] = useState<string | null>(null);
+  const [error, setPageError] = useState<string | null>(null);
+  const actionBookingIdRef = useRef<string>("");
 
-  const reload = async () => {
-    const [loadedSettings, loadedBookings] = await Promise.all([
-      residentRepo.getBuildingAmenitySettings(),
-      residentRepo.getAmenityBookings(),
-    ]);
-    setSettings(loadedSettings);
-    setBookings(loadedBookings);
-  };
+  void refreshKey;
 
-  useEffect(() => {
-    void reload();
-  }, [refreshKey]);
+  const reload = useCallback(async () => {
+    invalidateBuilding();
+    await refetch();
+  }, [invalidateBuilding, refetch]);
+
+  const clearPageError = () => setPageError(null);
+
+  const { run: submitElevator, loading: submittingElevator } = useAsyncAction(
+    useCallback(async () => {
+      await residentRepo.submitElevatorBooking(elevatorForm);
+      setElevatorForm({ amenityResourceId: "", bookingDate: "", startTime: "", endTime: "", notes: "" });
+      setTab("my-bookings");
+      await reload();
+    }, [elevatorForm, reload]),
+    {
+      successMessage: "Elevator booking submitted for review.",
+      errorMessage: "Unable to submit booking.",
+      onError: (message) => setPageError(message),
+    }
+  );
+
+  const { run: submitPartyRoom, loading: submittingPartyRoom } = useAsyncAction(
+    useCallback(async () => {
+      await residentRepo.submitPartyRoomBooking(partyForm);
+      setPartyForm({
+        amenityResourceId: "",
+        bookingDate: "",
+        startTime: "",
+        endTime: "",
+        guestCount: undefined,
+        notes: "",
+      });
+      setTab("my-bookings");
+      await reload();
+    }, [partyForm, reload]),
+    {
+      successMessage: "Party room booking submitted for review.",
+      errorMessage: "Unable to submit booking.",
+      onError: (message) => setPageError(message),
+    }
+  );
+
+  const { run: runPay, loading: paying } = useAsyncAction(
+    useCallback(async () => {
+      await residentRepo.acceptPartyRoomPayment(actionBookingIdRef.current);
+      await reload();
+    }, [reload]),
+    {
+      successMessage: "Payment recorded. Your party room booking is confirmed.",
+      errorMessage: "Payment failed.",
+      onError: (message) => setPageError(message),
+    }
+  );
+
+  const { run: runCancel, loading: cancelling } = useAsyncAction(
+    useCallback(async () => {
+      await residentRepo.cancelAmenityBooking(actionBookingIdRef.current);
+      await reload();
+    }, [reload]),
+    {
+      successMessage: "Booking cancelled.",
+      errorMessage: "Unable to cancel booking.",
+      onError: (message) => setPageError(message),
+    }
+  );
+
+  const actionId = paying || cancelling ? actionBookingIdRef.current : null;
 
   const handleSubmitElevator = async (event: React.FormEvent) => {
     event.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    setMessage(null);
-    try {
-      await residentRepo.submitElevatorBooking(elevatorForm);
-      setElevatorForm({ bookingDate: "", startTime: "", endTime: "", notes: "" });
-      setMessage("Elevator booking submitted for review.");
-      setTab("my-bookings");
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to submit booking.");
-    } finally {
-      setSubmitting(false);
-    }
+    clearPageError();
+    await submitElevator();
   };
 
   const handleSubmitPartyRoom = async (event: React.FormEvent) => {
     event.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    setMessage(null);
-    try {
-      await residentRepo.submitPartyRoomBooking(partyForm);
-      setPartyForm({ bookingDate: "", startTime: "", endTime: "", guestCount: undefined, notes: "" });
-      setMessage("Party room booking submitted for review.");
-      setTab("my-bookings");
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to submit booking.");
-    } finally {
-      setSubmitting(false);
-    }
+    clearPageError();
+    await submitPartyRoom();
   };
 
   const handlePay = async (bookingId: string) => {
-    setActionId(bookingId);
-    setError(null);
-    setMessage(null);
-    try {
-      await residentRepo.acceptPartyRoomPayment(bookingId);
-      setMessage("Payment recorded. Your party room booking is confirmed.");
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Payment failed.");
-    } finally {
-      setActionId(null);
-    }
+    clearPageError();
+    actionBookingIdRef.current = bookingId;
+    await runPay();
   };
 
   const handleCancel = async (bookingId: string) => {
-    setActionId(bookingId);
-    setError(null);
-    try {
-      await residentRepo.cancelAmenityBooking(bookingId);
-      setMessage("Booking cancelled.");
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to cancel booking.");
-    } finally {
-      setActionId(null);
-    }
+    clearPageError();
+    actionBookingIdRef.current = bookingId;
+    await runCancel();
   };
 
   const handleMarkRead = async (booking: AmenityBooking) => {
@@ -166,8 +190,7 @@ export function AmenityBookingsPage({ refreshKey = 0 }: { refreshKey?: number })
             type="button"
             onClick={() => {
               setTab(entry.id);
-              setError(null);
-              setMessage(null);
+              clearPageError();
             }}
             className={`rounded px-3 py-1.5 text-xs font-medium ${
               tab === entry.id
@@ -180,12 +203,7 @@ export function AmenityBookingsPage({ refreshKey = 0 }: { refreshKey?: number })
         ))}
       </div>
 
-      {message ? (
-        <p className="rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">{message}</p>
-      ) : null}
-      {error ? (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
-      ) : null}
+      {error ? <FormAlert message={error} /> : null}
 
       {tab === "elevator" ? (
         <div className="rounded-sm bg-white/95 p-4 shadow-lg">
@@ -194,7 +212,32 @@ export function AmenityBookingsPage({ refreshKey = 0 }: { refreshKey?: number })
               {settings.elevatorInstructions}
             </p>
           ) : null}
-          <form onSubmit={handleSubmitElevator} className="grid max-w-xl gap-3">
+          {elevators.length === 0 ? (
+            <p className="mb-4 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              No elevators are configured for this building. Contact your building administrator to set up bookable
+              elevators under Building Definition → Amenities.
+            </p>
+          ) : (
+            <form onSubmit={handleSubmitElevator} className="grid max-w-xl gap-3">
+              <label className="block space-y-1 text-sm">
+                <span className="font-medium text-slate-700">Elevator</span>
+                <select
+                  required
+                  value={elevatorForm.amenityResourceId}
+                  onChange={(event) =>
+                    setElevatorForm((prev) => ({ ...prev, amenityResourceId: event.target.value }))
+                  }
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-black"
+                >
+                  <option value="">Select an elevator…</option>
+                  {elevators.map((resource) => (
+                    <option key={resource.id} value={resource.id}>
+                      {resource.name}
+                      {resource.locationLabel ? ` (${resource.locationLabel})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
             <label className="block space-y-1 text-sm">
               <span className="font-medium text-slate-700">Date</span>
               <input
@@ -243,14 +286,16 @@ export function AmenityBookingsPage({ refreshKey = 0 }: { refreshKey?: number })
                 placeholder="Moving details, number of trips, etc."
               />
             </label>
-            <button
+            <ActionButton
               type="submit"
-              disabled={submitting}
-              className="w-fit rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              Submit Elevator Booking
-            </button>
+              label="Submit Elevator Booking"
+              loadingLabel="Submitting…"
+              loading={submittingElevator}
+              disabled={elevators.length === 0}
+              className="w-fit"
+            />
           </form>
+          )}
         </div>
       ) : null}
 
@@ -266,7 +311,32 @@ export function AmenityBookingsPage({ refreshKey = 0 }: { refreshKey?: number })
               Typical party room fee: <strong>{settings.partyRoomFee}</strong> (final amount confirmed by admin)
             </p>
           ) : null}
-          <form onSubmit={handleSubmitPartyRoom} className="grid max-w-xl gap-3">
+          {partyRooms.length === 0 ? (
+            <p className="mb-4 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              No party rooms are configured for this building. Contact your building administrator to set up bookable
+              party rooms under Building Definition → Amenities.
+            </p>
+          ) : (
+            <form onSubmit={handleSubmitPartyRoom} className="grid max-w-xl gap-3">
+              <label className="block space-y-1 text-sm">
+                <span className="font-medium text-slate-700">Party room</span>
+                <select
+                  required
+                  value={partyForm.amenityResourceId}
+                  onChange={(event) =>
+                    setPartyForm((prev) => ({ ...prev, amenityResourceId: event.target.value }))
+                  }
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-black"
+                >
+                  <option value="">Select a party room…</option>
+                  {partyRooms.map((resource) => (
+                    <option key={resource.id} value={resource.id}>
+                      {resource.name}
+                      {resource.locationLabel ? ` (${resource.locationLabel})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
             <label className="block space-y-1 text-sm">
               <span className="font-medium text-slate-700">Date</span>
               <input
@@ -329,14 +399,16 @@ export function AmenityBookingsPage({ refreshKey = 0 }: { refreshKey?: number })
                 className="w-full rounded border border-slate-300 px-3 py-2 text-black"
               />
             </label>
-            <button
+            <ActionButton
               type="submit"
-              disabled={submitting}
-              className="w-fit rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              Submit Party Room Booking
-            </button>
+              label="Submit Party Room Booking"
+              loadingLabel="Submitting…"
+              loading={submittingPartyRoom}
+              disabled={partyRooms.length === 0}
+              className="w-fit"
+            />
           </form>
+          )}
         </div>
       ) : null}
 
@@ -356,6 +428,9 @@ export function AmenityBookingsPage({ refreshKey = 0 }: { refreshKey?: number })
                     <div>
                       <p className="font-medium text-slate-800">
                         {labelType(booking.bookingType)}
+                        {booking.amenityResourceName ? (
+                          <span className="font-normal text-slate-600"> · {booking.amenityResourceName}</span>
+                        ) : null}
                         {booking.unread ? (
                           <span className="ml-2 rounded bg-[#3476ef] px-1.5 py-0.5 text-[10px] text-white">
                             New
@@ -378,24 +453,24 @@ export function AmenityBookingsPage({ refreshKey = 0 }: { refreshKey?: number })
                   ) : null}
                   <div className="mt-3 flex flex-wrap gap-2">
                     {booking.status === "approvedAwaitingPayment" ? (
-                      <button
-                        type="button"
-                        disabled={actionId === booking.id}
+                      <ActionButton
+                        label="Accept & Pay"
+                        loadingLabel="Processing…"
+                        loading={paying && actionId === booking.id}
+                        disabled={paying || cancelling}
+                        className="px-3 py-1.5 text-xs"
                         onClick={() => void handlePay(booking.id)}
-                        className="rounded bg-[#3476ef] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
-                      >
-                        {actionId === booking.id ? "Processing…" : "Accept & Pay"}
-                      </button>
+                      />
                     ) : null}
                     {booking.status === "pending" ? (
-                      <button
-                        type="button"
-                        disabled={actionId === booking.id}
+                      <ActionButton
+                        label="Cancel"
+                        variant="secondary"
+                        loading={cancelling && actionId === booking.id}
+                        disabled={paying || cancelling}
+                        className="px-3 py-1.5 text-xs"
                         onClick={() => void handleCancel(booking.id)}
-                        className="rounded border border-slate-300 px-3 py-1.5 text-xs disabled:opacity-50"
-                      >
-                        Cancel
-                      </button>
+                      />
                     ) : null}
                   </div>
                 </li>

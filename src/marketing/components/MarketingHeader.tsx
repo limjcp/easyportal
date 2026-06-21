@@ -17,9 +17,17 @@ type MarketingHeaderProps = {
   currentPage: MarketingPage;
   onNavigate: (path: string) => void;
   onOpenLogin: () => void;
+  isLoggedIn?: boolean;
+  onGoToPortal?: () => void;
 };
 
-export function MarketingHeader({ currentPage, onNavigate, onOpenLogin }: MarketingHeaderProps) {
+export function MarketingHeader({
+  currentPage,
+  onNavigate,
+  onOpenLogin,
+  isLoggedIn = false,
+  onGoToPortal,
+}: MarketingHeaderProps) {
   const headerRef = useRef<HTMLElement>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
@@ -77,10 +85,10 @@ export function MarketingHeader({ currentPage, onNavigate, onOpenLogin }: Market
           </button>
           <button
             type="button"
-            onClick={onOpenLogin}
+            onClick={isLoggedIn ? onGoToPortal : onOpenLogin}
             className={`${pe.eyebrowSm} px-4 py-2 border border-border text-foreground hover:border-foreground/40 transition-colors duration-300`}
           >
-            Sign In
+            {isLoggedIn ? "Go to Portal" : "Sign In"}
           </button>
         </div>
 
@@ -144,12 +152,16 @@ export function MarketingHeader({ currentPage, onNavigate, onOpenLogin }: Market
           <button
             type="button"
             onClick={() => {
-              onOpenLogin();
+              if (isLoggedIn) {
+                onGoToPortal?.();
+              } else {
+                onOpenLogin();
+              }
               closeMobileMenu();
             }}
             className={`${pe.mobileNav} py-4 text-left text-foreground/80 hover:text-foreground transition-colors duration-300`}
           >
-            Sign In
+            {isLoggedIn ? "Go to Portal" : "Sign In"}
           </button>
         </div>
       </div>

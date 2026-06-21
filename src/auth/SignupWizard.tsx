@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { executeRecaptcha } from "../shared/recaptcha";
 import type { UnitsUsersResidentType } from "../resident/data/types";
 import {
   lookupOnboardingBuilding,
@@ -54,11 +55,13 @@ export function SignupWizard({ onComplete, onSwitchToSignIn }: SignupWizardProps
     setError("");
     setLoading(true);
     try {
+      const recaptchaToken = await executeRecaptcha("onboarding_lookup");
       const result = await lookupOnboardingBuilding({
         corpNumber: identity.corpNumber,
         city: identity.city,
         unitNumber: identity.unitNumber,
         firstName: identity.firstName,
+        recaptchaToken,
       });
       setLookup(result);
       setStep("preview");
@@ -75,6 +78,7 @@ export function SignupWizard({ onComplete, onSwitchToSignIn }: SignupWizardProps
     setError("");
     setLoading(true);
     try {
+      const recaptchaToken = await executeRecaptcha("onboarding_register");
       await registerOnboardingRequest({
         email: identity.email.trim(),
         firstName: identity.firstName.trim(),
@@ -85,6 +89,7 @@ export function SignupWizard({ onComplete, onSwitchToSignIn }: SignupWizardProps
         buildingId: lookup.buildingId,
         quickbooksMatched: lookup.quickbooksMatched,
         quickbooksBalance: lookup.quickbooksBalance,
+        recaptchaToken,
       });
       setStep("done");
     } catch (err) {

@@ -385,11 +385,28 @@ export const unitsUsersRepository = {
       .eq("building_id", buildingId)
       .eq("unit", unit.label);
 
-    const { count: irCount } = await sb()
+    const profileIds = occupancyRows
+      .map((o) => o.profile_id as string | null)
+      .filter((id): id is string => !!id);
+
+    const { data: involvingReports } = await sb()
       .from("incident_reports")
-      .select("*", { count: "exact", head: true })
+      .select("id")
       .eq("building_id", buildingId)
       .eq("unit", unit.label);
+
+    let byUsersReports: { id: string }[] = [];
+    if (profileIds.length > 0) {
+      const { data } = await sb()
+        .from("incident_reports")
+        .select("id")
+        .eq("building_id", buildingId)
+        .in("created_by_profile_id", profileIds);
+      byUsersReports = (data ?? []) as { id: string }[];
+    }
+
+    const incidentReportIdsInvolvingUnit = (involvingReports ?? []).map((row) => row.id as string);
+    const incidentReportIdsByUsers = byUsersReports.map((row) => row.id);
 
     return {
       id: unit.id as string,
@@ -397,8 +414,10 @@ export const unitsUsersRepository = {
       serviceRequestsSubmitted: srCount ?? 0,
       deliveriesPendingPickup: 0,
       visitorsToUnit: 0,
-      incidentReportsByUsers: irCount ?? 0,
-      incidentReportsInvolvingUnit: irCount ?? 0,
+      incidentReportsByUsers: incidentReportIdsByUsers.length,
+      incidentReportsInvolvingUnit: incidentReportIdsInvolvingUnit.length,
+      incidentReportIdsByUsers,
+      incidentReportIdsInvolvingUnit,
       occupants: occupancyRows.map((o) => ({
         userId: (o.profile_id as string) ?? (o.id as string),
         type: o.resident_type as UnitsUsersUnitDetail["occupants"][0]["type"],
@@ -606,11 +625,12 @@ export const unitsUsersRepository = {
     unitsCount: number;
     floorCount: number;
     usersCount: number;
+    imageUrl?: string;
   }> {
     const buildingId = await bid();
     const { data: building, error: buildingError } = await sb()
       .from("buildings")
-      .select("condo_name, corporation, address, units_count, users_count")
+      .select("condo_name, corporation, address, units_count, users_count, image_url")
       .eq("id", buildingId)
       .single();
     mapDbError(buildingError);
@@ -622,12 +642,14 @@ export const unitsUsersRepository = {
     const floorCount = new Set((floors ?? []).map((f) => f.floor as string).filter(Boolean)).size;
     const corp = building!.corporation as string;
     const address = building!.address as string;
+    const imageUrl = (building!.image_url as string) || undefined;
     return {
       buildingName: building!.condo_name as string,
       buildingAddress: corp ? `(${corp}) ${address}` : address,
       unitsCount: (building!.units_count as number) ?? 0,
       floorCount,
       usersCount: (building!.users_count as number) ?? 0,
+      imageUrl,
     };
   },
 

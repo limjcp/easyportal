@@ -6,11 +6,13 @@ import type {
   BuildingReminder,
   BuildingTaxSettings,
   CreateStripeAccountInput,
+  BuildingAmenityResourceType,
 } from "../../../resident/data/types";
 import { mapDbError, nowIso, sb, todayIsoDate } from "../base";
 import { refreshBuildingCounts } from "../unitsUsersRepository";
 import {
   mapBuildingDefinition,
+  mapBuildingAmenityResource,
   mapBuildingLockerGroup,
   mapBuildingParkingGroup,
   mapBuildingReminder,
@@ -319,6 +321,83 @@ export const buildingRepository = {
       mapDbError(error);
     }
     return this.getBuildingLockers();
+  },
+
+  async getBuildingAmenityResources(resourceType?: BuildingAmenityResourceType, activeOnly = false) {
+    const buildingId = await bid();
+    let query = sb()
+      .from("building_amenity_resources")
+      .select("*")
+      .eq("building_id", buildingId)
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true });
+    if (resourceType) {
+      query = query.eq("resource_type", resourceType);
+    }
+    if (activeOnly) {
+      query = query.eq("is_active", true);
+    }
+    const { data, error } = await query;
+    mapDbError(error);
+    return (data ?? []).map((row) => mapBuildingAmenityResource(row as Record<string, unknown>));
+  },
+
+  async addBuildingAmenityResource(input: {
+    resourceType: BuildingAmenityResourceType;
+    name: string;
+    locationLabel?: string;
+  }) {
+    const buildingId = await bid();
+    const name = input.name.trim();
+    if (!name) throw new Error("Name is required.");
+    const { data: existing } = await sb()
+      .from("building_amenity_resources")
+      .select("sort_order")
+      .eq("building_id", buildingId)
+      .eq("resource_type", input.resourceType)
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const sortOrder = existing?.sort_order != null ? Number(existing.sort_order) + 1 : 0;
+    const { error } = await sb().from("building_amenity_resources").insert({
+      building_id: buildingId,
+      resource_type: input.resourceType,
+      name,
+      location_label: input.locationLabel?.trim() ?? "",
+      sort_order: sortOrder,
+    });
+    mapDbError(error);
+    return this.getBuildingAmenityResources(input.resourceType);
+  },
+
+  async updateBuildingAmenityResource(
+    id: string,
+    updates: Partial<{ name: string; locationLabel: string; isActive: boolean }>
+  ) {
+    const buildingId = await bid();
+    const payload: Record<string, unknown> = { updated_at: nowIso() };
+    if (updates.name !== undefined) {
+      const name = updates.name.trim();
+      if (!name) throw new Error("Name is required.");
+      payload.name = name;
+    }
+    if (updates.locationLabel !== undefined) {
+      payload.location_label = updates.locationLabel.trim();
+    }
+    if (updates.isActive !== undefined) {
+      payload.is_active = updates.isActive;
+    }
+    const { error } = await sb()
+      .from("building_amenity_resources")
+      .update(payload)
+      .eq("id", id)
+      .eq("building_id", buildingId);
+    mapDbError(error);
+    return this.getBuildingAmenityResources();
+  },
+
+  async deactivateBuildingAmenityResource(id: string) {
+    return this.updateBuildingAmenityResource(id, { isActive: false });
   },
 
   async getBuildingReminders() {

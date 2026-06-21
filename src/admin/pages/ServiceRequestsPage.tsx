@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
+import {
+  useAdminServiceCategories,
+  useAdminServiceRequestTerms,
+  useAdminServiceRequests,
+} from "../../shared/queries/adminListQueries";
+import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import {
   ActionRequiredBadge,
   SeverityBadge,
@@ -10,7 +19,7 @@ import { AdminServiceRequestModal } from "../modals/AdminServiceRequestModal";
 import { ServiceRequestDetailModal } from "../modals/ServiceRequestDetailModal";
 import { AdminPageActions } from "../components/AdminPageActions";
 import type { AdminRoute } from "../navigation";
-import type { AdminServiceRequest, ServiceRequestCategory } from "../../resident/data/types";
+import type { AdminServiceRequest } from "../../resident/data/types";
 
 type ServiceRequestsPageProps = {
   route: AdminRoute & { page: "service-requests" };
@@ -25,8 +34,12 @@ export function ServiceRequestsPage({
   refreshKey,
   onRefresh,
 }: ServiceRequestsPageProps) {
-  const [requests, setRequests] = useState<AdminServiceRequest[]>([]);
-  const [categories, setCategories] = useState<ServiceRequestCategory[]>([]);
+  const { invalidateBuilding } = useInvalidatePortalQueries();
+  const isArchivedTab = route.tab === "archived";
+  const isListTab = route.tab !== "categories" && route.tab !== "terms";
+  const { data: requests = [] } = useAdminServiceRequests(route.tab, isArchivedTab);
+  const { data: categories = [] } = useAdminServiceCategories();
+  const { data: loadedTerms = "" } = useAdminServiceRequestTerms();
   const [terms, setTerms] = useState("");
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
@@ -39,16 +52,49 @@ export function ServiceRequestsPage({
   const [addOpen, setAddOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [showColumns, setShowColumns] = useState(true);
+  const pendingCategoryRef = useRef<{ id: string; fee?: string } | null>(null);
+  const pendingCreateRef = useRef<Parameters<typeof adminRepository.createServiceRequest>[0] | null>(null);
+
+  void refreshKey;
+  void isListTab;
 
   useEffect(() => {
-    if (route.tab === "categories") {
-      adminRepository.getServiceCategories().then(setCategories);
-    } else if (route.tab === "terms") {
-      adminRepository.getServiceRequestTerms().then(setTerms);
-    } else {
-      adminRepository.getServiceRequests(route.tab === "archived").then(setRequests);
-    }
-  }, [route.tab, refreshKey]);
+    if (route.tab === "terms") setTerms(loadedTerms);
+  }, [loadedTerms, route.tab]);
+
+  const handleRefresh = useCallback(() => {
+    invalidateBuilding();
+    onRefresh();
+  }, [invalidateBuilding, onRefresh]);
+
+  const { run: updateCategoryRun, error: categoryError } = useAsyncAction(
+    useCallback(async () => {
+      const pending = pendingCategoryRef.current;
+      if (!pending?.fee) return;
+      await adminRepository.updateServiceCategory(pending.id, { fee: pending.fee || undefined });
+      handleRefresh();
+    }, [handleRefresh]),
+    { successMessage: "Category updated.", showErrorToast: false }
+  );
+
+  const { run: saveTerms, loading: savingTerms, error: termsError } = useAsyncAction(
+    useCallback(async () => {
+      await adminRepository.updateServiceRequestTerms(terms);
+    }, [terms]),
+    { successMessage: "Terms saved.", showErrorToast: false }
+  );
+
+  const { run: createRequestRun } = useAsyncAction(
+    useCallback(async () => {
+      const input = pendingCreateRef.current;
+      if (!input) return;
+      await adminRepository.createServiceRequest(input);
+      handleRefresh();
+    }, [handleRefresh]),
+    { successMessage: "Service request created." }
+  );
+
+  const actionError = categoryError ?? termsError;
 
   const filtered = requests.filter((r) => {
     if (severityFilter !== "all" && r.adminSeverity !== severityFilter) return false;
@@ -277,9 +323,8 @@ export function ServiceRequestsPage({
                   onClick={() => {
                     const fee = prompt("Edit fee (leave blank for none):", row.fee ?? "");
                     if (fee !== null) {
-                      adminRepository
-                        .updateServiceCategory(row.id, { fee: fee || undefined })
-                        .then(onRefresh);
+                      pendingCategoryRef.current = { id: row.id, fee };
+                      void updateCategoryRun();
                     }
                   }}
                   className="rounded bg-[#3476ef] px-2 py-1 text-xs text-white"
@@ -298,19 +343,20 @@ export function ServiceRequestsPage({
             Service Request Terms
           </div>
           <div className="p-4">
+            {actionError ? <FormAlert message={actionError} className="mb-3" /> : null}
             <textarea
               value={terms}
               onChange={(e) => setTerms(e.target.value)}
               rows={12}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
             />
-            <button
-              type="button"
-              onClick={() => adminRepository.updateServiceRequestTerms(terms)}
-              className="mt-3 rounded bg-[#3476ef] px-4 py-2 text-sm text-white"
-            >
-              Save Terms
-            </button>
+            <ActionButton
+              label="Save Terms"
+              loading={savingTerms}
+              loadingLabel="Saving…"
+              className="mt-3"
+              onClick={() => void saveTerms()}
+            />
           </div>
         </div>
       )}
@@ -319,8 +365,8 @@ export function ServiceRequestsPage({
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onSubmit={async (input) => {
-          await adminRepository.createServiceRequest(input);
-          onRefresh();
+          pendingCreateRef.current = input;
+          await createRequestRun();
         }}
       />
 
@@ -328,7 +374,7 @@ export function ServiceRequestsPage({
         open={!!detailId}
         requestId={detailId}
         onClose={() => setDetailId(null)}
-        onUpdated={onRefresh}
+        onUpdated={handleRefresh}
         onViewRelated={(unit, owner) => {
           setUnitFilter(unit);
           setOwnerFilter(owner);

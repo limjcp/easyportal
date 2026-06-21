@@ -86,6 +86,8 @@ async function mapSuggestionWithComments(row: Record<string, unknown>) {
   return mapSuggestion(row, comments);
 }
 
+const AMENITY_BOOKING_SELECT = "*, building_amenity_resources(name, location_label)";
+
 async function updateAmenityBookingStatus(id: string, patch: Record<string, unknown>) {
   const buildingId = await bid();
   const { data: existing, error: fetchError } = await sb()
@@ -114,7 +116,7 @@ async function updateAmenityBookingStatus(id: string, patch: Record<string, unkn
     .from("amenity_bookings")
     .update({ ...patch, updated_at: nowIso() })
     .eq("id", id)
-    .select("*")
+    .select(AMENITY_BOOKING_SELECT)
     .maybeSingle();
   mapDbError(error);
   return data ? mapAmenityBooking(data as Record<string, unknown>) : null;
@@ -858,7 +860,7 @@ export const operationsRepository = {
     const today = todayIsoDate();
     const { data, error } = await sb()
       .from("amenity_bookings")
-      .select("*")
+      .select(AMENITY_BOOKING_SELECT)
       .eq("building_id", buildingId)
       .order("booking_date", { ascending: false })
       .order("requested_at", { ascending: false });
@@ -882,7 +884,7 @@ export const operationsRepository = {
     const buildingId = await bid();
     const { data, error } = await sb()
       .from("amenity_bookings")
-      .select("*")
+      .select(AMENITY_BOOKING_SELECT)
       .eq("id", id)
       .eq("building_id", buildingId)
       .maybeSingle();

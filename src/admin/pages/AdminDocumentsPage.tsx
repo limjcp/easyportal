@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FaCalendarAlt,
   FaDownload,
@@ -6,7 +6,10 @@ import {
   FaUnlock,
 } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
+import { ActionButton } from "../../shared/ActionButton";
 import { FileUploadZone } from "../../shared/FileUploadZone";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { OptionsDropdown } from "../components/AdminBadges";
 import { AdminPanelTable } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
@@ -120,11 +123,7 @@ export function AdminDocumentsPage({
         }
       />
 
-      {loadError && (
-        <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {loadError}
-        </div>
-      )}
+      {loadError ? <FormAlert message={loadError} className="mb-4" /> : null}
 
       {storage && (
         <div className="mb-4 overflow-hidden rounded-sm border border-slate-300 bg-white">
@@ -358,37 +357,28 @@ function UploadDocumentModal({
   const [title, setTitle] = useState("");
   const [shownTo, setShownTo] = useState("All Residents");
   const [file, setFile] = useState<File | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  const { run: handleSubmit, loading: saving, error, setError } = useAsyncAction(
+    useCallback(async () => {
+      if (!title.trim()) {
+        throw new Error("Title is required.");
+      }
+      if (!file) {
+        throw new Error("Please select a file to upload.");
+      }
+      await onSubmit(file, { folderId, title: title.trim(), shownTo });
+    }, [title, file, folderId, shownTo, onSubmit]),
+    { successMessage: "Document uploaded.", showErrorToast: false }
+  );
 
   useEffect(() => {
     if (open) {
       setTitle("");
       setShownTo("All Residents");
       setFile(null);
-      setSaving(false);
       setError(null);
     }
-  }, [open]);
-
-  const handleSubmit = async () => {
-    if (!title.trim()) {
-      setError("Title is required.");
-      return;
-    }
-    if (!file) {
-      setError("Please select a file to upload.");
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      await onSubmit(file, { folderId, title: title.trim(), shownTo });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to upload document.");
-      setSaving(false);
-    }
-  };
+  }, [open, setError]);
 
   return (
     <Modal
@@ -400,14 +390,12 @@ function UploadDocumentModal({
           <button type="button" onClick={onClose} disabled={saving} className="rounded border px-4 py-2 text-sm">
             Cancel
           </button>
-          <button
-            type="button"
+          <ActionButton
+            label="Upload"
+            loadingLabel="Uploading…"
+            loading={saving}
             onClick={() => void handleSubmit()}
-            disabled={saving}
-            className="rounded bg-[#7D5DA7] px-4 py-2 text-sm text-white disabled:opacity-50"
-          >
-            {saving ? "Uploading…" : "Upload"}
-          </button>
+          />
         </>
       }
     >
@@ -415,11 +403,7 @@ function UploadDocumentModal({
         Uploading to folder: <strong>{folderName}</strong>
       </p>
       <div className="space-y-3">
-        {error && (
-          <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-            {error}
-          </div>
-        )}
+        {error ? <FormAlert message={error} /> : null}
         <label className="block text-sm">
           Title *
           <input

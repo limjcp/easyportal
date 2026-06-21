@@ -3,6 +3,7 @@ import {
   ensureActiveBuildingForUser,
   setActiveBuildingId,
 } from "../data/supabase/buildingContext";
+import { verifyRecaptchaOnServer } from "../shared/recaptcha";
 import {
   getRememberMe,
   resolvePortalAccess,
@@ -21,6 +22,32 @@ type LoginPageProps = {
   onOpenMarketing?: (path?: string) => void;
   initialMode?: AuthMode;
 };
+
+function RecaptchaAttribution() {
+  return (
+    <p className="mt-4 text-center text-[11px] leading-relaxed text-slate-400">
+      This site is protected by reCAPTCHA and the Google{" "}
+      <a
+        href="https://policies.google.com/privacy"
+        target="_blank"
+        rel="noreferrer"
+        className="underline hover:text-slate-600"
+      >
+        Privacy Policy
+      </a>{" "}
+      and{" "}
+      <a
+        href="https://policies.google.com/terms"
+        target="_blank"
+        rel="noreferrer"
+        className="underline hover:text-slate-600"
+      >
+        Terms of Service
+      </a>{" "}
+      apply.
+    </p>
+  );
+}
 
 export function LoginPage({ onLogin, onOpenMarketing, initialMode = "signin" }: LoginPageProps) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
@@ -44,6 +71,7 @@ export function LoginPage({ onLogin, onOpenMarketing, initialMode = "signin" }: 
     }
     setSubmitting(true);
     try {
+      await verifyRecaptchaOnServer("login");
       const { user } = await signInWithPassword(username.trim(), password);
       if (!user) throw new Error("Login failed");
       const access = await resolvePortalAccess(user.id);
@@ -73,6 +101,7 @@ export function LoginPage({ onLogin, onOpenMarketing, initialMode = "signin" }: 
     }
     setError("");
     try {
+      await verifyRecaptchaOnServer("forgot_password");
       await resetPasswordForEmail(username.trim());
       setError("If an account exists, a password reset link has been sent.");
     } catch (err) {
@@ -118,13 +147,16 @@ export function LoginPage({ onLogin, onOpenMarketing, initialMode = "signin" }: 
       </div>
 
       {mode === "signup" ? (
-        <SignupWizard
-          onComplete={() => {
-            setMode("signin");
-            setError("");
-          }}
-          onSwitchToSignIn={() => setMode("signin")}
-        />
+        <>
+          <SignupWizard
+            onComplete={() => {
+              setMode("signin");
+              setError("");
+            }}
+            onSwitchToSignIn={() => setMode("signin")}
+          />
+          <RecaptchaAttribution />
+        </>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -186,6 +218,7 @@ export function LoginPage({ onLogin, onOpenMarketing, initialMode = "signin" }: 
               Request access
             </button>
           </p>
+          <RecaptchaAttribution />
         </form>
       )}
     </AuthLayout>

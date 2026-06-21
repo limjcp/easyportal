@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { EmptyState } from "../../shared/EmptyState";
+import { useResidentIncidentReports } from "../../shared/queries/residentListQueries";
+import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { IncidentReportDetailModal } from "../modals/IncidentReportDetailModal";
-import { residentRepo } from "../data/mockRepository";
-import type { IncidentReport } from "../data/types";
 
 type IncidentReportsPageProps = {
   onAddNew: () => void;
@@ -17,24 +17,18 @@ function statusClass(status: string): string {
 }
 
 export function IncidentReportsPage({ onAddNew, refreshKey = 0 }: IncidentReportsPageProps) {
-  const [items, setItems] = useState<IncidentReport[]>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { invalidateBuilding } = useInvalidatePortalQueries();
+  const { data: items = [], error, refetch } = useResidentIncidentReports();
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
 
-  const reload = () => {
-    setLoadError(null);
-    residentRepo
-      .getIncidentReports()
-      .then(setItems)
-      .catch((err) => {
-        setItems([]);
-        setLoadError(err instanceof Error ? err.message : "Failed to load incident reports.");
-      });
-  };
+  void refreshKey;
 
-  useEffect(() => {
-    reload();
-  }, [refreshKey]);
+  const loadError = error instanceof Error ? error.message : error ? "Failed to load incident reports." : null;
+
+  const reload = () => {
+    invalidateBuilding();
+    void refetch();
+  };
 
   if (loadError) {
     return (
@@ -78,31 +72,24 @@ export function IncidentReportsPage({ onAddNew, refreshKey = 0 }: IncidentReport
               type="button"
               onClick={() => setSelectedReportId(item.id)}
               className={`w-full rounded border p-4 text-left text-sm transition hover:border-[#3476ef] hover:bg-slate-50 ${
-                item.archived ? "border-slate-200 opacity-75" : "border-slate-200"
+                item.unread ? "border-[#3476ef]/40 bg-slate-50/80" : "border-slate-200"
               }`}
             >
               <div className="flex items-start justify-between gap-3">
-                <span className="font-medium text-slate-800">{item.reportType}</span>
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-                  {item.archived ? (
-                    <span className="rounded bg-slate-400 px-2 py-0.5 text-xs text-white">Archived</span>
-                  ) : null}
-                  <span className={`rounded px-2 py-0.5 text-xs ${statusClass(item.status)}`}>
-                    {item.status}
-                  </span>
-                </div>
+                <span className="font-medium text-slate-800">{item.category}</span>
+                <span className={`shrink-0 rounded px-2 py-0.5 text-xs ${statusClass(item.status)}`}>
+                  {item.status}
+                </span>
               </div>
-              <p className="mt-1 line-clamp-2 text-slate-600">{item.description}</p>
-              <p className="mt-2 text-xs text-slate-400">
-                {item.location} · {item.severity} · {item.incidentDate} {item.incidentTime}
-              </p>
+              <p className="mt-1 text-slate-600">{item.description}</p>
+              <p className="mt-2 text-xs text-slate-500">{item.createdAt}</p>
             </button>
           ))}
         </div>
       </div>
 
       <IncidentReportDetailModal
-        open={selectedReportId !== null}
+        open={!!selectedReportId}
         reportId={selectedReportId}
         onClose={() => setSelectedReportId(null)}
         onUpdated={reload}

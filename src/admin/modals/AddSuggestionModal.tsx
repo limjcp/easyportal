@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { FaCommentDots } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 
 type AddSuggestionModalProps = {
   open: boolean;
   onClose: () => void;
-  onSubmit: (input: { text: string; visibility: string; createdBy: string; unit: string }) => void;
+  onSubmit: (input: { text: string; visibility: string; createdBy: string; unit: string }) => Promise<void>;
 };
 
 export function AddSuggestionModal({ open, onClose, onSubmit }: AddSuggestionModalProps) {
@@ -14,15 +17,18 @@ export function AddSuggestionModal({ open, onClose, onSubmit }: AddSuggestionMod
   const [createdBy, setCreatedBy] = useState("Unit 10 - Carol Zinger");
   const [unit, setUnit] = useState("10");
 
-  const handleSubmit = () => {
-    if (!text.trim()) {
-      alert("Suggestion text is required.");
-      return;
-    }
-    onSubmit({ text: text.trim(), visibility, createdBy, unit });
-    setText("");
-    onClose();
-  };
+  const { run: handleSubmit, loading, error } = useAsyncAction(
+    useCallback(async () => {
+      if (!text.trim()) {
+        alert("Suggestion text is required.");
+        return;
+      }
+      await onSubmit({ text: text.trim(), visibility, createdBy, unit });
+      setText("");
+      onClose();
+    }, [text, visibility, createdBy, unit, onSubmit, onClose]),
+    { successMessage: "Suggestion submitted.", showErrorToast: false }
+  );
 
   return (
     <Modal
@@ -35,16 +41,17 @@ export function AddSuggestionModal({ open, onClose, onSubmit }: AddSuggestionMod
           <button type="button" onClick={onClose} className="rounded border border-slate-300 px-4 py-2 text-sm">
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            className="rounded bg-[#89c64c] px-4 py-2 text-sm text-white"
-          >
-            Submit
-          </button>
+          <ActionButton
+            label="Submit"
+            loadingLabel="Submitting…"
+            loading={loading}
+            variant="success"
+            onClick={() => void handleSubmit()}
+          />
         </>
       }
     >
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <div className="space-y-3">
         <label className="block text-sm">
           Visibility

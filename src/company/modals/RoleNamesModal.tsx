@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { companyRepository } from "../data/companyRepository";
 import type { RoleNameOverride } from "../../resident/data/types";
 
@@ -11,19 +14,26 @@ type RoleNamesModalProps = {
 
 export function RoleNamesModal({ open, onClose, onSaved }: RoleNamesModalProps) {
   const [rows, setRows] = useState<RoleNameOverride[]>([]);
-  const [saving, setSaving] = useState(false);
+
+  const { run, loading, error, clearError } = useAsyncAction(
+    useCallback(async () => {
+      await companyRepository.saveRoleNameOverrides(rows);
+    }, [rows]),
+    {
+      successMessage: "Role names saved.",
+      onSuccess: () => {
+        onSaved();
+        onClose();
+      },
+    }
+  );
 
   useEffect(() => {
-    if (open) companyRepository.getRoleNameOverrides().then(setRows);
-  }, [open]);
-
-  const handleSave = async () => {
-    setSaving(true);
-    await companyRepository.saveRoleNameOverrides(rows);
-    setSaving(false);
-    onSaved();
-    onClose();
-  };
+    if (open) {
+      clearError();
+      companyRepository.getRoleNameOverrides().then(setRows);
+    }
+  }, [open, clearError]);
 
   return (
     <Modal
@@ -33,17 +43,8 @@ export function RoleNamesModal({ open, onClose, onSaved }: RoleNamesModalProps) 
       size="lg"
       footer={
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded border border-slate-300 px-4 py-2 text-sm">
-            Close
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white hover:bg-[#2d68cf]"
-          >
-            Save
-          </button>
+          <ActionButton label="Close" variant="secondary" onClick={onClose} disabled={loading} />
+          <ActionButton label="Save" loading={loading} onClick={() => void run()} />
         </div>
       }
     >
@@ -51,6 +52,7 @@ export function RoleNamesModal({ open, onClose, onSaved }: RoleNamesModalProps) 
         You can set custom names for user types below. If nothing is entered for a particular role, the
         default name will be used. This will apply to users at all properties.
       </p>
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-200 text-left text-slate-600">

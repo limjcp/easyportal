@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { companyRepository } from "../data/companyRepository";
 import type { CompanyBuilding, PurchaseOrderPrefill, Vendor } from "../../resident/data/types";
 
@@ -24,10 +27,56 @@ export function PurchaseOrderFormModal({
   const [buildingId, setBuildingId] = useState("");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([{ description: "", quantity: 1, unitPrice: 0 }]);
-  const [saving, setSaving] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  const onSuccess = useCallback(() => {
+    onSaved();
+    onClose();
+  }, [onSaved, onClose]);
+
+  const submitPo = useCallback(
+    async (send: boolean) => {
+      const validLines = lines.filter((l) => l.description.trim());
+      await companyRepository.createPurchaseOrder({
+        vendorId,
+        buildingId,
+        sourceRequest: prefill?.sourceRequest,
+        lineItems: validLines,
+        notes,
+        status: send ? "sent" : "draft",
+      });
+    },
+    [vendorId, buildingId, prefill?.sourceRequest, lines, notes]
+  );
+
+  const {
+    run: runDraft,
+    loading: loadingDraft,
+    error: draftError,
+    clearError: clearDraftError,
+  } = useAsyncAction(() => submitPo(false), {
+    successMessage: "Purchase order saved as draft.",
+    onSuccess,
+  });
+
+  const {
+    run: runSend,
+    loading: loadingSend,
+    error: sendError,
+    clearError: clearSendError,
+  } = useAsyncAction(() => submitPo(true), {
+    successMessage: "Purchase order sent to vendor.",
+    onSuccess,
+  });
+
+  const loading = loadingDraft || loadingSend;
+  const displayError = validationError ?? draftError ?? sendError;
 
   useEffect(() => {
     if (open) {
+      setValidationError(null);
+      clearDraftError();
+      clearSendError();
       companyRepository.getVendors().then((s) => {
         const active = s.filter((x) => x.status === "active");
         setVendors(active);
@@ -45,7 +94,7 @@ export function PurchaseOrderFormModal({
       setLines(prefill?.initialLineItems?.length ? prefill.initialLineItems : [{ description: "", quantity: 1, unitPrice: 0 }]);
       setNotes(prefill?.notes ?? "");
     }
-  }, [open, prefill]);
+  }, [open, prefill, clearDraftError, clearSendError]);
 
   const updateLine = (i: number, field: keyof LineDraft, value: string | number) => {
     const next = [...lines];
@@ -55,28 +104,26 @@ export function PurchaseOrderFormModal({
 
   const addLine = () => setLines([...lines, { description: "", quantity: 1, unitPrice: 0 }]);
 
-  const handleSubmit = async (send: boolean) => {
+  const validate = (): boolean => {
     if (!vendorId || !buildingId) {
-      alert("Select vendor and building.");
-      return;
+      setValidationError("Select vendor and building.");
+      return false;
     }
     const validLines = lines.filter((l) => l.description.trim());
     if (validLines.length === 0) {
-      alert("Add at least one line item.");
-      return;
+      setValidationError("Add at least one line item.");
+      return false;
     }
-    setSaving(true);
-    await companyRepository.createPurchaseOrder({
-      vendorId,
-      buildingId,
-      sourceRequest: prefill?.sourceRequest,
-      lineItems: validLines,
-      notes,
-      status: send ? "sent" : "draft",
-    });
-    setSaving(false);
-    onSaved();
-    onClose();
+    setValidationError(null);
+    clearDraftError();
+    clearSendError();
+    return true;
+  };
+
+  const handleSubmit = (send: boolean) => {
+    if (!validate()) return;
+    if (send) void runSend();
+    else void runDraft();
   };
 
   const total = lines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
@@ -89,28 +136,23 @@ export function PurchaseOrderFormModal({
       size="lg"
       footer={
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded border border-slate-300 px-4 py-2 text-sm">
-            Cancel
-          </button>
-          <button
-            type="button"
+          <ActionButton label="Cancel" variant="secondary" onClick={onClose} disabled={loading} />
+          <ActionButton
+            label="Save as Draft"
+            variant="secondary"
+            loading={loadingDraft}
             onClick={() => handleSubmit(false)}
-            disabled={saving}
-            className="rounded border border-slate-400 px-4 py-2 text-sm"
-          >
-            Save as Draft
-          </button>
-          <button
-            type="button"
+          />
+          <ActionButton
+            label="Send to Vendor"
+            loading={loadingSend}
+            loadingLabel="Sending…"
             onClick={() => handleSubmit(true)}
-            disabled={saving}
-            className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white"
-          >
-            Send to Vendor
-          </button>
+          />
         </div>
       }
     >
+      {displayError ? <FormAlert message={displayError} className="mb-3" /> : null}
       <div className="space-y-3 text-sm">
         <label className="block">
           Vendor *

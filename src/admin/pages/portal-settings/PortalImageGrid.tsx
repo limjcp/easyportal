@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaEdit, FaPlus, FaSearch, FaTrash } from "react-icons/fa";
 import { Modal } from "../../../shared/Modal";
+import { ActionButton } from "../../../shared/ActionButton";
 import { FileUploadZone } from "../../../shared/FileUploadZone";
+import { FormAlert } from "../../../shared/FormAlert";
+import { useAsyncAction } from "../../../shared/useAsyncAction";
 import { AdminFormPanel } from "../../components/AdminFormPanel";
 import { adminRepository } from "../../data/adminRepository";
 import type { PortalImage, PortalImageKind } from "../../../resident/data/types";
@@ -54,26 +57,33 @@ export function PortalImageGrid({
     reader.readAsDataURL(file);
   };
 
-  const handleSave = async () => {
-    if (!previewUrl) return;
-    if (editing) {
-      await adminRepository.updatePortalImage(editing.id, { url: previewUrl });
-    } else {
-      await adminRepository.createPortalImage({
-        kind,
-        url: previewUrl,
-        sortOrder: images.length,
-      });
-    }
-    setModalOpen(false);
-    load();
-  };
+  const { run: handleSave, loading: saving, error } = useAsyncAction(
+    useCallback(async () => {
+      if (!previewUrl) return;
+      if (editing) {
+        await adminRepository.updatePortalImage(editing.id, { url: previewUrl });
+      } else {
+        await adminRepository.createPortalImage({
+          kind,
+          url: previewUrl,
+          sortOrder: images.length,
+        });
+      }
+      setModalOpen(false);
+      load();
+    }, [previewUrl, editing, kind, images.length]),
+    { successMessage: "Image saved." }
+  );
 
-  const handleDelete = async (id: string) => {
-    await adminRepository.deletePortalImage(id);
-    setDeleteId(null);
-    load();
-  };
+  const { run: handleDelete, loading: deleting, error: deleteError } = useAsyncAction(
+    useCallback(async () => {
+      if (!deleteId) return;
+      await adminRepository.deletePortalImage(deleteId);
+      setDeleteId(null);
+      load();
+    }, [deleteId]),
+    { successMessage: "Image deleted." }
+  );
 
   return (
     <AdminFormPanel
@@ -134,17 +144,17 @@ export function PortalImageGrid({
             <button type="button" onClick={() => setModalOpen(false)} className="rounded border px-4 py-2 text-sm">
               Cancel
             </button>
-            <button
-              type="button"
-              onClick={handleSave}
+            <ActionButton
+              label="Save"
+              loadingLabel="Saving…"
+              loading={saving}
               disabled={!previewUrl}
-              className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white disabled:opacity-50"
-            >
-              Save
-            </button>
+              onClick={() => void handleSave()}
+            />
           </div>
         }
       >
+        {error ? <FormAlert message={error} className="mb-3" /> : null}
         {previewUrl && <img src={previewUrl} alt="" className="mb-3 max-h-40 rounded border object-cover" />}
         <FileUploadZone onFileSelect={handleFile} onRemove={previewUrl ? () => setPreviewUrl(null) : undefined} />
         <p className="mt-2 text-xs text-slate-500">Mock upload — optimize images for faster loading.</p>
@@ -160,16 +170,17 @@ export function PortalImageGrid({
             <button type="button" onClick={() => setDeleteId(null)} className="rounded border px-4 py-2 text-sm">
               Cancel
             </button>
-            <button
-              type="button"
-              onClick={() => deleteId && handleDelete(deleteId)}
-              className="rounded bg-red-600 px-4 py-2 text-sm text-white"
-            >
-              Delete
-            </button>
+            <ActionButton
+              label="Delete"
+              loadingLabel="Deleting…"
+              loading={deleting}
+              variant="danger"
+              onClick={() => void handleDelete()}
+            />
           </div>
         }
       >
+        {deleteError ? <FormAlert message={deleteError} className="mb-3" /> : null}
         <p className="text-sm text-slate-600">Are you sure you want to delete this image?</p>
       </Modal>
     </AdminFormPanel>

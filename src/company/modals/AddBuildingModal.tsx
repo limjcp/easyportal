@@ -1,6 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { FaArrowRight, FaBuilding, FaQuestionCircle } from "react-icons/fa";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { FaBuilding, FaQuestionCircle } from "react-icons/fa";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
+import { useAsyncAction } from "../../shared/useAsyncAction";
+import { PORTAL_SUBDOMAIN_DOMAIN } from "../../shared/portalDomain";
 import { companyRepository } from "../data/companyRepository";
 import {
   AU_TERRITORIES,
@@ -50,7 +54,6 @@ export function AddBuildingModal({ open, onClose, onCreated, copyFrom }: AddBuil
   const [regionUk, setRegionUk] = useState("");
   const [regionAustralia, setRegionAustralia] = useState("");
   const [regionOther, setRegionOther] = useState("");
-  const [saving, setSaving] = useState(false);
   const [showSubdomainHelp, setShowSubdomainHelp] = useState(false);
 
   const regionMode = regionModeForCountry(country);
@@ -72,6 +75,29 @@ export function AddBuildingModal({ open, onClose, onCreated, copyFrom }: AddBuil
     }
   }, [regionMode, regionCanada, regionUsa, regionMexico, regionUk, regionAustralia, regionOther]);
 
+  const { run, loading, error, setError, clearError } = useAsyncAction(
+    useCallback(async () => {
+      return companyRepository.createBuilding({
+        subdomain: subdomain.trim(),
+        buildingName: buildingName.trim() || undefined,
+        corp,
+        corpNo: corpNo.trim() || undefined,
+        address: address.trim(),
+        city: city.trim(),
+        postalZip: postalZip.trim(),
+        country,
+        provinceState: provinceState.trim(),
+      });
+    }, [subdomain, buildingName, corp, corpNo, address, city, postalZip, country, provinceState]),
+    {
+      successMessage: "Property created.",
+      onSuccess: (created) => {
+        onCreated(created);
+        onClose();
+      },
+    }
+  );
+
   useEffect(() => {
     if (!open) return;
     setSubdomain("");
@@ -89,8 +115,8 @@ export function AddBuildingModal({ open, onClose, onCreated, copyFrom }: AddBuil
     setRegionUk("");
     setRegionAustralia("");
     setRegionOther("");
-    setSaving(false);
-  }, [open, copyFrom]);
+    clearError();
+  }, [open, copyFrom, clearError]);
 
   useEffect(() => {
     if (!subdomain.trim() || subdomain.trim().length < 2) {
@@ -106,40 +132,25 @@ export function AddBuildingModal({ open, onClose, onCreated, copyFrom }: AddBuil
     return () => clearTimeout(t);
   }, [subdomain]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!subdomain.trim()) {
-      alert("Sub-Domain is required.");
+      setError("Sub-Domain is required.");
       return;
     }
     if (subdomainStatus === "taken") {
-      alert("This sub-domain is not available. Please choose another.");
+      setError("This sub-domain is not available. Please choose another.");
       return;
     }
     if (!address.trim() || !city.trim() || !postalZip.trim() || !country) {
-      alert("Address, City, Postal / Zip, and Country are required.");
+      setError("Address, City, Postal / Zip, and Country are required.");
       return;
     }
     if (!provinceState.trim()) {
-      alert("Province / State is required.");
+      setError("Province / State is required.");
       return;
     }
-
-    setSaving(true);
-    const created = await companyRepository.createBuilding({
-      subdomain: subdomain.trim(),
-      buildingName: buildingName.trim() || undefined,
-      corp,
-      corpNo: corpNo.trim() || undefined,
-      address: address.trim(),
-      city: city.trim(),
-      postalZip: postalZip.trim(),
-      country,
-      provinceState: provinceState.trim(),
-    });
-    setSaving(false);
-    onCreated(created);
-    onClose();
+    void run();
   };
 
   return (
@@ -151,27 +162,20 @@ export function AddBuildingModal({ open, onClose, onCreated, copyFrom }: AddBuil
       size="lg"
       footer={
         <>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="rounded border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-          >
-            Cancel
-          </button>
-          <button
+          <ActionButton label="Cancel" variant="secondary" onClick={onClose} disabled={loading} />
+          <ActionButton
+            label="Continue"
             type="submit"
             form="add-building-form"
-            disabled={saving || subdomainStatus === "taken"}
-            className="inline-flex items-center rounded bg-[#337ab7] px-4 py-2 text-sm text-white hover:bg-[#286090] disabled:opacity-60"
-          >
-            {saving ? "Saving…" : "Continue"}
-            {!saving && <FaArrowRight className="ml-2" />}
-          </button>
+            loading={loading}
+            disabled={subdomainStatus === "taken"}
+            className="inline-flex items-center bg-[#337ab7] hover:bg-[#286090]"
+          />
         </>
       }
     >
       <form id="add-building-form" onSubmit={handleSubmit} className="mx-auto max-w-2xl">
+        {error ? <FormAlert message={error} className="mb-3" /> : null}
         <div className="overflow-hidden rounded-sm border border-slate-200">
           <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
             <h3 className="text-sm font-semibold text-slate-800">Property Details:</h3>
@@ -204,7 +208,7 @@ export function AddBuildingModal({ open, onClose, onCreated, copyFrom }: AddBuil
                   className={`${inputClass} max-w-xs flex-1`}
                   autoComplete="off"
                 />
-                <span className="text-sm text-slate-600">.easyportal.ca</span>
+                <span className="text-sm text-slate-600">.{PORTAL_SUBDOMAIN_DOMAIN}</span>
               </div>
               {subdomainStatus === "checking" && (
                 <p className="mt-1 text-xs text-slate-500">Checking availability…</p>

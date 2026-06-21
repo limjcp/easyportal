@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaBuilding, FaTimes, FaTrash } from "react-icons/fa";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { PurplePanel } from "../components/PurplePanel";
 import {
   RegionFields,
@@ -41,8 +44,71 @@ export function ManagementCompanyProfileModal({
   const [tel2, setTel2] = useState("");
   const [fax, setFax] = useState("");
   const [logoUrl, setLogoUrl] = useState<string | undefined>();
-  const [saving, setSaving] = useState(false);
   const [deleteLogoOpen, setDeleteLogoOpen] = useState(false);
+
+  const { run, loading: saving, error } = useAsyncAction(
+    useCallback(async () => {
+      const provinceState = getProvinceStateFromRegions({
+        country,
+        regionCanada,
+        regionUsa,
+        regionMexico,
+        regionUk,
+        regionAustralia,
+        regionOther,
+      });
+      return companyRepository.updateManagementCompanyProfile({
+        companyName,
+        address,
+        city,
+        postalZip,
+        country,
+        provinceState,
+        timezone,
+        companyEmail,
+        tel1,
+        tel2,
+        fax,
+      });
+    }, [
+      companyName,
+      address,
+      city,
+      postalZip,
+      country,
+      regionCanada,
+      regionUsa,
+      regionMexico,
+      regionUk,
+      regionAustralia,
+      regionOther,
+      timezone,
+      companyEmail,
+      tel1,
+      tel2,
+      fax,
+    ]),
+    {
+      successMessage: "Company profile saved.",
+      onSuccess: (updated) => {
+        onSaved?.(updated);
+        onClose();
+      },
+    }
+  );
+
+  const { run: deleteLogo, loading: deletingLogo } = useAsyncAction(
+    useCallback(async () => {
+      return companyRepository.deleteManagementCompanyLogo();
+    }, []),
+    {
+      successMessage: "Logo removed.",
+      onSuccess: (updated) => {
+        setLogoUrl(updated.logoUrl);
+        setDeleteLogoOpen(false);
+      },
+    }
+  );
 
   const loadProfile = async () => {
     setLoading(true);
@@ -79,43 +145,9 @@ export function ManagementCompanyProfileModal({
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const provinceState = getProvinceStateFromRegions({
-      country,
-      regionCanada,
-      regionUsa,
-      regionMexico,
-      regionUk,
-      regionAustralia,
-      regionOther,
-    });
-    setSaving(true);
-    try {
-      const updated = await companyRepository.updateManagementCompanyProfile({
-        companyName,
-        address,
-        city,
-        postalZip,
-        country,
-        provinceState,
-        timezone,
-        companyEmail,
-        tel1,
-        tel2,
-        fax,
-      });
-      onSaved?.(updated);
-      onClose();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteLogo = async () => {
-    const updated = await companyRepository.deleteManagementCompanyLogo();
-    setLogoUrl(updated.logoUrl);
-    setDeleteLogoOpen(false);
+    void run();
   };
 
   if (!open) return null;
@@ -148,6 +180,7 @@ export function ManagementCompanyProfileModal({
         ) : (
           <>
             <div className="max-h-[65vh] overflow-y-auto p-4">
+              {error ? <FormAlert message={error} className="mb-4" /> : null}
               <div className="grid gap-4 lg:grid-cols-12">
                 <div className="space-y-4 lg:col-span-7">
                   <PurplePanel title="Company Information">
@@ -265,20 +298,19 @@ export function ManagementCompanyProfileModal({
                             <div className="absolute left-0 top-full z-10 mt-1 w-48 rounded border border-slate-200 bg-white p-2 shadow-lg">
                               <p className="mb-2 text-xs text-slate-600">Delete this image?</p>
                               <div className="flex gap-2">
-                                <button
-                                  type="button"
-                                  onClick={handleDeleteLogo}
-                                  className="rounded bg-[#3476ef] px-2 py-1 text-xs text-white"
-                                >
-                                  Yes
-                                </button>
-                                <button
-                                  type="button"
+                                <ActionButton
+                                  label="Yes"
+                                  loading={deletingLogo}
+                                  onClick={() => void deleteLogo()}
+                                  className="px-2 py-1 text-xs"
+                                />
+                                <ActionButton
+                                  label="Cancel"
+                                  variant="secondary"
                                   onClick={() => setDeleteLogoOpen(false)}
-                                  className="rounded border border-slate-300 px-2 py-1 text-xs"
-                                >
-                                  Cancel
-                                </button>
+                                  disabled={deletingLogo}
+                                  className="px-2 py-1 text-xs"
+                                />
                               </div>
                             </div>
                           )}
@@ -357,20 +389,8 @@ export function ManagementCompanyProfileModal({
             </div>
 
             <div className="flex justify-end gap-2 border-t border-slate-200 px-4 py-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf] disabled:opacity-60"
-              >
-                {saving ? "Saving…" : "Save Changes"}
-              </button>
+              <ActionButton label="Cancel" variant="secondary" onClick={onClose} disabled={saving} />
+              <ActionButton label="Save Changes" type="submit" loading={saving} />
             </div>
           </>
         )}

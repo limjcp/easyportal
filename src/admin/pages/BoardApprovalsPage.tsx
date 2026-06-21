@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { FaCheck, FaTimes } from "react-icons/fa";
 import {
   OptionsDropdown,
@@ -44,11 +46,33 @@ export function BoardApprovalsPage({
   const [topicOpen, setTopicOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<BoardApproval | null>(null);
+  const pendingIdRef = useRef<string | null>(null);
+  const pendingCreateRef = useRef<Parameters<typeof adminRepository.createBoardApproval>[0] | null>(null);
 
   useEffect(() => {
     adminRepository.getBoardApprovals(route.tab === "archived").then(setItems);
     setPage(1);
   }, [route.tab, refreshKey]);
+
+  const { run: archiveApprovalRun, error: archiveError } = useAsyncAction(
+    useCallback(async () => {
+      const id = pendingIdRef.current;
+      if (!id) return;
+      await adminRepository.archiveBoardApproval(id);
+      onRefresh();
+    }, [onRefresh]),
+    { successMessage: "Board approval archived." }
+  );
+
+  const { run: createTopicRun } = useAsyncAction(
+    useCallback(async () => {
+      const input = pendingCreateRef.current;
+      if (!input) return;
+      await adminRepository.createBoardApproval(input);
+      onRefresh();
+    }, [onRefresh]),
+    { successMessage: "Board approval topic created." }
+  );
 
   const filtered = items.filter((item) => {
     if (statusFilter !== "all" && item.status !== (statusFilter as BoardApprovalVoteStatus)) {
@@ -91,6 +115,8 @@ export function BoardApprovalsPage({
           </div>
         }
       />
+
+      {archiveError ? <FormAlert message={archiveError} className="mb-3" /> : null}
 
       <AdminTabs
         tabs={[
@@ -245,8 +271,10 @@ export function BoardApprovalsPage({
                     ? [
                         {
                           label: "Archive",
-                          onClick: () =>
-                            adminRepository.archiveBoardApproval(row.id).then(onRefresh),
+                          onClick: () => {
+                            pendingIdRef.current = row.id;
+                            void archiveApprovalRun();
+                          },
                         },
                       ]
                     : []),
@@ -261,12 +289,12 @@ export function BoardApprovalsPage({
         open={topicOpen}
         onClose={() => setTopicOpen(false)}
         onSubmit={async (input) => {
-          await adminRepository.createBoardApproval(input);
-          onRefresh();
+          pendingCreateRef.current = input;
+          await createTopicRun();
         }}
       />
 
-      <BoardApprovalExportModal open={exportOpen} onClose={() => setExportOpen(false)} />
+      <BoardApprovalExportModal open={exportOpen} onClose={() => setExportOpen(false)} items={items} />
 
       <BoardApprovalDetailModal item={detailItem} onClose={() => setDetailItem(null)} />
     </>

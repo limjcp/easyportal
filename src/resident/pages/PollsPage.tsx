@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { residentRepo } from "../data/mockRepository";
 import type { AgmMeeting, Poll, PollAttachment, PollResponse } from "../data/types";
@@ -35,8 +38,13 @@ export function PollsPage() {
   const [agmMeeting, setAgmMeeting] = useState<AgmMeeting | null>(null);
   const [responses, setResponses] = useState<PollResponse[]>([]);
   const [selectedByQuestion, setSelectedByQuestion] = useState<Record<string, string>>({});
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const submitParamsRef = useRef<{ pollId: string; questionId: string; selectedOption: string }>({
+    pollId: "",
+    questionId: "",
+    selectedOption: "",
+  });
   const [submittingQuestionId, setSubmittingQuestionId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const activePoll = polls.find((poll) => poll.id === activePollId) ?? null;
   const responseByQuestion = Object.fromEntries(responses.map((response) => [response.questionId, response]));
@@ -62,8 +70,31 @@ export function PollsPage() {
     residentRepo.getPollAttachments(activePollId).then(setAttachments);
     void loadResponses(activePollId);
     setSelectedByQuestion({});
-    setError(null);
+    setValidationError(null);
   }, [activePollId, loadResponses]);
+
+  const { run: runSubmitAnswer, error: submitError } = useAsyncAction(
+    async () => {
+      const { pollId, questionId, selectedOption } = submitParamsRef.current;
+      await residentRepo.submitPollResponse({
+        pollId,
+        questionId,
+        selectedOption,
+      });
+      await loadResponses(pollId);
+      setSelectedByQuestion((prev) => {
+        const next = { ...prev };
+        delete next[questionId];
+        return next;
+      });
+    },
+    {
+      successMessage: "Answer submitted.",
+      errorMessage: "Unable to submit answer.",
+      onSuccess: () => setSubmittingQuestionId(null),
+      onError: () => setSubmittingQuestionId(null),
+    }
+  );
 
   useEffect(() => {
     if (!activePoll?.agmMeetingId) {
@@ -77,29 +108,20 @@ export function PollsPage() {
     if (!activePoll) return;
     const selectedOption = selectedByQuestion[questionId];
     if (!selectedOption) {
-      setError("Please select an answer.");
+      setValidationError("Please select an answer.");
       return;
     }
+    setValidationError(null);
     setSubmittingQuestionId(questionId);
-    setError(null);
-    try {
-      await residentRepo.submitPollResponse({
-        pollId: activePoll.id,
-        questionId,
-        selectedOption,
-      });
-      await loadResponses(activePoll.id);
-      setSelectedByQuestion((prev) => {
-        const next = { ...prev };
-        delete next[questionId];
-        return next;
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to submit answer.");
-    } finally {
-      setSubmittingQuestionId(null);
-    }
+    submitParamsRef.current = {
+      pollId: activePoll.id,
+      questionId,
+      selectedOption,
+    };
+    await runSubmitAnswer();
   };
+
+  const displayError = validationError ?? submitError;
 
   if (polls.length === 0) {
     return (
@@ -148,9 +170,7 @@ export function PollsPage() {
                 </p>
               </header>
 
-              {error && (
-                <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
-              )}
+              {displayError ? <FormAlert message={displayError} /> : null}
 
               {agmMeeting && (
                 <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-slate-700">
@@ -215,19 +235,14 @@ export function PollsPage() {
                                     <span className="text-sm text-slate-800">{option}</span>
                                   </label>
                                 ))}
-                                <button
-                                  type="button"
-                                  disabled={
-                                    submittingQuestionId === question.id ||
-                                    !selectedByQuestion[question.id]
-                                  }
+                                <ActionButton
+                                  label="Submit answer"
+                                  loadingLabel="Submitting…"
+                                  loading={submittingQuestionId === question.id}
+                                  disabled={!selectedByQuestion[question.id]}
+                                  className="mt-2"
                                   onClick={() => void handleSubmitAnswer(question.id)}
-                                  className="mt-2 rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-                                >
-                                  {submittingQuestionId === question.id
-                                    ? "Submitting..."
-                                    : "Submit answer"}
-                                </button>
+                                />
                               </div>
                             )}
                           </div>

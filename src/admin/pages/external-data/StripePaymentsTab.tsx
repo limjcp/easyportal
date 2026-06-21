@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
-import { FaCreditCard, FaPlus } from "react-icons/fa";
+import { useCallback, useEffect, useState } from "react";
+import { FaCreditCard } from "react-icons/fa";
 import { AdminSectionPanel } from "../../components/AdminSectionPanel";
+import { ActionButton } from "../../../shared/ActionButton";
+import { FormAlert } from "../../../shared/FormAlert";
+import { useAsyncAction } from "../../../shared/useAsyncAction";
 import { adminRepository } from "../../data/adminRepository";
 import { STRIPE_COUNTRIES, STRIPE_CURRENCIES } from "../../data/mock/stripeFormOptions";
 import type { BuildingExternalData } from "../../../resident/data/types";
@@ -13,7 +16,20 @@ export function StripePaymentsTab() {
   const [accountNumber, setAccountNumber] = useState("");
   const [routingNumber, setRoutingNumber] = useState("");
   const [currency, setCurrency] = useState("CAD");
-  const [submitting, setSubmitting] = useState(false);
+
+  const { run: submitStripe, loading: submitting, error } = useAsyncAction(
+    useCallback(async () => {
+      const updated = await adminRepository.createStripeAccount({
+        country,
+        accountNumber,
+        routingNumber,
+        currency,
+      });
+      setData(updated);
+      alert("Stripe account signup submitted (mock).");
+    }, [country, accountNumber, routingNumber, currency]),
+    { successMessage: "Stripe account signup submitted." }
+  );
 
   useEffect(() => {
     adminRepository.getBuildingExternalData().then((d) => {
@@ -28,21 +44,9 @@ export function StripePaymentsTab() {
     else if (country === "US") setCurrency("USD");
   }, [country]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitting(true);
-    try {
-      const updated = await adminRepository.createStripeAccount({
-        country,
-        accountNumber,
-        routingNumber,
-        currency,
-      });
-      setData(updated);
-      alert("Stripe account signup submitted (mock).");
-    } finally {
-      setSubmitting(false);
-    }
+    void submitStripe();
   };
 
   if (!data) return <p className="text-sm text-slate-500">Loading…</p>;
@@ -143,15 +147,14 @@ export function StripePaymentsTab() {
           </div>
         </AdminSectionPanel>
 
+        {error ? <FormAlert message={error} className="mt-4" /> : null}
         <div className="mt-6 text-center">
-          <button
+          <ActionButton
+            label="Sign up to accept credit cards now"
+            loadingLabel="Submitting…"
+            loading={submitting}
             type="submit"
-            disabled={submitting}
-            className="inline-flex items-center gap-2 rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf] disabled:opacity-60"
-          >
-            <FaPlus />
-            {submitting ? "Submitting…" : "Sign up to accept credit cards now"}
-          </button>
+          />
         </div>
       </form>
     </AdminSectionPanel>

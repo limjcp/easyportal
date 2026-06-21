@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaCalendarAlt } from "react-icons/fa";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { OptionsDropdown, StatusBadge } from "../components/AdminBadges";
 import { AdminEventCalendar } from "../components/AdminEventCalendar";
 import { AdminPanelTable, AdminTabs } from "../components/AdminPanelTable";
@@ -42,6 +44,8 @@ export function AdminEventsPage({ route, onNavigate, refreshKey, onRefresh }: Ad
   const [statusFilter, setStatusFilter] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
   const [detailEvent, setDetailEvent] = useState<CalendarEvent | null>(null);
+  const pendingEventIdRef = useRef<string | null>(null);
+  const pendingCreateRef = useRef<Parameters<typeof adminRepository.createEvent>[0] | null>(null);
 
   const calendarFilter = route.calendarFilter ?? "all";
   const adminOnly = calendarFilter === "admin-only";
@@ -56,6 +60,26 @@ export function AdminEventsPage({ route, onNavigate, refreshKey, onRefresh }: Ad
     }
     setPage(1);
   }, [route.tab, calendarFilter, refreshKey, adminOnly]);
+
+  const { run: deleteEventRun, error: deleteError } = useAsyncAction(
+    useCallback(async () => {
+      const id = pendingEventIdRef.current;
+      if (!id) return;
+      await adminRepository.deleteEvent(id);
+      onRefresh();
+    }, [onRefresh]),
+    { successMessage: "Event deleted." }
+  );
+
+  const { run: createEventRun } = useAsyncAction(
+    useCallback(async () => {
+      const event = pendingCreateRef.current;
+      if (!event) return;
+      await adminRepository.createEvent(event);
+      onRefresh();
+    }, [onRefresh]),
+    { successMessage: "Event created." }
+  );
 
   const filtered = useMemo(() => {
     return items.filter((item) => {
@@ -94,6 +118,8 @@ export function AdminEventsPage({ route, onNavigate, refreshKey, onRefresh }: Ad
           ) : undefined
         }
       />
+
+      {deleteError ? <FormAlert message={deleteError} className="mb-3" /> : null}
 
       <AdminTabs
         tabs={EVENT_TABS.map((t) => ({ id: t.id, label: t.label }))}
@@ -204,7 +230,10 @@ export function AdminEventsPage({ route, onNavigate, refreshKey, onRefresh }: Ad
                           { label: "View", onClick: () => setDetailEvent(row) },
                           {
                             label: "Delete",
-                            onClick: () => adminRepository.deleteEvent(row.id).then(onRefresh),
+                            onClick: () => {
+                              pendingEventIdRef.current = row.id;
+                              void deleteEventRun();
+                            },
                           },
                         ]}
                       />
@@ -262,7 +291,10 @@ export function AdminEventsPage({ route, onNavigate, refreshKey, onRefresh }: Ad
                           { label: "View", onClick: () => setDetailEvent(row) },
                           {
                             label: "Delete",
-                            onClick: () => adminRepository.deleteEvent(row.id).then(onRefresh),
+                            onClick: () => {
+                              pendingEventIdRef.current = row.id;
+                              void deleteEventRun();
+                            },
                           },
                         ]}
                       />
@@ -278,8 +310,8 @@ export function AdminEventsPage({ route, onNavigate, refreshKey, onRefresh }: Ad
         eventType={listEventType}
         onClose={() => setAddOpen(false)}
         onSubmit={async (event) => {
-          await adminRepository.createEvent(event);
-          onRefresh();
+          pendingCreateRef.current = event;
+          await createEventRun();
         }}
       />
 

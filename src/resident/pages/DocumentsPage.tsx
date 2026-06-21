@@ -1,47 +1,50 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FaDownload, FaSearch } from "react-icons/fa";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useResidentDocumentFolders, useResidentDocuments } from "../../shared/queries/residentListQueries";
 import { DataTable } from "../../shared/DataTable";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { residentRepo } from "../data/mockRepository";
-import type { DocumentFile, DocumentFolder } from "../data/types";
+import type { DocumentFile } from "../data/types";
 
-export function DocumentsPage() {
-  const [folders, setFolders] = useState<DocumentFolder[]>([]);
+export function DocumentsPage({ refreshKey = 0 }: { refreshKey?: number }) {
+  const { data: folders = [] } = useResidentDocumentFolders();
   const [folderId, setFolderId] = useState("");
-  const [documents, setDocuments] = useState<DocumentFile[]>([]);
-  const [search, setSearch] = useState("");
+  const { data: documents = [] } = useResidentDocuments(folderId);  const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(5);
   const [page, setPage] = useState(0);
+  const downloadDocRef = useRef<DocumentFile | null>(null);
 
-  useEffect(() => {
-    residentRepo.getDocumentFolders().then((list) => {
-      setFolders(list);
-      if (list.length > 0) {
-        setFolderId((current) => (list.some((f) => f.id === current) ? current : list[0].id));
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!folderId) {
-      setDocuments([]);
-      return;
-    }
-    residentRepo.getDocuments(folderId).then((docs) => {
-      setDocuments(docs);
-      setPage(0);
-    });
-  }, [folderId]);
-
-  const handleDownload = async (doc: DocumentFile) => {
-    try {
+  const { run: downloadDocument, error: downloadError } = useAsyncAction(
+    async () => {
+      const doc = downloadDocRef.current;
+      if (!doc) return;
       const url = await residentRepo.getDocumentDownloadUrl(doc.id);
       window.open(url, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Unable to download document.");
+    },
+    {
+      errorMessage: "Unable to download document.",
+      showSuccessToast: false,
     }
+  );
+
+  const handleDownload = (doc: DocumentFile) => {
+    downloadDocRef.current = doc;
+    void downloadDocument();
   };
 
+  void refreshKey;
+
+  useEffect(() => {
+    if (folders.length > 0) {
+      setFolderId((current) => (folders.some((f) => f.id === current) ? current : folders[0].id));
+    }
+  }, [folders]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [folderId, documents]);
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return documents.filter(
@@ -58,6 +61,7 @@ export function DocumentsPage() {
   return (
     <div className="rounded-sm bg-white/95 p-4 shadow-lg sm:p-6">
       <ModuleMessageBanner moduleId="documents" />
+      {downloadError ? <FormAlert message={downloadError} className="mb-4" /> : null}
       <h2 className="mb-4 text-lg font-semibold text-slate-700">Documents:/</h2>
       <div className="mb-4 flex flex-wrap items-center gap-4">
         <label className="flex items-center gap-2 text-sm text-slate-600">

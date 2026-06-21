@@ -1,6 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { StatusBadge } from "../../admin/components/AdminBadges";
 import { AdminPanelTable } from "../../admin/components/AdminPanelTable";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
+import {
+  useCompanyActivePoCountsByVendor,
+  useCompanyBuildings,
+  useCompanyVendors,
+} from "../../shared/queries/companyQueries";
+import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { companyRepository } from "../data/companyRepository";
 import { VendorFormModal } from "../modals/VendorFormModal";
 import type { CompanyBuilding, Vendor } from "../../resident/data/types";
@@ -11,9 +19,10 @@ type VendorsPageProps = {
 };
 
 export function VendorsPage({ onNavigate }: VendorsPageProps) {
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [buildings, setBuildings] = useState<CompanyBuilding[]>([]);
-  const [activePoCounts, setActivePoCounts] = useState<Record<string, number>>({});
+  const { invalidateCompany } = useInvalidatePortalQueries();
+  const { data: vendors = [], refetch: refetchVendors } = useCompanyVendors();
+  const { data: buildings = [] } = useCompanyBuildings();
+  const { data: activePoCounts = {}, refetch: refetchPoCounts } = useCompanyActivePoCountsByVendor();
   const [search, setSearch] = useState("");
   const [tradeFilter, setTradeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -23,16 +32,37 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
   const [page, setPage] = useState(1);
   const [formOpen, setFormOpen] = useState(false);
   const [editVendor, setEditVendor] = useState<Vendor | null>(null);
+  const pendingVendorRef = useRef<{ id: string; email: string } | null>(null);
+  const pendingDeactivateIdRef = useRef<string | null>(null);
 
-  const load = () => {
-    companyRepository.getVendors().then(setVendors);
-    companyRepository.getBuildings().then(setBuildings);
-    companyRepository.getActivePurchaseOrderCountsByVendor().then(setActivePoCounts);
-  };
+  const load = useCallback(() => {
+    invalidateCompany();
+    void refetchVendors();
+    void refetchPoCounts();
+  }, [invalidateCompany, refetchVendors, refetchPoCounts]);
 
-  useEffect(() => {
-    load();
-  }, []);
+  const { run: inviteVendor, loading: inviting, error: inviteError } = useAsyncAction(
+    useCallback(async () => {
+      const pending = pendingVendorRef.current;
+      if (!pending) return;
+      await companyRepository.inviteVendor(pending.id, pending.email);
+    }, []),
+    {
+      successMessage: "Invitation sent.",
+      onSuccess: load,
+    }
+  );
+
+  const { run: deactivateVendor, loading: deactivating, error: deactivateError } = useAsyncAction(
+    useCallback(async () => {
+      if (!pendingDeactivateIdRef.current) return;
+      await companyRepository.updateVendor(pendingDeactivateIdRef.current, { status: "inactive" });
+    }, []),
+    {
+      successMessage: "Vendor deactivated.",
+      onSuccess: load,
+    }
+  );
 
   const trades = Array.from(new Set(vendors.map((s) => s.tradeCategory)));
   const buildingById = useMemo(
@@ -95,13 +125,14 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
     return "Active";
   };
 
-  const handleInvite = async (s: Vendor) => {
+  const handleInvite = (s: Vendor) => {
     const email = s.email || prompt("Enter email to send invitation:");
     if (!email) return;
-    await companyRepository.inviteVendor(s.id, email);
-    alert(`Invitation sent to ${email}`);
-    load();
+    pendingVendorRef.current = { id: s.id, email };
+    void inviteVendor();
   };
+
+  const actionError = inviteError ?? deactivateError;
 
   return (
     <div>
@@ -124,6 +155,7 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
           + Add Vendor
         </button>
       </div>
+      {actionError ? <FormAlert message={actionError} className="mb-4" /> : null}
       {activeFilters.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
           {activeFilters.map((filter) => (
@@ -266,10 +298,11 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
                 {s.status !== "inactive" && (
                   <button
                     type="button"
-                    className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-600"
-                    onClick={async () => {
-                      await companyRepository.updateVendor(s.id, { status: "inactive" });
-                      load();
+                    className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-600 disabled:opacity-60"
+                    disabled={deactivating || inviting}
+                    onClick={() => {
+                      pendingDeactivateIdRef.current = s.id;
+                      void deactivateVendor();
                     }}
                   >
                     Deactivate

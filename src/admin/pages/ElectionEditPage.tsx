@@ -1,5 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal } from "../../shared/Modal";
+import { ConfirmModal } from "../../shared/ConfirmModal";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { AdminPanelHeader } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
 import { AdminPageActions } from "../components/AdminPageActions";
@@ -33,6 +37,7 @@ export function ElectionEditPage({ route, onNavigate }: ElectionEditPageProps) {
   const [applications, setApplications] = useState<BoardMemberApplication[]>([]);
   const [results, setResults] = useState<ElectionResults | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [confirmKind, setConfirmKind] = useState<"position" | "candidate" | null>(null);
   const [newPositionTitle, setNewPositionTitle] = useState("");
   const [newCandidate, setNewCandidate] = useState<{
     positionId: string;
@@ -65,13 +70,116 @@ export function ElectionEditPage({ route, onNavigate }: ElectionEditPageProps) {
     load();
   }, [load]);
 
+  const pendingUpdatesRef = useRef<Partial<BoardElection> | null>(null);
+  const pendingPositionIdRef = useRef<string | null>(null);
+  const pendingCandidateIdRef = useRef<string | null>(null);
+  const pendingImportRef = useRef<{ positionId: string; applicationId: string } | null>(null);
+  const pendingPositionTitleRef = useRef<{ id: string; title: string } | null>(null);
+
+  const { run: updateElection, error: updateError } = useAsyncAction(
+    useCallback(async () => {
+      const updates = pendingUpdatesRef.current;
+      if (!updates) return;
+      const updated = await adminRepository.updateBoardElection(route.id, updates);
+      if (updated) setElection(updated);
+    }, [route.id]),
+    { showSuccessToast: false, showErrorToast: false }
+  );
+
+  const { run: addPosition, loading: addingPosition, error: positionError } = useAsyncAction(
+    useCallback(async () => {
+      if (!newPositionTitle.trim()) return;
+      await adminRepository.addElectionPosition(route.id, { title: newPositionTitle.trim() });
+      setNewPositionTitle("");
+      await load();
+    }, [newPositionTitle, route.id, load]),
+    { successMessage: "Position added.", showErrorToast: false }
+  );
+
+  const { run: removePositionRun, loading: removingPosition } = useAsyncAction(
+    useCallback(async () => {
+      const id = pendingPositionIdRef.current;
+      if (!id) return;
+      await adminRepository.removeElectionPosition(id);
+      await load();
+      setConfirmKind(null);
+    }, [load]),
+    { successMessage: "Position removed.", showErrorToast: false }
+  );
+
+  const { run: addCandidateRun, error: candidateError } = useAsyncAction(
+    useCallback(async () => {
+      const positionId = pendingPositionIdRef.current;
+      if (!positionId) return;
+      const draft = newCandidate.positionId === positionId ? newCandidate : newCandidate;
+      if (!draft.name.trim() || !draft.unit.trim()) {
+        alert("Candidate name and unit are required.");
+        return;
+      }
+      await adminRepository.addElectionCandidate(positionId, {
+        name: draft.name.trim(),
+        unit: draft.unit.trim(),
+        bio: draft.bio.trim() || undefined,
+      });
+      setNewCandidate({ positionId: "", name: "", unit: "", bio: "" });
+      await load();
+    }, [newCandidate, load]),
+    { successMessage: "Candidate added.", showErrorToast: false }
+  );
+
+  const { run: importApplicationRun } = useAsyncAction(
+    useCallback(async () => {
+      const pending = pendingImportRef.current;
+      if (!pending) return;
+      const app = applications.find((a) => a.id === pending.applicationId);
+      if (!app) return;
+      await adminRepository.addElectionCandidate(pending.positionId, {
+        name: app.residentName,
+        unit: app.unit,
+        bio: app.statement.slice(0, 200),
+        applicationId: app.id,
+      });
+      await load();
+    }, [applications, load]),
+    { successMessage: "Candidate imported.", showErrorToast: false }
+  );
+
+  const { run: removeCandidateRun, loading: removingCandidate } = useAsyncAction(
+    useCallback(async () => {
+      const id = pendingCandidateIdRef.current;
+      if (!id) return;
+      await adminRepository.removeElectionCandidate(id);
+      await load();
+      setConfirmKind(null);
+    }, [load]),
+    { successMessage: "Candidate removed.", showErrorToast: false }
+  );
+
+  const { run: archiveElection, loading: archiving } = useAsyncAction(
+    useCallback(async () => {
+      await adminRepository.archiveBoardElection(route.id);
+      onNavigate({ page: "board-elections" });
+    }, [route.id, onNavigate]),
+    { successMessage: "Election archived." }
+  );
+
+  const { run: updatePositionTitleRun } = useAsyncAction(
+    useCallback(async () => {
+      const pending = pendingPositionTitleRef.current;
+      if (!pending) return;
+      await adminRepository.updateElectionPosition(pending.id, { title: pending.title });
+      await load();
+    }, [load]),
+    { showSuccessToast: false, showErrorToast: false }
+  );
+
   if (!election) {
     return <div className="py-8 text-center text-slate-500">Loading...</div>;
   }
 
-  const update = async (updates: Partial<BoardElection>) => {
-    const updated = await adminRepository.updateBoardElection(route.id, updates);
-    if (updated) setElection(updated);
+  const update = (updates: Partial<BoardElection>) => {
+    pendingUpdatesRef.current = updates;
+    void updateElection();
   };
 
   const toggleResidentType = (type: string) => {
@@ -81,54 +189,27 @@ export function ElectionEditPage({ route, onNavigate }: ElectionEditPageProps) {
     update({ residentTypes: types });
   };
 
-  const handleAddPosition = async () => {
-    if (!newPositionTitle.trim()) return;
-    await adminRepository.addElectionPosition(route.id, { title: newPositionTitle.trim() });
-    setNewPositionTitle("");
-    load();
+  const handleRemovePosition = (id: string) => {
+    pendingPositionIdRef.current = id;
+    setConfirmKind("position");
   };
 
-  const handleRemovePosition = async (id: string) => {
-    if (!confirm("Remove this position and all its candidates?")) return;
-    await adminRepository.removeElectionPosition(id);
-    load();
+  const handleAddCandidate = (positionId: string) => {
+    pendingPositionIdRef.current = positionId;
+    void addCandidateRun();
   };
 
-  const handleAddCandidate = async (positionId: string) => {
-    const draft = positionId === newCandidate.positionId ? newCandidate : newCandidate;
-    if (!draft.name.trim() || !draft.unit.trim()) {
-      alert("Candidate name and unit are required.");
-      return;
-    }
-    await adminRepository.addElectionCandidate(positionId, {
-      name: draft.name.trim(),
-      unit: draft.unit.trim(),
-      bio: draft.bio.trim() || undefined,
-    });
-    setNewCandidate({ positionId: "", name: "", unit: "", bio: "" });
-    load();
+  const handleImportApplication = (positionId: string, applicationId: string) => {
+    pendingImportRef.current = { positionId, applicationId };
+    void importApplicationRun();
   };
 
-  const handleImportApplication = async (
-    positionId: string,
-    applicationId: string
-  ) => {
-    const app = applications.find((a) => a.id === applicationId);
-    if (!app) return;
-    await adminRepository.addElectionCandidate(positionId, {
-      name: app.residentName,
-      unit: app.unit,
-      bio: app.statement.slice(0, 200),
-      applicationId: app.id,
-    });
-    load();
+  const handleRemoveCandidate = (id: string) => {
+    pendingCandidateIdRef.current = id;
+    setConfirmKind("candidate");
   };
 
-  const handleRemoveCandidate = async (id: string) => {
-    if (!confirm("Remove this candidate?")) return;
-    await adminRepository.removeElectionCandidate(id);
-    load();
-  };
+  const formError = updateError ?? positionError ?? candidateError;
 
   const importableApplications = applications.filter(
     (a) => a.status === "Approved" || a.status === "Under Review"
@@ -142,34 +223,28 @@ export function ElectionEditPage({ route, onNavigate }: ElectionEditPageProps) {
         primaryAction={
           <div className="flex flex-wrap gap-2">
             {election.status === "draft" && (
-              <button
-                type="button"
+              <ActionButton
+                label="Publish / Schedule"
+                variant="success"
+                className="bg-emerald-600 hover:bg-emerald-700"
                 onClick={() => update({ status: "scheduled" })}
-                className="rounded bg-emerald-600 px-3 py-1.5 text-sm text-white"
-              >
-                Publish / Schedule
-              </button>
+              />
             )}
             {(election.status === "active" || election.status === "scheduled") && (
-              <button
-                type="button"
+              <ActionButton
+                label="Close Early"
+                className="bg-amber-600 hover:bg-amber-700"
                 onClick={() => update({ status: "closed" })}
-                className="rounded bg-amber-600 px-3 py-1.5 text-sm text-white"
-              >
-                Close Early
-              </button>
+              />
             )}
             {election.status !== "archived" && (
-              <button
-                type="button"
-                onClick={async () => {
-                  await adminRepository.archiveBoardElection(route.id);
-                  onNavigate({ page: "board-elections" });
-                }}
-                className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-600"
-              >
-                Archive
-              </button>
+              <ActionButton
+                label="Archive"
+                variant="secondary"
+                loading={archiving}
+                loadingLabel="Archiving…"
+                onClick={() => void archiveElection()}
+              />
             )}
             <button
               type="button"
@@ -186,6 +261,7 @@ export function ElectionEditPage({ route, onNavigate }: ElectionEditPageProps) {
         <AdminPanelHeader title={`Edit Election: ${election.title}`} />
 
         <div className="space-y-8 p-4">
+          {formError ? <FormAlert message={formError} /> : null}
           <section>
             <h3 className="mb-3 font-semibold text-slate-700">Election Details</h3>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -276,9 +352,10 @@ export function ElectionEditPage({ route, onNavigate }: ElectionEditPageProps) {
                     <input
                       type="text"
                       value={pos.title}
-                      onChange={(e) =>
-                        adminRepository.updateElectionPosition(pos.id, { title: e.target.value }).then(load)
-                      }
+                      onChange={(e) => {
+                        pendingPositionTitleRef.current = { id: pos.id, title: e.target.value };
+                        void updatePositionTitleRun();
+                      }}
                       className="rounded border border-slate-300 px-2 py-1 text-sm font-medium"
                     />
                     <button
@@ -341,13 +418,10 @@ export function ElectionEditPage({ route, onNavigate }: ElectionEditPageProps) {
                       }
                       className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
                     />
-                    <button
-                      type="button"
+                    <ActionButton
+                      label="Add Candidate"
                       onClick={() => handleAddCandidate(pos.id)}
-                      className="rounded bg-[#3476ef] px-3 py-1 text-sm text-white"
-                    >
-                      Add Candidate
-                    </button>
+                    />
                   </div>
 
                   {importableApplications.length > 0 && (
@@ -380,13 +454,12 @@ export function ElectionEditPage({ route, onNavigate }: ElectionEditPageProps) {
                 placeholder="New position title (e.g. President)"
                 className="flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm"
               />
-              <button
-                type="button"
-                onClick={handleAddPosition}
-                className="rounded bg-[#3476ef] px-3 py-1.5 text-sm text-white"
-              >
-                Add Position
-              </button>
+              <ActionButton
+                label="Add Position"
+                loading={addingPosition}
+                loadingLabel="Adding…"
+                onClick={() => void addPosition()}
+              />
             </div>
           </section>
 
@@ -466,6 +539,34 @@ export function ElectionEditPage({ route, onNavigate }: ElectionEditPageProps) {
           </div>
         ))}
       </Modal>
+
+      <ConfirmModal
+        open={confirmKind === "position"}
+        onClose={() => {
+          if (removingPosition) return;
+          setConfirmKind(null);
+          pendingPositionIdRef.current = null;
+        }}
+        title="Remove Position"
+        message="Remove this position and all its candidates?"
+        variant="danger"
+        loading={removingPosition}
+        onConfirm={() => void removePositionRun()}
+      />
+
+      <ConfirmModal
+        open={confirmKind === "candidate"}
+        onClose={() => {
+          if (removingCandidate) return;
+          setConfirmKind(null);
+          pendingCandidateIdRef.current = null;
+        }}
+        title="Remove Candidate"
+        message="Remove this candidate?"
+        variant="danger"
+        loading={removingCandidate}
+        onConfirm={() => void removeCandidateRun()}
+      />
     </>
   );
 }

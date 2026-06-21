@@ -35,6 +35,9 @@ import type {
   Comment,
   IncidentReportComment,
   IncidentReportDetail,
+  CertificateFile,
+  CertificateHistoryEntry,
+  BoardApprovalComment,
 } from "../../resident/data/types";
 import {
   getActiveBuildingId,
@@ -46,11 +49,14 @@ import { mapDbError, nowIso, sb, todayIsoDate } from "./base";
 import { ensureDefaultDocumentFolders } from "./admin/documentFolders";
 import { ensureDefaultPortalModules } from "./admin/portalRepository";
 import { loadEntityComments, loadIncidentReportAttachments } from "./admin/shared";
+import * as companyReportOps from "./companyReportOperations";
+import type { CertificateSettingsData } from "./companyReportOperations";
 import { provisionUser } from "./provisionUser";
 import { createDefaultPermissionsForRole } from "../../company/data/mock/permissions";
 import { ensureCompanyRolePermissions, mapCompanyPermissionDbRows, mergePermissionRows } from "./portalModulePermissions";
 import { certificateDetailFromRow } from "../../company/data/mock/certificateDetails";
 import { boardApprovalDetailFromRow } from "../../company/data/mock/boardApprovalDetails";
+import { buildLobbyDisplayUrl } from "../../shared/portalDomain";
 
 function mapBuilding(row: Record<string, unknown>): CompanyBuilding {
   return {
@@ -153,7 +159,125 @@ async function ensureCompanyId(): Promise<string> {
   throw new Error("No active company context. Sign in as a company user first.");
 }
 
+const IMPLICIT_ALL_BUILDING_ROLES: CompanyRole[] = ["Company Owner", "Company Administrator"];
+
+function hasImplicitAllBuildings(role: CompanyRole, assignedCount: number): boolean {
+  return IMPLICIT_ALL_BUILDING_ROLES.includes(role) && assignedCount === 0;
+}
+
+export function requiresExplicitBuildingAssignments(role: CompanyRole): boolean {
+  return !IMPLICIT_ALL_BUILDING_ROLES.includes(role);
+}
+
+async function syncMemberBuildingAssignments(
+  membershipId: string,
+  buildingIds: string[],
+  role: CompanyRole
+): Promise<void> {
+  const { error: deleteError } = await sb()
+    .from("company_member_buildings")
+    .delete()
+    .eq("membership_id", membershipId);
+  mapDbError(deleteError);
+
+  if (hasImplicitAllBuildings(role, buildingIds.length)) {
+    return;
+  }
+
+  const uniqueIds = [...new Set(buildingIds.filter(Boolean))];
+  if (uniqueIds.length === 0) return;
+
+  const { error: insertError } = await sb().from("company_member_buildings").insert(
+    uniqueIds.map((buildingId) => ({
+      membership_id: membershipId,
+      building_id: buildingId,
+    }))
+  );
+  mapDbError(insertError);
+}
+
+export type CurrentCompanyMembership = {
+  membershipId: string;
+  role: CompanyRole;
+  assignedBuildingIds: string[];
+  hasImplicitAllBuildings: boolean;
+};
+
+async function getCurrentCompanyMembership(): Promise<CurrentCompanyMembership> {
+  const companyId = await ensureCompanyId();
+  const {
+    data: { user },
+  } = await sb().auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data: membership, error } = await sb()
+    .from("company_memberships")
+    .select("id, role")
+    .eq("profile_id", user.id)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  mapDbError(error);
+  if (!membership) throw new Error("Company membership not found.");
+
+  const { data: links, error: linksError } = await sb()
+    .from("company_member_buildings")
+    .select("building_id")
+    .eq("membership_id", membership.id);
+  mapDbError(linksError);
+
+  const assignedBuildingIds = (links ?? []).map((row) => row.building_id as string);
+  const role = membership.role as CompanyRole;
+
+  return {
+    membershipId: membership.id as string,
+    role,
+    assignedBuildingIds,
+    hasImplicitAllBuildings: hasImplicitAllBuildings(role, assignedBuildingIds.length),
+  };
+}
+
+async function assignBuildingToCurrentMembership(buildingId: string): Promise<void> {
+  const membership = await getCurrentCompanyMembership();
+  if (membership.hasImplicitAllBuildings) return;
+
+  const { error } = await sb().from("company_member_buildings").upsert(
+    {
+      membership_id: membership.membershipId,
+      building_id: buildingId,
+    },
+    { onConflict: "membership_id,building_id" }
+  );
+  mapDbError(error);
+}
+
 export const supabaseCompanyRepository = {
+  async assertBuildingAccess(buildingId: string): Promise<void> {
+    const { data, error } = await sb()
+      .from("buildings")
+      .select("id")
+      .eq("id", buildingId)
+      .maybeSingle();
+    mapDbError(error);
+    if (!data) {
+      throw new Error("You do not have access to this building.");
+    }
+  },
+
+  async resolveAccessibleBuildingIds(): Promise<string[] | null> {
+    try {
+      const membership = await getCurrentCompanyMembership();
+      if (membership.hasImplicitAllBuildings) return null;
+      return membership.assignedBuildingIds;
+    } catch {
+      const buildings = await this.getBuildings();
+      return buildings.map((b) => b.id);
+    }
+  },
+
+  async getCurrentCompanyMembership(): Promise<CurrentCompanyMembership> {
+    return getCurrentCompanyMembership();
+  },
+
   async getCompanyUser(): Promise<CompanyUser> {
     const {
       data: { user },
@@ -263,8 +387,20 @@ export const supabaseCompanyRepository = {
   },
 
   async getBuildings(): Promise<CompanyBuilding[]> {
+    return this.getBuildingsByStatus("active");
+  },
+
+  async getArchivedBuildings(): Promise<CompanyBuilding[]> {
+    return this.getBuildingsByStatus("inactive");
+  },
+
+  async getBuildingsByStatus(status: "active" | "inactive"): Promise<CompanyBuilding[]> {
     const companyId = await ensureCompanyId();
-    const { data, error } = await sb().from("buildings").select("*").eq("company_id", companyId);
+    const { data, error } = await sb()
+      .from("buildings")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("status", status);
     mapDbError(error);
     const buildings = (data ?? []).map((row) => mapBuilding(row as Record<string, unknown>));
     const summaries = await loadBuildingAdminSummaries(buildings.map((b) => b.id));
@@ -323,12 +459,37 @@ export const supabaseCompanyRepository = {
     mapDbError(error);
     const buildingId = data!.id as string;
     await sb().from("portal_settings").insert({ building_id: buildingId });
-    await sb().from("public_portal_settings").insert({ building_id: buildingId, subdomain: input.subdomain });
+    await sb().from("public_portal_settings").insert({
+      building_id: buildingId,
+      subdomain: input.subdomain,
+      lobby_display_url: buildLobbyDisplayUrl(input.subdomain),
+    });
     await sb().from("portal_tile_settings").insert({ building_id: buildingId });
     await ensureDefaultPortalModules(buildingId);
     await ensureDefaultDocumentFolders(buildingId);
+    await assignBuildingToCurrentMembership(buildingId);
     setActiveBuildingId(buildingId);
     return mapBuilding(data as Record<string, unknown>);
+  },
+
+  async archiveBuilding(id: string): Promise<void> {
+    const companyId = await ensureCompanyId();
+    const { error } = await sb()
+      .from("buildings")
+      .update({ status: "inactive" })
+      .eq("id", id)
+      .eq("company_id", companyId);
+    mapDbError(error);
+  },
+
+  async restoreBuilding(id: string): Promise<void> {
+    const companyId = await ensureCompanyId();
+    const { error } = await sb()
+      .from("buildings")
+      .update({ status: "active" })
+      .eq("id", id)
+      .eq("company_id", companyId);
+    mapDbError(error);
   },
 
   async getEmployees(): Promise<CompanyEmployee[]> {
@@ -398,22 +559,70 @@ export const supabaseCompanyRepository = {
   },
 
   async updateEmployee(id: string, input: Partial<CreateEmployeeInput>): Promise<CompanyEmployee | undefined> {
-    const updates: Record<string, unknown> = {};
-    if (input.role) updates.role = input.role;
-    const { data, error } = await sb()
+    const companyId = await ensureCompanyId();
+    const { data: membership, error: membershipError } = await sb()
       .from("company_memberships")
-      .update(updates)
+      .select("id, profile_id, role")
       .eq("id", id)
-      .select("id, role")
+      .eq("company_id", companyId)
       .maybeSingle();
-    mapDbError(error);
-    if (!data) return undefined;
+    mapDbError(membershipError);
+    if (!membership) return undefined;
+
+    const nextRole = (input.role ?? membership.role) as CompanyRole;
+
+    if (input.role) {
+      const { error: roleError } = await sb()
+        .from("company_memberships")
+        .update({ role: input.role })
+        .eq("id", id);
+      mapDbError(roleError);
+    }
+
+    if (input.firstName !== undefined || input.lastName !== undefined || input.email !== undefined) {
+      const firstName = input.firstName?.trim();
+      const lastName = input.lastName?.trim();
+      const email = input.email?.trim();
+      const profileUpdates: Record<string, unknown> = {};
+      if (firstName) profileUpdates.first_name = firstName;
+      if (lastName) profileUpdates.last_name = lastName;
+      if (email) profileUpdates.email = email;
+      if (firstName && lastName) {
+        profileUpdates.display_name = `${firstName} ${lastName}`;
+      }
+      if (Object.keys(profileUpdates).length > 0) {
+        const { error: profileError } = await sb()
+          .from("profiles")
+          .update(profileUpdates)
+          .eq("id", membership.profile_id);
+        mapDbError(profileError);
+      }
+    }
+
+    if (input.assignedBuildingIds !== undefined) {
+      await syncMemberBuildingAssignments(id, input.assignedBuildingIds, nextRole);
+    }
+
     const employees = await this.getEmployees();
     return employees.find((e) => e.id === id);
   },
 
   async emailEmployeeLoginDetails(_employeeId: string) {
     return { ok: true, message: "Login invite queued." };
+  },
+
+  async archiveEmployee(membershipId: string): Promise<void> {
+    const companyId = await ensureCompanyId();
+    const { data, error } = await sb()
+      .from("company_memberships")
+      .select("id")
+      .eq("id", membershipId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    mapDbError(error);
+    if (!data) throw new Error("Employee not found.");
+    const { error: deleteError } = await sb().from("company_memberships").delete().eq("id", membershipId);
+    mapDbError(deleteError);
   },
 
   async getRoleNameOverrides(): Promise<RoleNameOverride[]> {
@@ -945,6 +1154,38 @@ export const supabaseCompanyRepository = {
   }): Promise<void> {
     /* no-op until master layout persisted */
   },
+
+  addIncidentReportComment: companyReportOps.addIncidentReportComment,
+  addIncidentReportAttachment: companyReportOps.addIncidentReportAttachment,
+  archiveIncidentReport: companyReportOps.archiveIncidentReport,
+  markIncidentReportUnread: companyReportOps.markIncidentReportUnread,
+  reopenIncidentReport: companyReportOps.reopenIncidentReport,
+
+  archiveBoardApproval: companyReportOps.archiveBoardApproval,
+  markBoardApprovalUnread: companyReportOps.markBoardApprovalUnread,
+  getBoardApprovalAttachmentUrl: companyReportOps.getBoardApprovalAttachmentUrl,
+  addBoardApprovalComment: companyReportOps.addBoardApprovalComment,
+  sendBoardApprovalVoteReminders: companyReportOps.sendBoardApprovalVoteReminders,
+  bulkArchiveIncidentReports: companyReportOps.bulkArchiveIncidentReports,
+
+  archiveStatusCertificate: companyReportOps.archiveStatusCertificate,
+  markStatusCertificateUnread: companyReportOps.markStatusCertificateUnread,
+  uploadCertificateFile: companyReportOps.uploadCertificateFile,
+  deleteCertificateFile: companyReportOps.deleteCertificateFile,
+  getCertificateFileUrl: companyReportOps.getCertificateFileUrl,
+  addCertificateHistoryEntry: companyReportOps.addCertificateHistoryEntry,
+  refundAndArchiveCertificate: companyReportOps.refundAndArchiveCertificate,
+  resendCertificateToUser: companyReportOps.resendCertificateToUser,
+
+  getCertificateSettings(buildingId: string): Promise<CertificateSettingsData> {
+    return companyReportOps.getCertificateSettings(buildingId);
+  },
+  saveCertificateSettings(
+    buildingId: string,
+    settings: CertificateSettingsData
+  ): Promise<CertificateSettingsData> {
+    return companyReportOps.saveCertificateSettings(buildingId, settings);
+  },
 };
 
 function mapPurchaseOrder(row: Record<string, unknown>): PurchaseOrder {
@@ -1107,6 +1348,32 @@ async function loadCertificateDetail(id: string): Promise<CertificateDetail | un
   const building = await getBuildingForCompany(data.building_id as string, companyId);
   if (!building) return undefined;
 
+  const [{ data: files }, { data: history }] = await Promise.all([
+    sb().from("certificate_files").select("*").eq("certificate_id", id),
+    sb()
+      .from("certificate_history")
+      .select("*")
+      .eq("certificate_id", id)
+      .order("event_date", { ascending: true }),
+  ]);
+
+  const mapFile = (f: Record<string, unknown>): CertificateFile => ({
+    id: f.id as string,
+    label: f.label as string,
+    fileName: f.file_name as string,
+    size: f.size_label as string,
+    uploadedDate: String(f.uploaded_at).slice(0, 10),
+    kind: f.kind as CertificateFile["kind"],
+  });
+
+  const allFiles = (files ?? []).map((f) => mapFile(f as Record<string, unknown>));
+  const historyEntries: CertificateHistoryEntry[] = (history ?? []).map((h) => ({
+    date: String(h.event_date),
+    user: h.actor_name as string,
+    action: h.action as string,
+  }));
+
+  const detailJson = (data.detail as Record<string, unknown>) ?? {};
   const row: MasterReportRow = {
     id: data.id as string,
     reportType: "certificates",
@@ -1123,7 +1390,51 @@ async function loadCertificateDetail(id: string): Promise<CertificateDetail | un
     dueDate: data.date_due ? String(data.date_due) : undefined,
     closingDate: data.closing_date ? String(data.closing_date) : undefined,
   };
-  return certificateDetailFromRow(row);
+  const base = certificateDetailFromRow(row);
+  const includedFiles = allFiles.filter(
+    (f) => !(files ?? []).find((x) => x.id === f.id && x.excluded)
+  );
+  const excludedFiles = allFiles.filter((f) =>
+    (files ?? []).some((x) => x.id === f.id && x.excluded)
+  );
+
+  return {
+    ...base,
+    id: data.id as string,
+    requestNumber: data.request_number as string,
+    unit: data.unit as string,
+    dateCreated: String(data.created_at).slice(0, 10),
+    deliveryType: data.delivery_type as string,
+    dateDue: data.date_due ? String(data.date_due) : "—",
+    closingDate: data.closing_date ? String(data.closing_date) : "",
+    buildingName: (building.name as string) ?? base.buildingName,
+    buildingAddress: (building.address as string) ?? base.buildingAddress,
+    buildingCityLine: [building.city, building.province, building.postal_zip].filter(Boolean).join(", "),
+    requestedByName: data.requested_by_name as string,
+    files: includedFiles.length ? includedFiles : base.files,
+    excludedFiles: excludedFiles.length ? excludedFiles : base.excludedFiles,
+    history: historyEntries.length ? historyEntries : base.history,
+    archived: Boolean(data.archived),
+    unread: Boolean(data.unread),
+    ownersName: (detailJson.ownersName as string) ?? base.ownersName,
+    purchasersName: (detailJson.purchasersName as string) ?? base.purchasersName,
+    reasonForRequest: (detailJson.reasonForRequest as string) ?? base.reasonForRequest,
+    solicitorName: (detailJson.solicitorName as string) ?? base.solicitorName,
+    solicitorPhone: (detailJson.solicitorPhone as string) ?? base.solicitorPhone,
+    solicitorFax: (detailJson.solicitorFax as string) ?? base.solicitorFax,
+    parkingSlots: (detailJson.parkingSlots as [string, string]) ?? base.parkingSlots,
+    lockerSlots: (detailJson.lockerSlots as [string, string]) ?? base.lockerSlots,
+    sellerRetainsSeparatelyDeeded:
+      (detailJson.sellerRetainsSeparatelyDeeded as boolean) ?? base.sellerRetainsSeparatelyDeeded,
+  };
+}
+
+function mapCommentToBoardApproval(comment: Comment): BoardApprovalComment {
+  return {
+    dateTime: new Date(comment.createdAt).toLocaleString(),
+    author: comment.author,
+    message: comment.text,
+  };
 }
 
 async function loadBoardApprovalDetail(id: string): Promise<BoardApprovalDetail | undefined> {
@@ -1135,10 +1446,11 @@ async function loadBoardApprovalDetail(id: string): Promise<BoardApprovalDetail 
   const building = await getBuildingForCompany(data.building_id as string, companyId);
   if (!building) return undefined;
 
-  const [{ data: voteRows, error: voteError }, { data: attachmentRows, error: attachmentError }] =
+  const [{ data: voteRows, error: voteError }, { data: attachmentRows, error: attachmentError }, comments] =
     await Promise.all([
       sb().from("board_approval_votes").select("*").eq("approval_id", id).order("vote_date", { ascending: true }),
       sb().from("board_approval_attachments").select("*").eq("approval_id", id),
+      loadEntityComments("board_approval", id),
     ]);
   mapDbError(voteError);
   mapDbError(attachmentError);
@@ -1173,6 +1485,11 @@ async function loadBoardApprovalDetail(id: string): Promise<BoardApprovalDetail 
     label: attachment.label as string,
     fileName: attachment.file_name as string,
   }));
+  const adminComments = comments.adminComments.map(mapCommentToBoardApproval);
+  const publicComments = comments.publicComments.map(mapCommentToBoardApproval);
+  detail.comments = [...adminComments, ...publicComments];
+  detail.archived = Boolean(data.archived);
+  detail.unread = Boolean(data.unread);
   return detail;
 }
 

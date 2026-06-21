@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaFile, FaFolderOpen, FaTrash } from "react-icons/fa";
 import { Modal } from "../../../shared/Modal";
+import { ActionButton } from "../../../shared/ActionButton";
 import { FileUploadZone } from "../../../shared/FileUploadZone";
+import { FormAlert } from "../../../shared/FormAlert";
+import { useAsyncAction } from "../../../shared/useAsyncAction";
 import { adminRepository } from "../../data/adminRepository";
 import type { PublicPortalDocument } from "../../../resident/data/types";
 import { PortalSettingsAlert } from "./PortalSettingsAlert";
@@ -17,16 +20,19 @@ export function PublicDocumentsTab() {
     load();
   }, []);
 
-  const handleUpload = async () => {
-    await adminRepository.createPublicPortalDocument({
-      title: title || "Uploaded Document",
-      filename: "public_document.pdf",
-      uploadedAt: new Date().toLocaleDateString(),
-    });
-    setTitle("");
-    setUploadOpen(false);
-    load();
-  };
+  const { run: handleUpload, loading: uploading, error } = useAsyncAction(
+    useCallback(async () => {
+      await adminRepository.createPublicPortalDocument({
+        title: title || "Uploaded Document",
+        filename: "public_document.pdf",
+        uploadedAt: new Date().toLocaleDateString(),
+      });
+      setTitle("");
+      setUploadOpen(false);
+      load();
+    }, [title]),
+    { successMessage: "Document uploaded." }
+  );
 
   return (
     <div className="space-y-4">
@@ -99,12 +105,16 @@ export function PublicDocumentsTab() {
             <button type="button" onClick={() => setUploadOpen(false)} className="rounded border px-4 py-2 text-sm">
               Cancel
             </button>
-            <button type="button" onClick={handleUpload} className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white">
-              Upload
-            </button>
+            <ActionButton
+              label="Upload"
+              loadingLabel="Uploading…"
+              loading={uploading}
+              onClick={() => void handleUpload()}
+            />
           </div>
         }
       >
+        {error ? <FormAlert message={error} className="mb-3" /> : null}
         <label className="block text-sm">
           <span className="font-medium">Title</span>
           <input

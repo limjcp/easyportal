@@ -21,6 +21,7 @@ import {
   updateLastLogin,
 } from "./supabaseAuth";
 import { ensureActiveBuildingForUser, setActiveBuildingId, setActiveCompanyId } from "../data/supabase/buildingContext";
+import { clearAllQueries, invalidateAuthQueries, invalidateCompanyQueries } from "../shared/queryInvalidation";
 
 type Profile = Awaited<ReturnType<typeof fetchProfile>>;
 
@@ -117,6 +118,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setActivePortal((prev) => prev ?? access.defaultPortal);
       void updateLastLogin(currentSession.user.id);
+      invalidateAuthQueries();
+      if (access.companyId) {
+        invalidateCompanyQueries(currentSession.user.id, access.companyId);
+      }
       if (showLoading) setLoading(false);
       setInitializing(false);
       hasInitialized.current = true;
@@ -145,6 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
+    clearAllQueries();
     setSession(null);
     setProfile(null);
     setPortalAccess(null);

@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaCoins } from "react-icons/fa";
 import { AdminFormPanel } from "../../components/AdminFormPanel";
 import { adminRepository } from "../../data/adminRepository";
 import type { BuildingTaxSettings } from "../../../resident/data/types";
+import { ActionButton } from "../../../shared/ActionButton";
+import { FormAlert } from "../../../shared/FormAlert";
+import { useAsyncAction } from "../../../shared/useAsyncAction";
 
 export function TaxTab() {
   const [settings, setSettings] = useState<BuildingTaxSettings | null>(null);
@@ -11,6 +14,15 @@ export function TaxTab() {
   useEffect(() => {
     adminRepository.getBuildingTaxSettings().then(setSettings);
   }, []);
+
+  const { run: handleSave, loading: saving, error } = useAsyncAction(
+    useCallback(async () => {
+      if (!settings) return;
+      await adminRepository.updateBuildingTaxSettings(settings);
+      setSaved(true);
+    }, [settings]),
+    { successMessage: "Tax settings saved." }
+  );
 
   if (!settings) return <div className="py-8 text-center text-slate-500">Loading...</div>;
 
@@ -30,11 +42,6 @@ export function TaxTab() {
       serviceRequestsTaxRate: checked ? settings.masterTaxRate : null,
     });
     setSaved(false);
-  };
-
-  const handleSave = async () => {
-    await adminRepository.updateBuildingTaxSettings(settings);
-    setSaved(true);
   };
 
   return (
@@ -108,11 +115,17 @@ export function TaxTab() {
         </div>
       </AdminFormPanel>
 
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={handleSave} className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white">
-          Save Settings
-        </button>
-        {saved && <span className="text-sm text-green-600">Saved successfully.</span>}
+      <div className="space-y-3">
+        {error ? <FormAlert message={error} /> : null}
+        <div className="flex items-center gap-3">
+          <ActionButton
+            label="Save Settings"
+            loadingLabel="Saving…"
+            loading={saving}
+            onClick={() => void handleSave()}
+          />
+          {saved && !saving ? <span className="text-sm text-green-600">Saved successfully.</span> : null}
+        </div>
       </div>
     </div>
   );

@@ -244,6 +244,8 @@ export const seedUnitsUsersUnitDetails: UnitsUsersUnitDetail[] = [
     visitorsToUnit: 0,
     incidentReportsByUsers: 0,
     incidentReportsInvolvingUnit: 0,
+    incidentReportIdsByUsers: [],
+    incidentReportIdsInvolvingUnit: [],
     occupants: [
       {
         userId: "uu-current-1a",
@@ -283,6 +285,8 @@ export const seedUnitsUsersUnitDetails: UnitsUsersUnitDetail[] = [
     visitorsToUnit: 0,
     incidentReportsByUsers: 0,
     incidentReportsInvolvingUnit: 0,
+    incidentReportIdsByUsers: [],
+    incidentReportIdsInvolvingUnit: [],
     occupants: [
       {
         userId: "uu-current-tenant-1",

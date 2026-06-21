@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { AdminPageActions } from "../components/AdminPageActions";
 import { AdminPanelHeader } from "../components/AdminPanelTable";
 import { StatusBadge } from "../components/AdminBadges";
@@ -26,23 +29,26 @@ function AddAgmModal({ open, onClose, onCreate }: AddAgmModalProps) {
   const [location, setLocation] = useState("");
   const [notes, setNotes] = useState("");
 
-  const submit = async () => {
-    if (!title.trim() || !scheduledDate || !location.trim()) {
-      alert("Title, date, and location are required.");
-      return;
-    }
-    await onCreate({
-      title: title.trim(),
-      scheduledDate,
-      location: location.trim(),
-      notes: notes.trim() || undefined,
-    });
-    setTitle("");
-    setScheduledDate("");
-    setLocation("");
-    setNotes("");
-    onClose();
-  };
+  const { run: submit, loading, error } = useAsyncAction(
+    useCallback(async () => {
+      if (!title.trim() || !scheduledDate || !location.trim()) {
+        alert("Title, date, and location are required.");
+        return;
+      }
+      await onCreate({
+        title: title.trim(),
+        scheduledDate,
+        location: location.trim(),
+        notes: notes.trim() || undefined,
+      });
+      setTitle("");
+      setScheduledDate("");
+      setLocation("");
+      setNotes("");
+      onClose();
+    }, [title, scheduledDate, location, notes, onCreate, onClose]),
+    { successMessage: "AGM meeting created.", showErrorToast: false }
+  );
 
   return (
     <Modal
@@ -59,16 +65,11 @@ function AddAgmModal({ open, onClose, onCreate }: AddAgmModalProps) {
           >
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={() => void submit()}
-            className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white"
-          >
-            Create
-          </button>
+          <ActionButton label="Create" loadingLabel="Creating…" loading={loading} onClick={() => void submit()} />
         </>
       }
     >
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <div className="space-y-3">
         <label className="block text-sm font-medium text-slate-700">
           AGM Title
@@ -114,19 +115,53 @@ function AddAgmModal({ open, onClose, onCreate }: AddAgmModalProps) {
 export function AgmMeetingsPage({ route, onNavigate, refreshKey, onRefresh }: AgmMeetingsPageProps) {
   const [items, setItems] = useState<AgmMeeting[]>([]);
   const [addOpen, setAddOpen] = useState(false);
+  const pendingMeetingIdRef = useRef<string | null>(null);
+  const pendingCreateRef = useRef<{ title: string; scheduledDate: string; location: string; notes?: string } | null>(null);
 
   useEffect(() => {
     adminRepository.getAgmMeetings().then(setItems);
   }, [refreshKey]);
 
-  const startMeeting = async (meetingId: string) => {
-    await adminRepository.startAgmMeeting(meetingId);
-    onRefresh();
+  const { run: startMeetingRun, error: startError } = useAsyncAction(
+    useCallback(async () => {
+      const meetingId = pendingMeetingIdRef.current;
+      if (!meetingId) return;
+      await adminRepository.startAgmMeeting(meetingId);
+      onRefresh();
+    }, [onRefresh]),
+    { successMessage: "AGM started." }
+  );
+
+  const { run: endMeetingRun, error: endError } = useAsyncAction(
+    useCallback(async () => {
+      const meetingId = pendingMeetingIdRef.current;
+      if (!meetingId) return;
+      await adminRepository.endAgmMeeting(meetingId);
+      onRefresh();
+    }, [onRefresh]),
+    { successMessage: "AGM ended." }
+  );
+
+  const { run: createMeetingRun } = useAsyncAction(
+    useCallback(async () => {
+      const input = pendingCreateRef.current;
+      if (!input) return;
+      await adminRepository.createAgmMeeting(input);
+      onRefresh();
+    }, [onRefresh]),
+    { showSuccessToast: false }
+  );
+
+  const actionError = startError ?? endError;
+
+  const startMeeting = (meetingId: string) => {
+    pendingMeetingIdRef.current = meetingId;
+    void startMeetingRun();
   };
 
-  const endMeeting = async (meetingId: string) => {
-    await adminRepository.endAgmMeeting(meetingId);
-    onRefresh();
+  const endMeeting = (meetingId: string) => {
+    pendingMeetingIdRef.current = meetingId;
+    void endMeetingRun();
   };
 
   return (
@@ -144,6 +179,8 @@ export function AgmMeetingsPage({ route, onNavigate, refreshKey, onRefresh }: Ag
           </button>
         }
       />
+
+      {actionError ? <FormAlert message={actionError} className="mb-3" /> : null}
 
       <div className="overflow-hidden rounded-sm border border-slate-300 bg-white shadow-sm">
         <AdminPanelHeader title="AGM Meetings" />
@@ -170,22 +207,20 @@ export function AgmMeetingsPage({ route, onNavigate, refreshKey, onRefresh }: Ag
                 </div>
                 <div className="flex gap-2">
                   {meeting.status !== "active" && meeting.status !== "ended" && (
-                    <button
-                      type="button"
-                      onClick={() => void startMeeting(meeting.id)}
-                      className="rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white"
-                    >
-                      Start AGM
-                    </button>
+                    <ActionButton
+                      label="Start AGM"
+                      variant="success"
+                      className="px-3 py-1.5 text-xs"
+                      onClick={() => startMeeting(meeting.id)}
+                    />
                   )}
                   {meeting.status === "active" && (
-                    <button
-                      type="button"
-                      onClick={() => void endMeeting(meeting.id)}
-                      className="rounded border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700"
-                    >
-                      End AGM
-                    </button>
+                    <ActionButton
+                      label="End AGM"
+                      variant="secondary"
+                      className="px-3 py-1.5 text-xs"
+                      onClick={() => endMeeting(meeting.id)}
+                    />
                   )}
                 </div>
               </div>
@@ -198,8 +233,8 @@ export function AgmMeetingsPage({ route, onNavigate, refreshKey, onRefresh }: Ag
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onCreate={async (input) => {
-          await adminRepository.createAgmMeeting(input);
-          onRefresh();
+          pendingCreateRef.current = input;
+          await createMeetingRun();
         }}
       />
     </>

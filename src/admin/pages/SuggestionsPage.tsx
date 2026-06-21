@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { AdminPanelTable } from "../components/AdminPanelTable";
 import { UnreadBadge } from "../components/AdminBadges";
 import { adminRepository } from "../data/adminRepository";
+import { useAdminSuggestions } from "../../shared/queries/adminListQueries";
+import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { AddSuggestionModal } from "../modals/AddSuggestionModal";
 import { AdminPageActions } from "../components/AdminPageActions";
 import type { AdminRoute } from "../navigation";
@@ -15,16 +17,20 @@ type SuggestionsPageProps = {
 };
 
 export function SuggestionsPage({ route, onNavigate, refreshKey, onRefresh }: SuggestionsPageProps) {
-  const [items, setItems] = useState<AdminSuggestion[]>([]);
+  const { invalidateBuilding } = useInvalidatePortalQueries();
+  const { data: items = [] } = useAdminSuggestions();
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
   const [visibilityFilter, setVisibilityFilter] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
 
-  useEffect(() => {
-    adminRepository.getSuggestions().then(setItems);
-  }, [refreshKey]);
+  void refreshKey;
+
+  const handleRefresh = () => {
+    invalidateBuilding();
+    onRefresh();
+  };
 
   const filtered =
     visibilityFilter === "all"
@@ -112,7 +118,7 @@ export function SuggestionsPage({ route, onNavigate, refreshKey, onRefresh }: Su
         onClose={() => setAddOpen(false)}
         onSubmit={async (input) => {
           await adminRepository.createSuggestion(input);
-          onRefresh();
+          handleRefresh();
         }}
       />
     </>

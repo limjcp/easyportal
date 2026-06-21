@@ -12,6 +12,7 @@ import type {
 } from "../../../resident/data/types";
 import { normalizePortalLayout } from "../../../resident/data/portalTileLayout";
 import { normalizeExternalUrl } from "../../../shared/urlUtils";
+import { buildLobbyDisplayUrl } from "../../../shared/portalDomain";
 import { DEFAULT_PORTAL_MODULES } from "../../defaults/portalModules";
 import { mapDbError, sb } from "../base";
 import { bid } from "./shared";
@@ -231,6 +232,7 @@ export const portalRepository = {
     const buildingId = await bid();
     const current = await this.getPublicPortalSettings();
     const merged = { ...current, ...updates };
+    const lobbyDisplayUrl = buildLobbyDisplayUrl(merged.subdomain);
     await sb().from("public_portal_settings").upsert({
       building_id: buildingId,
       portal_theme_color: merged.portalThemeColor,
@@ -238,13 +240,13 @@ export const portalRepository = {
       about_building: merged.aboutBuilding,
       building_logo_url: merged.buildingLogoUrl,
       enable_lobby_display: merged.enableLobbyDisplay,
-      lobby_display_url: merged.lobbyDisplayUrl,
+      lobby_display_url: lobbyDisplayUrl,
       twitter_url: merged.twitterUrl,
       facebook_url: merged.facebookUrl,
       insta_url: merged.instaUrl,
       youtube_url: merged.youTubeUrl,
     });
-    return merged;
+    return { ...merged, lobbyDisplayUrl };
   },
 
   async getPortalImages(kind?: PortalImageKind) {

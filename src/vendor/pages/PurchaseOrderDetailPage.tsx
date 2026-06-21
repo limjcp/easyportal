@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { vendorRepository } from "../data/vendorRepository";
 import { DeclinePurchaseOrderModal } from "../modals/DeclinePurchaseOrderModal";
 import type { VendorRoute } from "../navigation";
@@ -18,9 +21,9 @@ export function PurchaseOrderDetailPage({
   const [po, setPo] = useState<PurchaseOrder | null>(null);
   const [building, setBuilding] = useState<CompanyBuilding | undefined>();
   const [declineOpen, setDeclineOpen] = useState(false);
-  const [responding, setResponding] = useState(false);
+  const declineReasonRef = useRef("");
 
-  const load = () => {
+  const load = useCallback(() => {
     vendorRepository.getPurchaseOrder(poId).then(async (p) => {
       setPo(p ?? null);
       if (p) {
@@ -28,29 +31,52 @@ export function PurchaseOrderDetailPage({
         setBuilding(b);
       }
     });
-  };
+  }, [poId]);
 
   useEffect(() => {
     load();
-  }, [poId]);
+  }, [load]);
 
-  const handleAccept = async () => {
-    if (!po) return;
-    setResponding(true);
-    await vendorRepository.respondToPurchaseOrder(po.id, "accepted");
-    setResponding(false);
+  const navigateToActionList = useCallback(() => {
     onRefresh();
     onNavigate({ page: "purchase-orders", tab: "action" });
-  };
+  }, [onNavigate, onRefresh]);
 
-  const handleDecline = async (reason: string) => {
-    if (!po) return;
-    setResponding(true);
-    await vendorRepository.respondToPurchaseOrder(po.id, "declined", reason || undefined);
-    setResponding(false);
-    setDeclineOpen(false);
-    onRefresh();
-    onNavigate({ page: "purchase-orders", tab: "action" });
+  const { run: acceptOrder, loading: accepting, error: acceptError } = useAsyncAction(
+    useCallback(async () => {
+      if (!po) return;
+      await vendorRepository.respondToPurchaseOrder(po.id, "accepted");
+      navigateToActionList();
+    }, [navigateToActionList, po]),
+    {
+      successMessage: "Purchase order accepted.",
+      errorMessage: "Unable to accept purchase order.",
+    }
+  );
+
+  const { run: declineOrder, loading: declining, error: declineError } = useAsyncAction(
+    useCallback(async () => {
+      if (!po) return;
+      await vendorRepository.respondToPurchaseOrder(
+        po.id,
+        "declined",
+        declineReasonRef.current || undefined
+      );
+      setDeclineOpen(false);
+      navigateToActionList();
+    }, [navigateToActionList, po]),
+    {
+      successMessage: "Purchase order declined.",
+      errorMessage: "Unable to decline purchase order.",
+    }
+  );
+
+  const responding = accepting || declining;
+  const displayError = acceptError ?? declineError;
+
+  const handleDecline = (reason: string) => {
+    declineReasonRef.current = reason;
+    void declineOrder();
   };
 
   if (!po) {
@@ -71,6 +97,8 @@ export function PurchaseOrderDetailPage({
           ← Back to list
         </button>
       </div>
+
+      {displayError ? <FormAlert message={displayError} className="mb-4" /> : null}
 
       <div className="space-y-3 rounded border border-slate-200 bg-white p-4 text-sm text-slate-700">
         <p>
@@ -130,22 +158,21 @@ export function PurchaseOrderDetailPage({
 
       {po.status === "sent" && (
         <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
+          <ActionButton
+            label="Decline"
+            variant="danger"
+            loading={declining}
             disabled={responding}
             onClick={() => setDeclineOpen(true)}
-            className="rounded bg-red-600 px-4 py-2 text-sm text-white disabled:opacity-50"
-          >
-            Decline
-          </button>
-          <button
-            type="button"
+          />
+          <ActionButton
+            label="Accept order"
+            variant="success"
+            loadingLabel="Accepting…"
+            loading={accepting}
             disabled={responding}
-            onClick={handleAccept}
-            className="rounded bg-green-600 px-4 py-2 text-sm text-white disabled:opacity-50"
-          >
-            Accept order
-          </button>
+            onClick={() => void acceptOrder()}
+          />
         </div>
       )}
 

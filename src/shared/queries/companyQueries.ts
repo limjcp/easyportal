@@ -1,0 +1,89 @@
+import { useQuery } from "@tanstack/react-query";
+import { companyRepository } from "../../company/data/companyRepository";
+import { queryKeys } from "../queryKeys";
+import { useTenantContext } from "./useTenantContext";
+
+const COMPANY_BUILDINGS_STALE = 60_000;
+const COMPANY_LIST_STALE = 60_000;
+
+export function useCompanyUser() {
+  const { userId, companyId, isCompanyReady } = useTenantContext();
+  return useQuery({
+    queryKey: queryKeys.company.user(userId!, companyId!),
+    queryFn: () => companyRepository.getCompanyUser(),
+    enabled: isCompanyReady,
+    staleTime: COMPANY_LIST_STALE,
+  });
+}
+
+export function useAccessibleBuildings() {
+  const { userId, isReady } = useTenantContext();
+  return useQuery({
+    queryKey: ["accessibleBuildings", userId ?? "none"] as const,
+    queryFn: () => companyRepository.getBuildings(),
+    enabled: isReady,
+    staleTime: COMPANY_BUILDINGS_STALE,
+  });
+}
+
+export function useCompanyBuildings() {
+  const { userId, companyId, isCompanyReady } = useTenantContext();
+  return useQuery({
+    queryKey: queryKeys.company.buildings(userId!, companyId!),
+    queryFn: () => companyRepository.getBuildings(),
+    enabled: isCompanyReady,
+    staleTime: COMPANY_BUILDINGS_STALE,
+  });
+}
+
+export function useCompanyArchivedBuildings() {
+  const { userId, companyId, isCompanyReady } = useTenantContext();
+  return useQuery({
+    queryKey: queryKeys.company.archivedBuildings(userId!, companyId!),
+    queryFn: () => companyRepository.getArchivedBuildings(),
+    enabled: isCompanyReady,
+    staleTime: COMPANY_BUILDINGS_STALE,
+  });
+}
+
+export function useCompanyEmployees() {
+  const { userId, companyId, isCompanyReady } = useTenantContext();
+  return useQuery({
+    queryKey: queryKeys.company.employees(userId!, companyId!),
+    queryFn: () => companyRepository.getEmployees(),
+    enabled: isCompanyReady,
+    staleTime: COMPANY_LIST_STALE,
+  });
+}
+
+export function useCompanyVendors() {
+  const { userId, companyId, isCompanyReady } = useTenantContext();
+  return useQuery({
+    queryKey: queryKeys.company.vendors(userId!, companyId!),
+    queryFn: () => companyRepository.getVendors(),
+    enabled: isCompanyReady,
+    staleTime: COMPANY_LIST_STALE,
+  });
+}
+
+export function useCompanyPurchaseOrders(archived: boolean) {
+  const { userId, companyId, isCompanyReady } = useTenantContext();
+  const tab = archived ? "archived" : "current";
+  return useQuery({
+    queryKey: queryKeys.company.purchaseOrders(userId!, companyId!, tab),
+    queryFn: () => companyRepository.getPurchaseOrders(archived),
+    enabled: isCompanyReady,
+    staleTime: COMPANY_LIST_STALE,
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useCompanyActivePoCountsByVendor() {
+  const { userId, companyId, isCompanyReady } = useTenantContext();
+  return useQuery({
+    queryKey: queryKeys.company.activePoCounts(userId!, companyId!),
+    queryFn: () => companyRepository.getActivePurchaseOrderCountsByVendor(),
+    enabled: isCompanyReady,
+    staleTime: COMPANY_LIST_STALE,
+  });
+}

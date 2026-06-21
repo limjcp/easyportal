@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { verifyRecaptchaToken } from "../_shared/recaptcha.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,6 +17,7 @@ type RegisterPayload = {
   buildingId?: string;
   quickbooksMatched?: boolean;
   quickbooksBalance?: string | null;
+  recaptchaToken?: string | null;
 };
 
 const RESIDENT_TYPES = new Set([
@@ -51,6 +53,7 @@ Deno.serve(async (req) => {
     }
 
     const payload = (await req.json()) as RegisterPayload;
+    await verifyRecaptchaToken(payload.recaptchaToken, "onboarding_register");
     const email = payload.email?.trim().toLowerCase() ?? "";
     const firstName = payload.firstName?.trim() ?? "";
     const corpNumber = payload.corpNumber?.trim() ?? "";

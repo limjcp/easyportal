@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaBuilding, FaCheck, FaUser } from "react-icons/fa";
 import { OptionsDropdown } from "../components/AdminBadges";
 import { AdminPanelTable, AdminTabs, type AdminTableColumn } from "../components/AdminPanelTable";
@@ -6,8 +6,17 @@ import { resetPasswordForEmail } from "../../auth/supabaseAuth";
 import { adminRepository } from "../data/adminRepository";
 import { BUILDING_ADMIN_ROLES } from "../data/mock/buildingPermissions";
 import { Modal } from "../../shared/Modal";
+import { ConfirmModal } from "../../shared/ConfirmModal";
+import { ColumnPrefsModal } from "../../shared/ColumnPrefsModal";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import {
+  filterColumnsByKey,
+  loadVisibleColumnKeys,
+  saveVisibleColumnKeys,
+} from "../../shared/tableColumnPrefs";
 import { unitDetailDirty, userDetailDirty } from "../../shared/formDirty";
-import { useToast } from "../../shared/Toast";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import {
   cloneUnitDetail,
   cloneUserDetail,
@@ -16,7 +25,10 @@ import {
 } from "../utils/profileSectionAdd";
 import type { ResidentDetailSection } from "../../resident/data/types";
 import { ResidentTypePortalModulesModal } from "../modals/ResidentTypePortalModulesModal";
+import { IncidentReportDetailModal } from "../modals/IncidentReportDetailModal";
 import { FaEdit } from "react-icons/fa";
+import { useAdminUnitsUsersData } from "../../shared/queries/adminListQueries";
+import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import type {
   UnitsUsersAccountStatus,
   UnitsUsersArchivedRow,
@@ -142,16 +154,58 @@ function UnitSectionPanel({
   );
 }
 
+const UNITS_USERS_COLUMN_PREFS_KEY = "admin-units-users-columns";
+
+const UNITS_USERS_COLUMN_OPTIONS: Record<
+  UnitsUsersTab,
+  Array<{ key: string; label: string }>
+> = {
+  current: [
+    { key: "unit", label: "Unit" },
+    { key: "status", label: "Status" },
+    { key: "name", label: "Name" },
+    { key: "type", label: "Type" },
+    { key: "email", label: "Email" },
+    { key: "actions", label: "Actions" },
+  ],
+  pending: [
+    { key: "status", label: "Status" },
+    { key: "name", label: "Name" },
+    { key: "type", label: "Type" },
+    { key: "email", label: "Email" },
+    { key: "actions", label: "Actions" },
+  ],
+  unoccupied: [
+    { key: "unit", label: "Unit" },
+    { key: "owners", label: "Owners" },
+    { key: "tenants", label: "Tenants" },
+    { key: "occupants", label: "Occupants" },
+    { key: "updated", label: "Updated" },
+    { key: "actions", label: "Actions" },
+  ],
+  archived: [
+    { key: "unit", label: "Unit" },
+    { key: "status", label: "Status" },
+    { key: "name", label: "Name" },
+    { key: "type", label: "Type" },
+    { key: "email", label: "Email" },
+    { key: "archivedAt", label: "Archived Date" },
+    { key: "actions", label: "Actions" },
+  ],
+};
+
 function UnitSummaryLink({
   badgeClass,
   count,
   label,
   clickable = false,
+  onClick,
 }: {
   badgeClass: string;
   count: number;
   label: string;
   clickable?: boolean;
+  onClick?: () => void;
 }) {
   const content: ReactNode = (
     <>
@@ -160,12 +214,12 @@ function UnitSummaryLink({
     </>
   );
 
-  if (clickable) {
+  if (clickable && onClick && count > 0) {
     return (
       <button
         type="button"
         className="text-left text-[#3476ef] hover:underline"
-        onClick={() => window.alert("Linked report view is mock-only in this phase.")}
+        onClick={onClick}
       >
         {content}
       </button>
@@ -185,12 +239,12 @@ function LegacyToggleRow({ label, enabled }: { label: string; enabled?: boolean 
 }
 
 export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
-  const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState<UnitsUsersTab>("current");
-  const [currentRows, setCurrentRows] = useState<UnitsUsersCurrentRow[]>([]);
-  const [pendingRows, setPendingRows] = useState<UnitsUsersPendingRow[]>([]);
-  const [unoccupiedRows, setUnoccupiedRows] = useState<UnitsUsersUnoccupiedRow[]>([]);
-  const [archivedRows, setArchivedRows] = useState<UnitsUsersArchivedRow[]>([]);
+  const { invalidateBuilding } = useInvalidatePortalQueries();
+  const { data: unitsUsersData } = useAdminUnitsUsersData();
+  const currentRows = unitsUsersData?.current ?? [];
+  const pendingRows = unitsUsersData?.pending ?? [];
+  const unoccupiedRows = unitsUsersData?.unoccupied ?? [];
+  const archivedRows = unitsUsersData?.archived ?? [];
 
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
@@ -208,7 +262,25 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
   const [userDetailBaseline, setUserDetailBaseline] = useState<UnitsUsersUserDetail | null>(null);
   const [userDetailTab, setUserDetailTab] = useState<UserDetailTab>("details");
   const [addResidentOpen, setAddResidentOpen] = useState(false);
+  const [addOccupantOpen, setAddOccupantOpen] = useState(false);
+  const [columnPrefsOpen, setColumnPrefsOpen] = useState(false);
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState<Set<string>>(
+    () =>
+      loadVisibleColumnKeys(
+        `${UNITS_USERS_COLUMN_PREFS_KEY}-current`,
+        UNITS_USERS_COLUMN_OPTIONS.current.map((column) => column.key)
+      )
+  );
+  const [incidentReportModalId, setIncidentReportModalId] = useState<string | null>(null);
+  const [incidentReportPickerOpen, setIncidentReportPickerOpen] = useState(false);
+  const [incidentReportPickerIds, setIncidentReportPickerIds] = useState<string[]>([]);
   const [typePortalModulesOpen, setTypePortalModulesOpen] = useState(false);
+
+  const [newOccupantFirstName, setNewOccupantFirstName] = useState("");
+  const [newOccupantLastName, setNewOccupantLastName] = useState("");
+  const [newOccupantEmail, setNewOccupantEmail] = useState("");
+  const [newOccupantPassword, setNewOccupantPassword] = useState("");
+  const [newOccupantPasswordConfirm, setNewOccupantPasswordConfirm] = useState("");
 
   const [newResidentUnit, setNewResidentUnit] = useState("");
   const [newResidentType, setNewResidentType] = useState<UnitsUsersResidentType>("Owner");
@@ -222,9 +294,224 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
   const [assignUnitId, setAssignUnitId] = useState("");
   const [assignableUnits, setAssignableUnits] = useState<Array<{ id: string; label: string }>>([]);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [confirmKind, setConfirmKind] = useState<"deleteUser" | "passwordReset" | null>(null);
+  const pendingResetEmailRef = useRef<string | null>(null);
 
-  const reloadLists = () => onRefresh();
+  const { run: saveUnitDetail, loading: savingUnit } = useAsyncAction(
+    useCallback(async () => {
+      if (!unitDraft) return;
+      await adminRepository.updateUnitsUsersUnitDetail(unitDraft.id, {
+        parkingSpots: unitDraft.parkingSpots ?? [],
+        lockers: unitDraft.lockers ?? [],
+        bikeSpaces: unitDraft.bikeSpaces ?? [],
+        primaryOccupancyId: unitDraft.primaryOccupancyId,
+        profileDetails: unitDraft.profileDetails,
+      });
+      const refreshed = await adminRepository.getUnitsUsersUnitDetail(unitDraft.id);
+      if (refreshed) {
+        setSelectedUnit(refreshed);
+        setUnitDraft(cloneUnitDetail(refreshed));
+        setUnitDetailBaseline(cloneUnitDetail(refreshed));
+      }
+    }, [unitDraft]),
+    { successMessage: "Unit changes saved successfully.", onError: setActionError, showErrorToast: false }
+  );
+
+  const { run: assignUnit, loading: savingAssign } = useAsyncAction(
+    useCallback(async () => {
+      if (!assignOccupancyId || !assignUnitId) return;
+      await adminRepository.assignUnitToOccupancy(assignOccupancyId, assignUnitId);
+      setAssignUnitOpen(false);
+      setActiveTab("current");
+      refreshLists();
+    }, [assignOccupancyId, assignUnitId, refreshLists]),
+    { successMessage: "Unit assigned successfully.", onError: setActionError, showErrorToast: false }
+  );
+
+  const { run: archiveUser, loading: savingArchive } = useAsyncAction(
+    useCallback(async () => {
+      if (!selectedUser) return;
+      await adminRepository.archiveUnitOccupancy(selectedUser.id);
+      setSelectedUser(null);
+      setUserDraft(null);
+      setUserDetailBaseline(null);
+      refreshLists();
+    }, [selectedUser, refreshLists]),
+    { successMessage: "User archived successfully.", onError: setActionError, showErrorToast: false }
+  );
+
+  const { run: deleteUser, loading: savingDelete } = useAsyncAction(
+    useCallback(async () => {
+      if (!selectedUser) return;
+      await adminRepository.deleteUnitOccupancy(selectedUser.id);
+      setSelectedUser(null);
+      setUserDraft(null);
+      setUserDetailBaseline(null);
+      setConfirmKind(null);
+      refreshLists();
+    }, [selectedUser, refreshLists]),
+    { successMessage: "User deleted successfully.", onError: setActionError, showErrorToast: false }
+  );
+
+  const { run: saveUserDetail, loading: savingUser } = useAsyncAction(
+    useCallback(async () => {
+      if (!userDraft) return;
+      if (!userDraft.email.trim()) {
+        throw new Error("Email is required.");
+      }
+      const includePortalAccess =
+        userDetailTab === "permissions" ||
+        userDraft.canAccessResidentPortal !== undefined ||
+        userDraft.canAccessBuildingAdmin !== undefined;
+
+      await adminRepository.updateUnitsUsersUserDetail(userDraft.id, {
+        firstName: userDraft.firstName,
+        lastName: userDraft.lastName,
+        email: userDraft.email,
+        timezone: userDraft.timezone,
+        type: userDraft.type,
+        buzzerCode: userDraft.buzzerCode ?? "",
+        homePhone: userDraft.homePhone ?? "",
+        mobilePhone: userDraft.mobilePhone ?? "",
+        businessPhone: userDraft.businessPhone ?? "",
+        profileDetails: userDraft.profileDetails,
+        ...(includePortalAccess
+          ? {
+              canAccessResidentPortal: userDraft.canAccessResidentPortal ?? true,
+              canAccessBuildingAdmin: userDraft.canAccessBuildingAdmin ?? false,
+              buildingAdminRoleLabel: userDraft.buildingAdminRoleLabel ?? "Resident (Admin)",
+            }
+          : {}),
+      });
+      if (
+        includePortalAccess &&
+        userDraft.canAccessResidentPortal !== false &&
+        userDraft.portalModules?.length
+      ) {
+        await adminRepository.saveOccupancyPortalModules(
+          userDraft.id,
+          userDraft.type,
+          userDraft.portalModules
+        );
+      }
+      if (
+        includePortalAccess &&
+        userDraft.canAccessBuildingAdmin === true &&
+        userDraft.buildingAdminModules?.length
+      ) {
+        await adminRepository.saveOccupancyBuildingAdminModules(
+          userDraft.id,
+          userDraft.buildingAdminModules
+        );
+      }
+      const refreshed = await adminRepository.getUnitsUsersUserDetail(userDraft.id);
+      if (refreshed) {
+        setSelectedUser(refreshed);
+        const cloned = cloneUserDetail(refreshed);
+        setUserDraft(cloned);
+        setUserDetailBaseline(cloneUserDetail(refreshed));
+      }
+      refreshLists();
+    }, [userDraft, userDetailTab, refreshLists]),
+    { successMessage: "Changes saved successfully.", onError: setActionError, showErrorToast: false }
+  );
+
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [savingRestore, setSavingRestore] = useState(false);
+
+  const { run: createResident, loading: savingCreate } = useAsyncAction(
+    useCallback(async () => {
+      if (!newResidentFirstName.trim() || !newResidentLastName.trim() || !newResidentEmail.trim()) return;
+      if (newResidentPassword.length < 8) {
+        throw new Error("Password must be at least 8 characters.");
+      }
+      if (newResidentPassword !== newResidentPasswordConfirm) {
+        throw new Error("Passwords do not match.");
+      }
+      const assignedUnit = newResidentUnit || undefined;
+      await adminRepository.createUnitOccupancy({
+        firstName: newResidentFirstName.trim(),
+        lastName: newResidentLastName.trim(),
+        email: newResidentEmail.trim(),
+        type: newResidentType,
+        unitId: assignedUnit,
+        password: newResidentPassword,
+      });
+      setNewResidentUnit("");
+      setNewResidentType("Owner");
+      setNewResidentFirstName("");
+      setNewResidentLastName("");
+      setNewResidentEmail("");
+      setNewResidentPassword("");
+      setNewResidentPasswordConfirm("");
+      setAddResidentOpen(false);
+      setActiveTab("current");
+      refreshLists();
+    }, [
+      newResidentFirstName,
+      newResidentLastName,
+      newResidentEmail,
+      newResidentPassword,
+      newResidentPasswordConfirm,
+      newResidentType,
+      newResidentUnit,
+      refreshLists,
+    ]),
+    { successMessage: "Resident created successfully.", onError: setActionError, showErrorToast: false }
+  );
+
+  const { run: createOccupant, loading: savingOccupant } = useAsyncAction(
+    useCallback(async () => {
+      if (!selectedUnit) return;
+      if (!newOccupantFirstName.trim() || !newOccupantLastName.trim() || !newOccupantEmail.trim()) return;
+      if (newOccupantPassword.length < 8) {
+        throw new Error("Password must be at least 8 characters.");
+      }
+      if (newOccupantPassword !== newOccupantPasswordConfirm) {
+        throw new Error("Passwords do not match.");
+      }
+      await adminRepository.createUnitOccupancy({
+        firstName: newOccupantFirstName.trim(),
+        lastName: newOccupantLastName.trim(),
+        email: newOccupantEmail.trim(),
+        type: "Occupant",
+        unitId: selectedUnit.id,
+        password: newOccupantPassword,
+      });
+      setNewOccupantFirstName("");
+      setNewOccupantLastName("");
+      setNewOccupantEmail("");
+      setNewOccupantPassword("");
+      setNewOccupantPasswordConfirm("");
+      setAddOccupantOpen(false);
+      const refreshed = await adminRepository.getUnitsUsersUnitDetail(selectedUnit.id);
+      if (refreshed) {
+        setSelectedUnit(refreshed);
+        setUnitDraft(cloneUnitDetail(refreshed));
+        setUnitDetailBaseline(cloneUnitDetail(refreshed));
+      }
+      refreshLists();
+    }, [
+      selectedUnit,
+      newOccupantFirstName,
+      newOccupantLastName,
+      newOccupantEmail,
+      newOccupantPassword,
+      newOccupantPasswordConfirm,
+      refreshLists,
+    ]),
+    { successMessage: "Occupant added successfully.", onError: setActionError, showErrorToast: false }
+  );
+
+  const saving =
+    savingUnit || savingAssign || savingArchive || savingDelete || savingUser || savingEmail || savingRestore || savingCreate || savingOccupant;
+
+  const refreshLists = useCallback(() => {
+    invalidateBuilding();
+    onRefresh();
+  }, [invalidateBuilding, onRefresh]);
+
+  void refreshKey;
 
   const isUserDetailDirty = useMemo(
     () => userDetailDirty(userDetailBaseline, userDraft),
@@ -235,20 +522,6 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
     () => unitDetailDirty(unitDetailBaseline, unitDraft),
     [unitDetailBaseline, unitDraft]
   );
-
-  useEffect(() => {
-    Promise.all([
-      adminRepository.getUnitsUsersCurrent(),
-      adminRepository.getUnitsUsersPending(),
-      adminRepository.getUnitsUsersUnoccupied(),
-      adminRepository.getUnitsUsersArchived(),
-    ]).then(([current, pending, unoccupied, archived]) => {
-      setCurrentRows(current);
-      setPendingRows(pending);
-      setUnoccupiedRows(unoccupied);
-      setArchivedRows(archived);
-    });
-  }, [refreshKey]);
 
   useEffect(() => {
     setSearch("");
@@ -343,32 +616,9 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
     });
   };
 
-  const handleSaveUnitDetail = async () => {
-    if (!unitDraft) return;
-    setSaving(true);
+  const handleSaveUnitDetail = () => {
     setActionError(null);
-    try {
-      await adminRepository.updateUnitsUsersUnitDetail(unitDraft.id, {
-        parkingSpots: unitDraft.parkingSpots ?? [],
-        lockers: unitDraft.lockers ?? [],
-        bikeSpaces: unitDraft.bikeSpaces ?? [],
-        primaryOccupancyId: unitDraft.primaryOccupancyId,
-        profileDetails: unitDraft.profileDetails,
-      });
-      const refreshed = await adminRepository.getUnitsUsersUnitDetail(unitDraft.id);
-      if (refreshed) {
-        setSelectedUnit(refreshed);
-        setUnitDraft(cloneUnitDetail(refreshed));
-        setUnitDetailBaseline(cloneUnitDetail(refreshed));
-      }
-      showToast({ message: "Unit changes saved successfully.", variant: "success" });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save unit changes.";
-      setActionError(message);
-      showToast({ message, variant: "error" });
-    } finally {
-      setSaving(false);
-    }
+    void saveUnitDetail();
   };
 
   const openUserDetail = (userId: string) => {
@@ -500,209 +750,68 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
     }
   };
 
-  const handleAssignUnit = async () => {
-    if (!assignOccupancyId || !assignUnitId) return;
-    setSaving(true);
+  const handleAssignUnit = () => {
     setActionError(null);
-    try {
-      await adminRepository.assignUnitToOccupancy(assignOccupancyId, assignUnitId);
-      setAssignUnitOpen(false);
-      setActiveTab("current");
-      reloadLists();
-      showToast({ message: "Unit assigned successfully.", variant: "success" });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to assign unit.";
-      setActionError(message);
-      showToast({ message, variant: "error" });
-    } finally {
-      setSaving(false);
-    }
+    void assignUnit();
   };
 
-  const handleArchiveUser = async () => {
-    if (!selectedUser) return;
-    setSaving(true);
+  const handleArchiveUser = () => {
     setActionError(null);
-    try {
-      await adminRepository.archiveUnitOccupancy(selectedUser.id);
-      closeUserDetail();
-      reloadLists();
-      showToast({ message: "User archived successfully.", variant: "success" });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to archive record.";
-      setActionError(message);
-      showToast({ message, variant: "error" });
-    } finally {
-      setSaving(false);
-    }
+    void archiveUser();
   };
 
-  const handleDeleteUser = async () => {
-    if (!selectedUser) return;
-    if (!window.confirm(`Delete record for ${selectedUser.name}? This cannot be undone.`)) return;
-    setSaving(true);
+  const handleDeleteUser = () => {
     setActionError(null);
-    try {
-      await adminRepository.deleteUnitOccupancy(selectedUser.id);
-      closeUserDetail();
-      reloadLists();
-      showToast({ message: "User deleted successfully.", variant: "success" });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to delete record.";
-      setActionError(message);
-      showToast({ message, variant: "error" });
-    } finally {
-      setSaving(false);
-    }
+    setConfirmKind("deleteUser");
   };
 
-  const handleSaveUserDetail = async () => {
-    if (!userDraft) return;
-    if (!userDraft.email.trim()) {
-      setActionError("Email is required.");
-      return;
-    }
-    setSaving(true);
+  const handleSaveUserDetail = () => {
     setActionError(null);
-    try {
-      const includePortalAccess =
-        userDetailTab === "permissions" ||
-        userDraft.canAccessResidentPortal !== undefined ||
-        userDraft.canAccessBuildingAdmin !== undefined;
-
-      await adminRepository.updateUnitsUsersUserDetail(userDraft.id, {
-        firstName: userDraft.firstName,
-        lastName: userDraft.lastName,
-        email: userDraft.email,
-        timezone: userDraft.timezone,
-        type: userDraft.type,
-        buzzerCode: userDraft.buzzerCode ?? "",
-        homePhone: userDraft.homePhone ?? "",
-        mobilePhone: userDraft.mobilePhone ?? "",
-        businessPhone: userDraft.businessPhone ?? "",
-        profileDetails: userDraft.profileDetails,
-        ...(includePortalAccess
-          ? {
-              canAccessResidentPortal: userDraft.canAccessResidentPortal ?? true,
-              canAccessBuildingAdmin: userDraft.canAccessBuildingAdmin ?? false,
-              buildingAdminRoleLabel: userDraft.buildingAdminRoleLabel ?? "Resident (Admin)",
-            }
-          : {}),
-      });
-      if (
-        includePortalAccess &&
-        userDraft.canAccessResidentPortal !== false &&
-        userDraft.portalModules?.length
-      ) {
-        await adminRepository.saveOccupancyPortalModules(
-          userDraft.id,
-          userDraft.type,
-          userDraft.portalModules
-        );
-      }
-      if (
-        includePortalAccess &&
-        userDraft.canAccessBuildingAdmin === true &&
-        userDraft.buildingAdminModules?.length
-      ) {
-        await adminRepository.saveOccupancyBuildingAdminModules(
-          userDraft.id,
-          userDraft.buildingAdminModules
-        );
-      }
-      const refreshed = await adminRepository.getUnitsUsersUserDetail(userDraft.id);
-      if (refreshed) {
-        setSelectedUser(refreshed);
-        const cloned = cloneUserDetail(refreshed);
-        setUserDraft(cloned);
-        setUserDetailBaseline(cloneUserDetail(refreshed));
-      }
-      reloadLists();
-      showToast({ message: "Changes saved successfully.", variant: "success" });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save changes.";
-      setActionError(message);
-      showToast({ message, variant: "error" });
-    } finally {
-      setSaving(false);
-    }
+    void saveUserDetail();
   };
 
-  const handleEmailLoginDetails = async (email: string, status: UnitsUsersAccountStatus) => {
+  const handleEmailLoginDetails = (email: string, status: UnitsUsersAccountStatus) => {
     if (status !== "Activated") {
       setActionError("This user does not have a login account yet.");
       return;
     }
-    if (!window.confirm(`Send password reset email to ${email}?`)) return;
-    setSaving(true);
+    pendingResetEmailRef.current = email;
+    setConfirmKind("passwordReset");
+  };
+
+  const confirmPasswordReset = async () => {
+    const email = pendingResetEmailRef.current;
+    if (!email) return;
+    setSavingEmail(true);
     setActionError(null);
     try {
       await resetPasswordForEmail(email);
       window.alert(`Password reset email sent to ${email}.`);
+      setConfirmKind(null);
+      pendingResetEmailRef.current = null;
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Failed to send password reset email.");
     } finally {
-      setSaving(false);
+      setSavingEmail(false);
     }
   };
 
   const handleRestoreUser = async (occupancyId: string) => {
-    setSaving(true);
+    setSavingRestore(true);
     setActionError(null);
     try {
       await adminRepository.restoreUnitOccupancy(occupancyId);
-      reloadLists();
-      showToast({ message: "User restored successfully.", variant: "success" });
+      refreshLists();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to restore record.";
-      setActionError(message);
-      showToast({ message, variant: "error" });
+      setActionError(err instanceof Error ? err.message : "Failed to restore record.");
     } finally {
-      setSaving(false);
+      setSavingRestore(false);
     }
   };
 
-  const handleCreateResident = async () => {
-    if (!newResidentFirstName.trim() || !newResidentLastName.trim() || !newResidentEmail.trim()) return;
-    if (newResidentPassword.length < 8) {
-      setActionError("Password must be at least 8 characters.");
-      return;
-    }
-    if (newResidentPassword !== newResidentPasswordConfirm) {
-      setActionError("Passwords do not match.");
-      return;
-    }
-
-    const assignedUnit = newResidentUnit || undefined;
-    setSaving(true);
+  const handleCreateResident = () => {
     setActionError(null);
-    try {
-      await adminRepository.createUnitOccupancy({
-        firstName: newResidentFirstName.trim(),
-        lastName: newResidentLastName.trim(),
-        email: newResidentEmail.trim(),
-        type: newResidentType,
-        unitId: assignedUnit,
-        password: newResidentPassword,
-      });
-      setNewResidentUnit("");
-      setNewResidentType("Owner");
-      setNewResidentFirstName("");
-      setNewResidentLastName("");
-      setNewResidentEmail("");
-      setNewResidentPassword("");
-      setNewResidentPasswordConfirm("");
-      setAddResidentOpen(false);
-      setActiveTab("current");
-      reloadLists();
-      showToast({ message: "Resident created successfully.", variant: "success" });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to create resident.";
-      setActionError(message);
-      showToast({ message, variant: "error" });
-    } finally {
-      setSaving(false);
-    }
+    void createResident();
   };
 
   const currentColumns: AdminTableColumn<UnitsUsersCurrentRow>[] = [
@@ -941,6 +1050,46 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
     },
   ];
 
+  useEffect(() => {
+    const keys = UNITS_USERS_COLUMN_OPTIONS[activeTab].map((column) => column.key);
+    setVisibleColumnKeys(loadVisibleColumnKeys(`${UNITS_USERS_COLUMN_PREFS_KEY}-${activeTab}`, keys));
+  }, [activeTab]);
+
+  const openIncidentReports = useCallback((reportIds: string[]) => {
+    if (reportIds.length === 0) return;
+    if (reportIds.length === 1) {
+      setIncidentReportModalId(reportIds[0]!);
+      return;
+    }
+    setIncidentReportPickerIds(reportIds);
+    setIncidentReportPickerOpen(true);
+  }, []);
+
+  const handleSaveColumnPrefs = useCallback(
+    (keys: string[]) => {
+      saveVisibleColumnKeys(`${UNITS_USERS_COLUMN_PREFS_KEY}-${activeTab}`, keys);
+      setVisibleColumnKeys(new Set(keys));
+    },
+    [activeTab]
+  );
+
+  const visibleCurrentColumns = useMemo(
+    () => filterColumnsByKey(currentColumns, visibleColumnKeys),
+    [currentColumns, visibleColumnKeys]
+  );
+  const visiblePendingColumns = useMemo(
+    () => filterColumnsByKey(pendingColumns, visibleColumnKeys),
+    [pendingColumns, visibleColumnKeys]
+  );
+  const visibleUnoccupiedColumns = useMemo(
+    () => filterColumnsByKey(unoccupiedColumns, visibleColumnKeys),
+    [unoccupiedColumns, visibleColumnKeys]
+  );
+  const visibleArchivedColumns = useMemo(
+    () => filterColumnsByKey(archivedColumns, visibleColumnKeys),
+    [archivedColumns, visibleColumnKeys]
+  );
+
   const commonFilters = [];
   if (activeTab !== "unoccupied" && statusOptions.length > 0) {
     commonFilters.push({
@@ -973,15 +1122,13 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
 
       <AdminTabs tabs={TABS} activeTab={activeTab} onChange={(tab) => setActiveTab(tab as UnitsUsersTab)} />
 
-      {actionError ? (
-        <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</div>
-      ) : null}
+      {actionError ? <FormAlert message={actionError} className="mb-3" /> : null}
 
       <div className="mb-3 flex flex-wrap justify-between gap-2">
         <button
           type="button"
           className="rounded bg-[#79d0df] px-3 py-1 text-sm text-white"
-          onClick={() => window.alert("Column preferences are mock-only in this phase.")}
+          onClick={() => setColumnPrefsOpen(true)}
         >
           Change Column Preferences:
         </button>
@@ -1021,7 +1168,7 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
           sortKey={sortKey}
           sortDir={sortDir}
           onSortChange={handleSortChange}
-          columns={currentColumns}
+          columns={visibleCurrentColumns}
         />
       )}
 
@@ -1042,7 +1189,7 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
           sortKey={sortKey}
           sortDir={sortDir}
           onSortChange={handleSortChange}
-          columns={pendingColumns}
+          columns={visiblePendingColumns}
         />
       )}
 
@@ -1062,7 +1209,7 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
           sortKey={sortKey}
           sortDir={sortDir}
           onSortChange={handleSortChange}
-          columns={unoccupiedColumns}
+          columns={visibleUnoccupiedColumns}
         />
       )}
 
@@ -1083,7 +1230,7 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
           sortKey={sortKey}
           sortDir={sortDir}
           onSortChange={handleSortChange}
-          columns={archivedColumns}
+          columns={visibleArchivedColumns}
         />
       )}
 
@@ -1102,14 +1249,13 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
             >
               Close
             </button>
-            <button
-              type="button"
-              className="rounded bg-[#7D5DA7] px-4 py-2 text-sm text-white hover:bg-[#6d4d97] disabled:cursor-not-allowed disabled:opacity-50"
+            <ActionButton
+              label="Save Changes"
+              loadingLabel="Saving…"
+              loading={saving}
+              disabled={!unitDraft || !isUnitDetailDirty}
               onClick={handleSaveUnitDetail}
-              disabled={saving || !unitDraft || !isUnitDetailDirty}
-            >
-              Save Changes
-            </button>
+            />
             <button
               type="button"
               className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white hover:bg-[#2968d8]"
@@ -1153,6 +1299,7 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
                     count={selectedUnit.incidentReportsByUsers}
                     label="Incident Report(s) Submitted By Users In This Unit"
                     clickable
+                    onClick={() => openIncidentReports(selectedUnit.incidentReportIdsByUsers)}
                   />
                   <hr className="border-slate-200" />
                   <UnitSummaryLink
@@ -1160,6 +1307,7 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
                     count={selectedUnit.incidentReportsInvolvingUnit}
                     label="Incident Report(s) Submitted Involving This Unit"
                     clickable
+                    onClick={() => openIncidentReports(selectedUnit.incidentReportIdsInvolvingUnit)}
                   />
                 </div>
               </div>
@@ -1170,7 +1318,10 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
                 <h4 className="font-semibold text-slate-700">Occupants in this Unit</h4>
                 <button
                   type="button"
-                  onClick={() => window.alert("Add occupant is mock-only in this phase.")}
+                  onClick={() => {
+                    setActionError(null);
+                    setAddOccupantOpen(true);
+                  }}
                   className="rounded bg-[#7D5DA7] px-2 py-1 text-xs text-white hover:bg-[#6d4d97]"
                 >
                   Add
@@ -1352,14 +1503,13 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
               Print
             </button>
             {userDetailTab === "details" || userDetailTab === "extended" || userDetailTab === "permissions" ? (
-              <button
-                type="button"
-                className="rounded bg-[#7D5DA7] px-3 py-2 text-sm text-white hover:bg-[#6d4d97] disabled:cursor-not-allowed disabled:opacity-50"
+              <ActionButton
+                label="Save Changes"
+                loadingLabel="Saving…"
+                loading={saving}
+                disabled={!userDraft || !isUserDetailDirty}
                 onClick={handleSaveUserDetail}
-                disabled={saving || !userDraft || !isUserDetailDirty}
-              >
-                Save Changes
-              </button>
+              />
             ) : null}
             <button
               type="button"
@@ -2195,6 +2345,158 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
             });
           }
         }}
+      />
+
+      <ConfirmModal
+        open={confirmKind === "deleteUser"}
+        onClose={() => {
+          if (savingDelete) return;
+          setConfirmKind(null);
+        }}
+        title="Delete User Record"
+        message={
+          selectedUser
+            ? `Delete record for ${selectedUser.name}? This cannot be undone.`
+            : "Delete this user record? This cannot be undone."
+        }
+        variant="danger"
+        loading={savingDelete}
+        onConfirm={() => void deleteUser()}
+      />
+
+      <ConfirmModal
+        open={confirmKind === "passwordReset"}
+        onClose={() => {
+          if (savingEmail) return;
+          setConfirmKind(null);
+          pendingResetEmailRef.current = null;
+        }}
+        title="Send Password Reset"
+        message={
+          pendingResetEmailRef.current
+            ? `Send password reset email to ${pendingResetEmailRef.current}?`
+            : "Send password reset email?"
+        }
+        loading={savingEmail}
+        onConfirm={() => void confirmPasswordReset()}
+      />
+
+      <ColumnPrefsModal
+        open={columnPrefsOpen}
+        onClose={() => setColumnPrefsOpen(false)}
+        title="Change Column Preferences"
+        columns={UNITS_USERS_COLUMN_OPTIONS[activeTab]}
+        visibleKeys={visibleColumnKeys}
+        onSave={handleSaveColumnPrefs}
+      />
+
+      <Modal
+        open={addOccupantOpen}
+        onClose={() => setAddOccupantOpen(false)}
+        title={selectedUnit ? `Add Occupant to ${selectedUnit.unitLabel}` : "Add Occupant"}
+        icon={<FaUser className="text-[#3476ef]" />}
+        size="md"
+        footer={
+          <div className="ml-auto flex gap-2">
+            <button
+              type="button"
+              className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700"
+              onClick={() => setAddOccupantOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="rounded bg-[#3476ef] px-3 py-2 text-sm text-white disabled:opacity-50"
+              onClick={() => {
+                setActionError(null);
+                void createOccupant();
+              }}
+              disabled={savingOccupant}
+            >
+              Continue
+            </button>
+          </div>
+        }
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="space-y-1 text-sm text-slate-700">
+            <span>First Name</span>
+            <input
+              value={newOccupantFirstName}
+              onChange={(event) => setNewOccupantFirstName(event.target.value)}
+              className="w-full rounded border border-slate-300 px-2 py-2"
+            />
+          </label>
+          <label className="space-y-1 text-sm text-slate-700">
+            <span>Last Name</span>
+            <input
+              value={newOccupantLastName}
+              onChange={(event) => setNewOccupantLastName(event.target.value)}
+              className="w-full rounded border border-slate-300 px-2 py-2"
+            />
+          </label>
+          <label className="space-y-1 text-sm text-slate-700 sm:col-span-2">
+            <span>Email</span>
+            <input
+              value={newOccupantEmail}
+              onChange={(event) => setNewOccupantEmail(event.target.value)}
+              className="w-full rounded border border-slate-300 px-2 py-2"
+              type="email"
+            />
+          </label>
+          <label className="space-y-1 text-sm text-slate-700">
+            <span>Password</span>
+            <input
+              value={newOccupantPassword}
+              onChange={(event) => setNewOccupantPassword(event.target.value)}
+              className="w-full rounded border border-slate-300 px-2 py-2"
+              type="password"
+              autoComplete="new-password"
+            />
+          </label>
+          <label className="space-y-1 text-sm text-slate-700">
+            <span>Confirm Password</span>
+            <input
+              value={newOccupantPasswordConfirm}
+              onChange={(event) => setNewOccupantPasswordConfirm(event.target.value)}
+              className="w-full rounded border border-slate-300 px-2 py-2"
+              type="password"
+              autoComplete="new-password"
+            />
+          </label>
+        </div>
+      </Modal>
+
+      <Modal
+        open={incidentReportPickerOpen}
+        onClose={() => setIncidentReportPickerOpen(false)}
+        title="Select Incident Report"
+        size="sm"
+      >
+        <ul className="space-y-2">
+          {incidentReportPickerIds.map((reportId) => (
+            <li key={reportId}>
+              <button
+                type="button"
+                className="w-full rounded border border-slate-200 px-3 py-2 text-left text-sm text-[#3476ef] hover:bg-slate-50"
+                onClick={() => {
+                  setIncidentReportPickerOpen(false);
+                  setIncidentReportModalId(reportId);
+                }}
+              >
+                Report {reportId.slice(0, 8)}…
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Modal>
+
+      <IncidentReportDetailModal
+        open={!!incidentReportModalId}
+        reportId={incidentReportModalId}
+        onClose={() => setIncidentReportModalId(null)}
+        onUpdated={refreshLists}
       />
     </div>
   );

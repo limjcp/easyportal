@@ -1,6 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "../../shared/Modal";
+import { ConfirmModal } from "../../shared/ConfirmModal";
+import { ActionButton } from "../../shared/ActionButton";
 import { FileUploadZone } from "../../shared/FileUploadZone";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { inferAttachmentKind, toDataUrl, validateAttachmentFile } from "../../shared/attachmentUtils";
 import { AdminPanelHeader } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
@@ -32,12 +36,107 @@ export function PollEditPage({ route, onNavigate }: PollEditPageProps) {
   const [meetings, setMeetings] = useState<AgmMeeting[]>([]);
   const [attachments, setAttachments] = useState<PollAttachment[]>([]);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [removeQuestionOpen, setRemoveQuestionOpen] = useState(false);
   const [newQuestion, setNewQuestion] = useState("");
   const [newAnswers, setNewAnswers] = useState(["", ""]);
-  const [addingQuestion, setAddingQuestion] = useState(false);
   const [results, setResults] = useState<PollResults | null>(null);
 
-  const loadResults = () => adminRepository.getPollResults(route.id).then(setResults);
+  const loadResults = useCallback(
+    () => adminRepository.getPollResults(route.id).then(setResults),
+    [route.id]
+  );
+
+  const pendingUpdatesRef = useRef<Partial<Poll> | null>(null);
+  const pendingQuestionIdRef = useRef<string | null>(null);
+  const pendingFileRef = useRef<File | null>(null);
+  const pendingAttachmentIdRef = useRef<string | null>(null);
+
+  const { run: updatePoll, error: updateError } = useAsyncAction(
+    useCallback(async () => {
+      const updates = pendingUpdatesRef.current;
+      if (!updates) return;
+      const updated = await adminRepository.updatePoll(route.id, updates);
+      if (updated) setPoll(updated);
+    }, [route.id]),
+    { showSuccessToast: false, showErrorToast: false }
+  );
+
+  const { run: addQuestion, loading: addingQuestion, error: questionError } = useAsyncAction(
+    useCallback(async () => {
+      if (!poll) return;
+      const questionText = newQuestion.trim();
+      const answers = newAnswers.map((answer) => answer.trim()).filter(Boolean);
+      if (!questionText) {
+        alert("Question text is required.");
+        return;
+      }
+      if (answers.length < 2) {
+        alert("Add at least two answer options.");
+        return;
+      }
+      await adminRepository.addPollQuestion(route.id, {
+        sortOrder: poll.questions.length + 1,
+        question: questionText,
+        type: POLL_QUESTION_TYPE_SINGLE,
+        answerOptions: formatPollAnswerOptions(answers),
+      });
+      const refreshed = await adminRepository.getPollById(route.id);
+      if (refreshed) setPoll(refreshed);
+      setNewQuestion("");
+      setNewAnswers(["", ""]);
+      void loadResults();
+    }, [poll, newQuestion, newAnswers, route.id, loadResults]),
+    { successMessage: "Question added.", showErrorToast: false }
+  );
+
+  const { run: removeQuestionRun, loading: removingQuestion } = useAsyncAction(
+    useCallback(async () => {
+      const questionId = pendingQuestionIdRef.current;
+      if (!questionId) return;
+      await adminRepository.deletePollQuestion(questionId);
+      const refreshed = await adminRepository.getPollById(route.id);
+      if (refreshed) setPoll(refreshed);
+      void loadResults();
+      setRemoveQuestionOpen(false);
+      pendingQuestionIdRef.current = null;
+    }, [route.id, loadResults]),
+    { successMessage: "Question removed.", showErrorToast: false }
+  );
+
+  const { run: addAttachmentRun, error: attachmentError } = useAsyncAction(
+    useCallback(async () => {
+      const file = pendingFileRef.current;
+      if (!file) return;
+      const validationError = validateAttachmentFile(file);
+      if (validationError) {
+        alert(validationError);
+        return;
+      }
+      const sourceUrl = await toDataUrl(file);
+      const kind = inferAttachmentKind(file.type);
+      await adminRepository.addPollAttachment(route.id, {
+        name: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
+        kind,
+        sourceUrl,
+      });
+      const refreshed = await adminRepository.getPollAttachments(route.id);
+      setAttachments(refreshed);
+    }, [route.id]),
+    { successMessage: "Attachment added.", showErrorToast: false }
+  );
+
+  const { run: removeAttachmentRun } = useAsyncAction(
+    useCallback(async () => {
+      const attachmentId = pendingAttachmentIdRef.current;
+      if (!attachmentId) return;
+      await adminRepository.removePollAttachment(attachmentId);
+      const refreshed = await adminRepository.getPollAttachments(route.id);
+      setAttachments(refreshed);
+    }, [route.id]),
+    { successMessage: "Attachment removed.", showErrorToast: false }
+  );
 
   const activeMeetingOptions = useMemo(
     () => meetings.filter((meeting) => meeting.status === "draft" || meeting.status === "active"),
@@ -55,9 +154,24 @@ export function PollEditPage({ route, onNavigate }: PollEditPageProps) {
     return <div className="py-8 text-center text-slate-500">Loading...</div>;
   }
 
-  const update = async (updates: Partial<Poll>) => {
-    const updated = await adminRepository.updatePoll(route.id, updates);
-    if (updated) setPoll(updated);
+  const update = (updates: Partial<Poll>) => {
+    pendingUpdatesRef.current = updates;
+    void updatePoll();
+  };
+
+  const removeQuestion = (questionId: string) => {
+    pendingQuestionIdRef.current = questionId;
+    setRemoveQuestionOpen(true);
+  };
+
+  const addAttachment = (file: File | null) => {
+    pendingFileRef.current = file;
+    void addAttachmentRun();
+  };
+
+  const removeAttachment = (attachmentId: string) => {
+    pendingAttachmentIdRef.current = attachmentId;
+    void removeAttachmentRun();
   };
 
   const toggleResidentType = (type: string) => {
@@ -67,68 +181,7 @@ export function PollEditPage({ route, onNavigate }: PollEditPageProps) {
     update({ residentTypes: types });
   };
 
-  const addQuestion = async () => {
-    const questionText = newQuestion.trim();
-    const answers = newAnswers.map((answer) => answer.trim()).filter(Boolean);
-    if (!questionText) {
-      alert("Question text is required.");
-      return;
-    }
-    if (answers.length < 2) {
-      alert("Add at least two answer options.");
-      return;
-    }
-    setAddingQuestion(true);
-    try {
-      await adminRepository.addPollQuestion(route.id, {
-        sortOrder: poll.questions.length + 1,
-        question: questionText,
-        type: POLL_QUESTION_TYPE_SINGLE,
-        answerOptions: formatPollAnswerOptions(answers),
-      });
-      const refreshed = await adminRepository.getPollById(route.id);
-      if (refreshed) setPoll(refreshed);
-      setNewQuestion("");
-      setNewAnswers(["", ""]);
-      void loadResults();
-    } finally {
-      setAddingQuestion(false);
-    }
-  };
-
-  const removeQuestion = async (questionId: string) => {
-    if (!window.confirm("Remove this question?")) return;
-    await adminRepository.deletePollQuestion(questionId);
-    const refreshed = await adminRepository.getPollById(route.id);
-    if (refreshed) setPoll(refreshed);
-    void loadResults();
-  };
-
-  const addAttachment = async (file: File | null) => {
-    if (!file) return;
-    const validationError = validateAttachmentFile(file);
-    if (validationError) {
-      alert(validationError);
-      return;
-    }
-    const sourceUrl = await toDataUrl(file);
-    const kind = inferAttachmentKind(file.type);
-    await adminRepository.addPollAttachment(route.id, {
-      name: file.name,
-      mimeType: file.type,
-      sizeBytes: file.size,
-      kind,
-      sourceUrl,
-    });
-    const refreshed = await adminRepository.getPollAttachments(route.id);
-    setAttachments(refreshed);
-  };
-
-  const removeAttachment = async (attachmentId: string) => {
-    await adminRepository.removePollAttachment(attachmentId);
-    const refreshed = await adminRepository.getPollAttachments(route.id);
-    setAttachments(refreshed);
-  };
+  const formError = updateError ?? questionError ?? attachmentError;
 
   return (
     <>
@@ -150,6 +203,7 @@ export function PollEditPage({ route, onNavigate }: PollEditPageProps) {
         <AdminPanelHeader title={`Edit Poll: ${poll.title}`} />
 
         <div className="space-y-6 p-4">
+          {formError ? <FormAlert message={formError} /> : null}
           <section>
             <h3 className="mb-3 font-semibold text-slate-700">Poll Options</h3>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -406,14 +460,12 @@ export function PollEditPage({ route, onNavigate }: PollEditPageProps) {
                   + Add answer
                 </button>
               </div>
-              <button
-                type="button"
-                disabled={addingQuestion}
+              <ActionButton
+                label="Add Question"
+                loadingLabel="Adding…"
+                loading={addingQuestion}
                 onClick={() => void addQuestion()}
-                className="rounded bg-[#3476ef] px-3 py-1.5 text-sm text-white disabled:opacity-50"
-              >
-                {addingQuestion ? "Adding..." : "Add Question"}
-              </button>
+              />
             </div>
           </section>
 
@@ -542,6 +594,20 @@ export function PollEditPage({ route, onNavigate }: PollEditPageProps) {
           )}
         </div>
       </Modal>
+
+      <ConfirmModal
+        open={removeQuestionOpen}
+        onClose={() => {
+          if (removingQuestion) return;
+          setRemoveQuestionOpen(false);
+          pendingQuestionIdRef.current = null;
+        }}
+        title="Remove Question"
+        message="Remove this question?"
+        variant="danger"
+        loading={removingQuestion}
+        onConfirm={() => void removeQuestionRun()}
+      />
     </>
   );
 }

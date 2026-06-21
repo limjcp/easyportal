@@ -1,21 +1,42 @@
 import { useState } from "react";
 import { FaFileDownload } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
+import { downloadCsv } from "../../shared/exportCsv";
+import type { BoardApproval } from "../../resident/data/types";
 
 type BoardApprovalExportModalProps = {
   open: boolean;
   onClose: () => void;
+  items: BoardApproval[];
 };
 
-export function BoardApprovalExportModal({ open, onClose }: BoardApprovalExportModalProps) {
+export function BoardApprovalExportModal({ open, onClose, items }: BoardApprovalExportModalProps) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
   const handleExport = () => {
-    alert(
-      fromDate && toDate
-        ? `Export queued for ${fromDate} through ${toDate} (mock).`
-        : "Export queued for all board approvals (mock)."
+    const filtered = items.filter((item) => {
+      if (!fromDate && !toDate) return true;
+      const created = item.created?.slice(0, 10) ?? "";
+      if (fromDate && created < fromDate) return false;
+      if (toDate && created > toDate) return false;
+      return true;
+    });
+
+    downloadCsv(
+      "board-approvals.csv",
+      ["Title", "Status", "Created", "Closed", "Vendor", "Type", "Amount", "Approved", "Disapproved"],
+      filtered.map((item) => [
+        item.title,
+        item.status,
+        item.created ?? "",
+        item.closed ?? "",
+        item.vendor ?? "",
+        item.type ?? "",
+        item.amount ?? "",
+        String(item.approvedVotes ?? ""),
+        String(item.disapprovedVotes ?? ""),
+      ])
     );
     onClose();
   };

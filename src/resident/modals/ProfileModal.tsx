@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FaEnvelope, FaExclamationCircle, FaEye, FaUser } from "react-icons/fa";
+import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
 import { StatusBadge } from "../../shared/StatusBadge";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { residentRepo } from "../data/mockRepository";
 import type { EmailRecord, NotificationPreference, ResidentUser } from "../data/types";
 
@@ -18,6 +20,24 @@ export function ProfileModal({ open, onClose }: ProfileModalProps) {
   const [prefs, setPrefs] = useState<NotificationPreference[]>([]);
   const [emails, setEmails] = useState<EmailRecord[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<EmailRecord | null>(null);
+  const toggleParamsRef = useRef<{ id: string; enabled: boolean }>({ id: "", enabled: false });
+
+  const { run: runTogglePref, error: prefError } = useAsyncAction(
+    async () => {
+      const { id, enabled } = toggleParamsRef.current;
+      await residentRepo.updateNotificationPreference(id, enabled);
+      setPrefs((p) => p.map((x) => (x.id === id ? { ...x, enabled } : x)));
+    },
+    {
+      errorMessage: "Unable to update notification preference.",
+      showSuccessToast: false,
+    }
+  );
+
+  const togglePref = (id: string, enabled: boolean) => {
+    toggleParamsRef.current = { id, enabled };
+    void runTogglePref();
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -27,11 +47,6 @@ export function ProfileModal({ open, onClose }: ProfileModalProps) {
     setTab("profile");
     setSelectedEmail(null);
   }, [open]);
-
-  const togglePref = async (id: string, enabled: boolean) => {
-    await residentRepo.updateNotificationPreference(id, enabled);
-    setPrefs((p) => p.map((x) => (x.id === id ? { ...x, enabled } : x)));
-  };
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: "profile", label: "Profile", icon: <FaUser /> },
@@ -87,6 +102,7 @@ export function ProfileModal({ open, onClose }: ProfileModalProps) {
           )}
           {tab === "notifications" && (
             <div className="space-y-3">
+              {prefError ? <FormAlert message={prefError} /> : null}
               {prefs.map((p) => (
                 <label key={p.id} className="flex items-center justify-between rounded border border-slate-200 px-3 py-2">
                   <span className="text-sm text-slate-700">{p.label}</span>

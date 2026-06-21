@@ -45,6 +45,8 @@ import type {
   AgmMeeting,
   AmenityBooking,
   BuildingAmenitySettings,
+  BuildingAmenityResource,
+  BuildingAmenityResourceType,
   SubmitElevatorBookingInput,
   SubmitPartyRoomBookingInput,
 } from "./types";
@@ -58,6 +60,7 @@ export interface ResidentRepository {
   getDocumentFolders(): Promise<DocumentFolder[]>;
   getDocuments(folderId: string): Promise<DocumentFile[]>;
   getDocumentDownloadUrl(id: string): Promise<string>;
+  createDocument(file: File, input: { folderId: string; title: string }): Promise<{ id: string }>;
   getFaqs(): Promise<FaqItem[]>;
   getAlbums(): Promise<GalleryAlbum[]>;
   getEvents(): Promise<CalendarEvent[]>;
@@ -127,6 +130,7 @@ export interface ResidentRepository {
   }>;
   getAmenityBookings(): Promise<AmenityBooking[]>;
   getBuildingAmenitySettings(): Promise<BuildingAmenitySettings>;
+  getBuildingAmenityResources(resourceType?: BuildingAmenityResourceType): Promise<BuildingAmenityResource[]>;
   submitElevatorBooking(input: SubmitElevatorBookingInput): Promise<AmenityBooking>;
   submitPartyRoomBooking(input: SubmitPartyRoomBookingInput): Promise<AmenityBooking>;
   acceptPartyRoomPayment(bookingId: string): Promise<AmenityBooking>;

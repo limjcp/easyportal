@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaEnvelope } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import type { IncidentContactEmail } from "../../resident/data/types";
 
 type IncidentContactModalProps = {
   open: boolean;
   contact: IncidentContactEmail | null;
   onClose: () => void;
-  onSubmit: (email: string, status: "active" | "inactive") => void;
+  onSubmit: (email: string, status: "active" | "inactive") => Promise<void>;
 };
 
 export function IncidentContactModal({
@@ -29,14 +32,20 @@ export function IncidentContactModal({
     }
   }, [contact, open]);
 
-  const handleSubmit = () => {
-    if (!email.trim() || !email.includes("@")) {
-      alert("A valid email address is required.");
-      return;
+  const { run: handleSubmit, loading, error } = useAsyncAction(
+    useCallback(async () => {
+      if (!email.trim() || !email.includes("@")) {
+        alert("A valid email address is required.");
+        return;
+      }
+      await onSubmit(email.trim(), status);
+      onClose();
+    }, [email, status, onSubmit, onClose]),
+    {
+      successMessage: contact ? "Contact updated." : "Contact added.",
+      showErrorToast: false,
     }
-    onSubmit(email.trim(), status);
-    onClose();
-  };
+  );
 
   return (
     <Modal
@@ -49,12 +58,11 @@ export function IncidentContactModal({
           <button type="button" onClick={onClose} className="rounded border border-slate-300 px-4 py-2 text-sm">
             Cancel
           </button>
-          <button type="button" onClick={handleSubmit} className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white">
-            Save
-          </button>
+          <ActionButton label="Save" loadingLabel="Saving…" loading={loading} onClick={() => void handleSubmit()} />
         </>
       }
     >
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <div className="space-y-3">
         <label className="block text-sm">
           Email Address *

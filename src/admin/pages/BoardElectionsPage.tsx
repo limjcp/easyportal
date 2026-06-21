@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { StatusBadge } from "../components/AdminBadges";
 import { AdminPanelTable } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
@@ -32,6 +34,7 @@ export function BoardElectionsPage({
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
+  const pendingTitleRef = useRef("");
 
   useEffect(() => {
     Promise.all([
@@ -56,6 +59,18 @@ export function BoardElectionsPage({
     });
   }, [refreshKey]);
 
+  const { run: createElectionRun, error: createError } = useAsyncAction(
+    useCallback(async () => {
+      const title = pendingTitleRef.current;
+      if (!title) return;
+      const election = await adminRepository.createBoardElection({ title });
+      setAddOpen(false);
+      onRefresh();
+      onNavigate({ page: "board-election-edit", id: election.id });
+    }, [onRefresh, onNavigate]),
+    { successMessage: "Election created.", showErrorToast: false }
+  );
+
   const filtered = useMemo(() => {
     if (statusFilter === "all") return rows;
     return rows.filter((r) => r.status === statusFilter);
@@ -76,6 +91,7 @@ export function BoardElectionsPage({
           </button>
         }
       />
+      {createError ? <FormAlert message={createError} className="mb-3" /> : null}
       <AdminPanelTable
         title="Board Elections"
         data={filtered}
@@ -135,10 +151,8 @@ export function BoardElectionsPage({
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onContinue={async (title) => {
-          const election = await adminRepository.createBoardElection({ title });
-          setAddOpen(false);
-          onRefresh();
-          onNavigate({ page: "board-election-edit", id: election.id });
+          pendingTitleRef.current = title;
+          await createElectionRun();
         }}
       />
     </>

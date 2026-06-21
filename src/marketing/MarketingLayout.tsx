@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { CookieNotice } from "./components/CookieNotice";
 import { MarketingFooter } from "./components/MarketingFooter";
 import { MarketingHeader } from "./components/MarketingHeader";
 import type { MarketingPage } from "./navigation";
@@ -10,17 +9,32 @@ type MarketingLayoutProps = {
   currentPage: MarketingPage;
   onNavigate: (path: string) => void;
   onOpenLogin: () => void;
+  isLoggedIn?: boolean;
+  onGoToPortal?: () => void;
   children: ReactNode;
 };
 
 const FULL_BLEED_PAGES = new Set<string>(EDITORIAL_FULL_BLEED_PAGES);
 
-export function MarketingLayout({ currentPage, onNavigate, onOpenLogin, children }: MarketingLayoutProps) {
+export function MarketingLayout({
+  currentPage,
+  onNavigate,
+  onOpenLogin,
+  isLoggedIn = false,
+  onGoToPortal,
+  children,
+}: MarketingLayoutProps) {
   const isFullBleed = FULL_BLEED_PAGES.has(currentPage);
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans antialiased">
-      <MarketingHeader currentPage={currentPage} onNavigate={onNavigate} onOpenLogin={onOpenLogin} />
+      <MarketingHeader
+        currentPage={currentPage}
+        onNavigate={onNavigate}
+        onOpenLogin={onOpenLogin}
+        isLoggedIn={isLoggedIn}
+        onGoToPortal={onGoToPortal}
+      />
       <main
         className={cn(
           "w-full",
@@ -31,7 +45,6 @@ export function MarketingLayout({ currentPage, onNavigate, onOpenLogin, children
         {children}
       </main>
       <MarketingFooter onNavigate={onNavigate} />
-      <CookieNotice />
     </div>
   );
 }

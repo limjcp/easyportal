@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { FaPaperPlane, FaWrench } from "react-icons/fa";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { FaWrench } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
+import { ActionButton } from "../../shared/ActionButton";
 import { FileUploadZone } from "../../shared/FileUploadZone";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { AdminSectionHeader } from "../components/CommentSection";
 import { adminRepository } from "../data/adminRepository";
 import { validateAttachmentFile } from "../../shared/attachmentUtils";
@@ -33,9 +36,59 @@ export function AdminServiceRequestModal({
   const [uploadSlots, setUploadSlots] = useState([1, 2, 3]);
   const [slotFiles, setSlotFiles] = useState<Record<number, File>>({});
   const [residentOptions, setResidentOptions] = useState<string[]>([""]);
-  const [submitting, setSubmitting] = useState(false);
 
   const derivedUnit = resident.match(/(Unit\s*\d+)/i)?.[1]?.replace(/\s+/g, " ").trim() ?? "";
+
+  const { run: handleSubmit, loading: submitting, error } = useAsyncAction(
+    useCallback(async () => {
+      if (!resident || !location || !permissionToEnter || !severity || !category || !description) {
+        throw new Error("Please fill in all required fields.");
+      }
+      if (category === "Other" && !customCategory.trim()) {
+        throw new Error("Please enter a custom category name.");
+      }
+      const resolvedCategory = category === "Other" ? customCategory.trim() : category;
+      const files = Object.values(slotFiles);
+      for (const file of files) {
+        const validationError = validateAttachmentFile(file);
+        if (validationError) {
+          throw new Error(validationError);
+        }
+      }
+      await onSubmit({
+        assignedTo,
+        resident,
+        unit: derivedUnit || undefined,
+        visibility,
+        contact,
+        location,
+        permissionToEnter,
+        permissionNotes,
+        severity,
+        category: resolvedCategory,
+        description,
+        files: files.length ? files : undefined,
+      });
+      onClose();
+    }, [
+      assignedTo,
+      resident,
+      derivedUnit,
+      visibility,
+      contact,
+      location,
+      permissionToEnter,
+      permissionNotes,
+      severity,
+      category,
+      customCategory,
+      description,
+      slotFiles,
+      onSubmit,
+      onClose,
+    ]),
+    { successMessage: "Service request submitted.", showErrorToast: false }
+  );
 
   useEffect(() => {
     if (!open) {
@@ -82,48 +135,6 @@ export function AdminServiceRequestModal({
     return ["", ...withOther];
   }, [categories]);
 
-  const handleSubmit = async () => {
-    if (!resident || !location || !permissionToEnter || !severity || !category || !description) {
-      alert("Please fill in all required fields.");
-      return;
-    }
-    if (category === "Other" && !customCategory.trim()) {
-      alert("Please enter a custom category name.");
-      return;
-    }
-    const resolvedCategory = category === "Other" ? customCategory.trim() : category;
-    const files = Object.values(slotFiles);
-    for (const file of files) {
-      const error = validateAttachmentFile(file);
-      if (error) {
-        alert(error);
-        return;
-      }
-    }
-    setSubmitting(true);
-    try {
-      await onSubmit({
-        assignedTo,
-        resident,
-        unit: derivedUnit || undefined,
-        visibility,
-        contact,
-        location,
-        permissionToEnter,
-        permissionNotes,
-        severity,
-        category: resolvedCategory,
-        description,
-        files: files.length ? files : undefined,
-      });
-      onClose();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to submit service request.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   return (
     <Modal
       open={open}
@@ -136,18 +147,16 @@ export function AdminServiceRequestModal({
           <button type="button" onClick={onClose} className="text-sm text-slate-600">
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="inline-flex items-center gap-2 rounded bg-[#e8913a] px-4 py-2 text-sm font-medium text-white hover:bg-[#d8822f] disabled:opacity-50"
-          >
-            Submit Request
-            <FaPaperPlane />
-          </button>
+          <ActionButton
+            label="Submit Request"
+            loadingLabel="Submitting…"
+            loading={submitting}
+            onClick={() => void handleSubmit()}
+          />
         </>
       }
     >
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <div>
           <AdminSectionHeader title="Request Assignment & Users" />

@@ -43,3 +43,7 @@ button,
 select {
   font: inherit;
 }
+
+body[data-recaptcha-context="authenticated"] .grecaptcha-badge {
+  visibility: hidden !important;
+}

@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FaEnvelope, FaExclamationTriangle, FaPrint } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { IncidentReportAttachmentGrid } from "../../shared/IncidentReportAttachmentThumb";
-import { AdminSectionHeader, CommentSection } from "../components/CommentSection";import { SeverityBadge, StatusBadge, UnreadBadge } from "../components/AdminBadges";
+import { AdminSectionHeader, CommentSection } from "../components/CommentSection";
+import { SeverityBadge, StatusBadge, UnreadBadge } from "../components/AdminBadges";
 import { adminRepository } from "../data/adminRepository";
 import type {
   AdminIncidentReport,
@@ -40,6 +44,79 @@ export function IncidentReportDetailModal({
   const [customAdminType, setCustomAdminType] = useState("");
   const [commentAuthor, setCommentAuthor] = useState("Admin");
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const pendingMutationRef = useRef<(() => Promise<unknown>) | null>(null);
+  const pendingCommentRef = useRef<{ text: string; visibility: "admin" | "public" } | null>(null);
+  const pendingFileRef = useRef<File | null>(null);
+  const pendingAttachmentIdRef = useRef<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!reportId) return;
+    const updated = await adminRepository.getIncidentReportById(reportId);
+    if (updated) setReport(updated);
+    const cats = await adminRepository.getIncidentCategories();
+    const active = cats.filter((category) => category.status === "active").map((category) => category.name);
+    setCategories(active.includes("Other") ? active : [...active, "Other"]);
+    onUpdated();
+  }, [reportId, onUpdated]);
+
+  const { run: runMutation, loading: mutating, error, clearError } = useAsyncAction(
+    useCallback(async () => {
+      const mutation = pendingMutationRef.current;
+      if (!mutation) return;
+      await mutation();
+      await refresh();
+    }, [refresh]),
+    { showSuccessToast: false, showErrorToast: false }
+  );
+
+  const queueMutation = (mutation: () => Promise<unknown>, successMessage?: string) => {
+    pendingMutationRef.current = mutation;
+    clearError();
+    void runMutation().then(() => {
+      if (successMessage) {
+        // toast handled by individual actions when needed
+      }
+    });
+  };
+
+  const { run: addCommentRun, error: commentError } = useAsyncAction(
+    useCallback(async () => {
+      const pending = pendingCommentRef.current;
+      if (!reportId || !pending) return;
+      await adminRepository.addIncidentReportComment(
+        reportId,
+        {
+          author: commentAuthor,
+          text: pending.text,
+          createdAt: new Date().toLocaleString(),
+          visibility: pending.visibility,
+        },
+        pending.visibility
+      );
+      await refresh();
+    }, [reportId, commentAuthor, refresh]),
+    { successMessage: "Comment added.", showErrorToast: false }
+  );
+
+  const { run: addAttachmentRun } = useAsyncAction(
+    useCallback(async () => {
+      const file = pendingFileRef.current;
+      if (!reportId || !file) return;
+      await adminRepository.addIncidentReportAttachment(reportId, file);
+      await refresh();
+    }, [reportId, refresh]),
+    { successMessage: "Attachment added.", showErrorToast: false }
+  );
+
+  const { run: removeAttachmentRun } = useAsyncAction(
+    useCallback(async () => {
+      const attachmentId = pendingAttachmentIdRef.current;
+      if (!attachmentId) return;
+      await adminRepository.removeIncidentReportAttachment(attachmentId);
+      await refresh();
+    }, [refresh]),
+    { successMessage: "Attachment removed.", showErrorToast: false }
+  );
 
   useEffect(() => {
     if (open && reportId) {
@@ -59,58 +136,38 @@ export function IncidentReportDetailModal({
   }, [open, reportId]);
 
   const addComment = (text: string, visibility: "admin" | "public") => {
-    if (!reportId) return;
-    adminRepository
-      .addIncidentReportComment(
-        reportId,
-        { author: commentAuthor, text, createdAt: new Date().toLocaleString(), visibility },
-        visibility
-      )
-      .then(refresh)
-      .catch((err) => alert(err instanceof Error ? err.message : "Failed to save comment."));
+    pendingCommentRef.current = { text, visibility };
+    void addCommentRun();
   };
 
-  const addAttachment = async (file: File | null) => {
-    if (!reportId || !file) return;
-    try {
-      await adminRepository.addIncidentReportAttachment(reportId, file);
-      await refresh();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to add attachment.");
-    }
+  const addAttachment = (file: File | null) => {
+    pendingFileRef.current = file;
+    void addAttachmentRun();
   };
 
-  const removeAttachment = async (attachmentId: string) => {
-    try {
-      await adminRepository.removeIncidentReportAttachment(attachmentId);
-      await refresh();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to remove attachment.");
-    }
+  const removeAttachment = (attachmentId: string) => {
+    pendingAttachmentIdRef.current = attachmentId;
+    void removeAttachmentRun();
   };
 
   if (!open || !report) return null;
 
-  const refresh = async () => {
-    if (reportId) {
-      const updated = await adminRepository.getIncidentReportById(reportId);
-      if (updated) setReport(updated);
-      const cats = await adminRepository.getIncidentCategories();
-      const active = cats.filter((category) => category.status === "active").map((category) => category.name);
-      setCategories(active.includes("Other") ? active : [...active, "Other"]);
-      onUpdated();
-    }
-  };
-
-  const markResolved = () =>
-    adminRepository
-      .updateIncidentReport(report.id, {
+  const markResolved = () => {
+    queueMutation(() =>
+      adminRepository.updateIncidentReport(report.id, {
         status: "Resolved",
         resolvedBy: "Claudio Owner",
         resolvedAt: new Date().toLocaleDateString(),
         pendingReply: "No",
       })
-      .then(refresh);
+    );
+  };
+
+  const updateReport = (updates: Partial<AdminIncidentReport>) => {
+    queueMutation(() => adminRepository.updateIncidentReport(report.id, updates));
+  };
+
+  const formError = error ?? commentError;
 
   const incidentTypeOptions = Array.from(
     new Set([...(categories.length ? categories : [report.adminType]), report.adminType].filter(Boolean))
@@ -127,9 +184,7 @@ export function IncidentReportDetailModal({
         <div className="flex w-full flex-wrap justify-end gap-2">
           <button
             type="button"
-            onClick={() =>
-              adminRepository.updateIncidentReport(report.id, { unread: true }).then(refresh)
-            }
+            onClick={() => updateReport({ unread: true })}
             className="rounded bg-slate-700 px-3 py-1.5 text-sm text-white"
           >
             Set as Unread
@@ -137,14 +192,12 @@ export function IncidentReportDetailModal({
           <button
             type="button"
             onClick={() =>
-              adminRepository
-                .updateIncidentReport(report.id, {
-                  status: "Pending",
-                  archived: false,
-                  resolvedBy: undefined,
-                  resolvedAt: undefined,
-                })
-                .then(refresh)
+              updateReport({
+                status: "Pending",
+                archived: false,
+                resolvedBy: undefined,
+                resolvedAt: undefined,
+              })
             }
             className="rounded bg-slate-700 px-3 py-1.5 text-sm text-white"
           >
@@ -153,7 +206,12 @@ export function IncidentReportDetailModal({
           {!archived && (
             <button
               type="button"
-              onClick={() => adminRepository.archiveIncidentReport(report.id).then(onClose)}
+              onClick={() => {
+                queueMutation(async () => {
+                  await adminRepository.archiveIncidentReport(report.id);
+                  onClose();
+                });
+              }}
               className="rounded bg-slate-700 px-3 py-1.5 text-sm text-white"
             >
               Archive
@@ -185,13 +243,13 @@ export function IncidentReportDetailModal({
             Print
           </button>
           {report.status !== "Resolved" && (
-            <button
-              type="button"
+            <ActionButton
+              label="Mark Resolved"
+              variant="success"
+              loading={mutating}
+              loadingLabel="Saving…"
               onClick={markResolved}
-              className="rounded bg-[#5cb85c] px-3 py-1.5 text-sm text-white"
-            >
-              Mark Resolved
-            </button>
+            />
           )}
           <button
             type="button"
@@ -203,6 +261,7 @@ export function IncidentReportDetailModal({
         </div>
       }
     >
+      {formError ? <FormAlert message={formError} className="mb-4" /> : null}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {report.unread && <UnreadBadge />}
         <StatusBadge status={report.status as IncidentReportStatus} />
@@ -226,7 +285,7 @@ export function IncidentReportDetailModal({
           label="Assigned To Admin *"
           value={report.assignedToAdmin}
           options={ASSIGNED_OPTIONS}
-          onChange={(v) => adminRepository.updateIncidentReport(report.id, { assignedToAdmin: v }).then(refresh)}
+          onChange={(v) => updateReport({ assignedToAdmin: v })}
         />
         <ReadField label="Resident" value={report.resident} />
         <ReadField label="Unit" value={report.unit} />
@@ -234,7 +293,7 @@ export function IncidentReportDetailModal({
           label="Who can view this report *"
           value={report.visibility}
           options={VISIBILITY_OPTIONS}
-          onChange={(v) => adminRepository.updateIncidentReport(report.id, { visibility: v }).then(refresh)}
+          onChange={(v) => updateReport({ visibility: v })}
         />
       </div>
       {onViewRelated && report.unit && report.resident && (
@@ -257,9 +316,7 @@ export function IncidentReportDetailModal({
           label="Admin Severity *"
           value={report.adminSeverity}
           options={["Low", "Medium", "High"]}
-          onChange={(v) =>
-            adminRepository.updateIncidentReport(report.id, { adminSeverity: v, severity: v }).then(refresh)
-          }
+          onChange={(v) => updateReport({ adminSeverity: v, severity: v })}
         />
         <ReadField label="Resident Severity" value={report.severity} />
         <SelectField
@@ -272,8 +329,7 @@ export function IncidentReportDetailModal({
               return;
             }
             const resolved = await adminRepository.resolveIncidentCategoryName(v);
-            await adminRepository.updateIncidentReport(report.id, { adminType: resolved, reportType: resolved });
-            await refresh();
+            updateReport({ adminType: resolved, reportType: resolved });
           }}
         />
         {report.adminType === "Other" && (
@@ -287,8 +343,10 @@ export function IncidentReportDetailModal({
                 className="mt-1 w-full rounded border border-slate-300 px-3 py-1.5"
               />
             </label>
-            <button
-              type="button"
+            <ActionButton
+              label="Save Custom Type"
+              className="px-3 py-1 text-xs"
+              loading={mutating}
               onClick={async () => {
                 if (!customAdminType.trim()) {
                   alert("Please enter a custom incident type.");
@@ -299,16 +357,9 @@ export function IncidentReportDetailModal({
                   customAdminType
                 );
                 setCustomAdminType("");
-                await adminRepository.updateIncidentReport(report.id, {
-                  adminType: resolved,
-                  reportType: resolved,
-                });
-                await refresh();
+                updateReport({ adminType: resolved, reportType: resolved });
               }}
-              className="rounded bg-[#3476ef] px-3 py-1 text-xs text-white"
-            >
-              Save Custom Type
-            </button>
+            />
           </div>
         )}
         <ReadField label="Resident Type" value={report.reportType} />
@@ -316,21 +367,13 @@ export function IncidentReportDetailModal({
           label="Status *"
           value={report.status}
           options={["Draft", "Pending", "Resolved"]}
-          onChange={(v) =>
-            adminRepository
-              .updateIncidentReport(report.id, { status: v as IncidentReportStatus })
-              .then(refresh)
-          }
+          onChange={(v) => updateReport({ status: v as IncidentReportStatus })}
         />
         <SelectField
           label="Pending Reply"
           value={report.pendingReply}
           options={["Yes", "No", "N/A"]}
-          onChange={(v) =>
-            adminRepository
-              .updateIncidentReport(report.id, { pendingReply: v as IncidentPendingReply })
-              .then(refresh)
-          }
+          onChange={(v) => updateReport({ pendingReply: v as IncidentPendingReply })}
         />
       </div>
       <div className="p-3">

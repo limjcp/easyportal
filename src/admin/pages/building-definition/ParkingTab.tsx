@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FaCar } from "react-icons/fa";
 import { AdminFormPanel, InfoBanner, StepCard } from "../../components/AdminFormPanel";
 import { adminRepository } from "../../data/adminRepository";
+import { ActionButton } from "../../../shared/ActionButton";
+import { FormAlert } from "../../../shared/FormAlert";
+import { useAsyncAction } from "../../../shared/useAsyncAction";
 import type {
   AddUnitRangeType,
   BuildingParkingGroup,
@@ -25,12 +28,28 @@ export function ParkingTab({ refreshKey, onRefresh }: ParkingTabProps) {
   const [assigningRequestId, setAssigningRequestId] = useState<string | null>(null);
   const [selectedSpotByRequestId, setSelectedSpotByRequestId] = useState<Record<string, string>>({});
   const [assignmentNotice, setAssignmentNotice] = useState<string | null>(null);
-  const [assignmentError, setAssignmentError] = useState<string | null>(null);
   const [regularMonthlyCost, setRegularMonthlyCost] = useState("$120.00");
   const [visitorMonthlyCost, setVisitorMonthlyCost] = useState("$30.00");
-  const [pricingSaving, setPricingSaving] = useState(false);
   const [condoFeeAmount, setCondoFeeAmount] = useState("$485.00");
-  const [condoFeeSaving, setCondoFeeSaving] = useState(false);
+
+  const { run: handleSavePricing, loading: pricingSaving, error: pricingError } = useAsyncAction(
+    useCallback(async () => {
+      await adminRepository.updateBuildingParkingPricing({
+        regularMonthlyCost,
+        visitorMonthlyCost,
+      });
+      setAssignmentNotice("Parking monthly pricing updated.");
+    }, [regularMonthlyCost, visitorMonthlyCost]),
+    { successMessage: "Parking pricing saved." }
+  );
+
+  const { run: handleSaveCondoFeeAmount, loading: condoFeeSaving, error: condoFeeError } = useAsyncAction(
+    useCallback(async () => {
+      await adminRepository.updateResidentCondoFeeAmount(condoFeeAmount);
+      setAssignmentNotice("Condo fee amount updated.");
+    }, [condoFeeAmount]),
+    { successMessage: "Condo fee amount saved." }
+  );
 
   useEffect(() => {
     Promise.all([
@@ -47,70 +66,60 @@ export function ParkingTab({ refreshKey, onRefresh }: ParkingTabProps) {
       });
   }, [refreshKey]);
 
-  const refreshParkingData = async () => {
+  const refreshParkingData = useCallback(async () => {
     const [parkingGroups, requests] = await Promise.all([
       adminRepository.getBuildingParking(),
       adminRepository.getParkingRequests(),
     ]);
     setGroups(parkingGroups);
     setParkingRequests(requests);
-  };
+  }, []);
 
-  const handleAdd = async () => {
-    if (!floor.trim() || !start.trim() || !end.trim()) {
-      alert("Floor/Area, Start, and End are required.");
-      return;
-    }
-    await adminRepository.addBuildingParking({
-      floorArea: floor.trim(),
-      start,
-      end,
-      addType,
-      prefix,
-      visitorParking,
-    });
-    setFloor("");
-    setStart("");
-    setEnd("");
-    await refreshParkingData();
-    onRefresh();
-  };
+  const pendingAssignRef = useRef<{ requestId: string; spot: string } | null>(null);
 
-  const handleAssignRequest = async (requestId: string) => {
+  const { run: handleAdd, loading: addingParking, error: addError } = useAsyncAction(
+    useCallback(async () => {
+      if (!floor.trim() || !start.trim() || !end.trim()) {
+        alert("Floor/Area, Start, and End are required.");
+        return;
+      }
+      await adminRepository.addBuildingParking({
+        floorArea: floor.trim(),
+        start,
+        end,
+        addType,
+        prefix,
+        visitorParking,
+      });
+      setFloor("");
+      setStart("");
+      setEnd("");
+      await refreshParkingData();
+      onRefresh();
+    }, [floor, start, end, addType, prefix, visitorParking, refreshParkingData, onRefresh]),
+    { successMessage: "Parking spaces added.", showErrorToast: false }
+  );
+
+  const { run: assignRequestRun, loading: assigning, error: assignmentError } = useAsyncAction(
+    useCallback(async () => {
+      const pending = pendingAssignRef.current;
+      if (!pending) return;
+      await adminRepository.assignParkingRequest(pending.requestId, pending.spot);
+      await refreshParkingData();
+      setAssignmentNotice(`Assigned ${pending.spot} successfully.`);
+    }, [refreshParkingData]),
+    { successMessage: "Parking request assigned.", showErrorToast: false }
+  );
+
+  const handleAssignRequest = (requestId: string) => {
     const assignedSpot = selectedSpotByRequestId[requestId];
     if (!assignedSpot) {
-      setAssignmentError("Please select a parking space before assigning.");
       return;
     }
-    setAssignmentError(null);
     setAssignmentNotice(null);
     setAssigningRequestId(requestId);
-    try {
-      await adminRepository.assignParkingRequest(requestId, assignedSpot);
-      await refreshParkingData();
-      setAssignmentNotice(`Assigned ${assignedSpot} successfully.`);
-    } catch (error) {
-      setAssignmentError(error instanceof Error ? error.message : "Unable to assign parking request.");
-    } finally {
-      setAssigningRequestId(null);
-    }
-  };
-
-  const handleSavePricing = async () => {
-    setPricingSaving(true);
-    await adminRepository.updateBuildingParkingPricing({
-      regularMonthlyCost,
-      visitorMonthlyCost,
-    });
-    setPricingSaving(false);
-    setAssignmentNotice("Parking monthly pricing updated.");
-  };
-
-  const handleSaveCondoFeeAmount = async () => {
-    setCondoFeeSaving(true);
-    await adminRepository.updateResidentCondoFeeAmount(condoFeeAmount);
-    setCondoFeeSaving(false);
-    setAssignmentNotice("Condo fee amount updated.");
+    pendingAssignRef.current = { requestId, spot: assignedSpot };
+    void assignRequestRun().finally(() => setAssigningRequestId(null));
   };
 
   const assignedParkingSpots = new Set(
@@ -190,9 +199,15 @@ export function ParkingTab({ refreshKey, onRefresh }: ParkingTabProps) {
             </select>
           </label>
         </div>
-        <button type="button" onClick={handleAdd} className="mt-4 rounded bg-[#89c64c] px-4 py-2 text-sm text-white">
-          Add Parking
-        </button>
+        {addError ? <FormAlert message={addError} className="mt-3" /> : null}
+        <ActionButton
+          label="Add Parking"
+          loadingLabel="Adding…"
+          loading={addingParking}
+          variant="success"
+          className="mt-4"
+          onClick={() => void handleAdd()}
+        />
       </AdminFormPanel>
 
       <AdminFormPanel title="Parking Monthly Costs:" headerColor="primary">
@@ -214,14 +229,14 @@ export function ParkingTab({ refreshKey, onRefresh }: ParkingTabProps) {
             />
           </label>
         </div>
-        <button
-          type="button"
-          onClick={handleSavePricing}
-          disabled={pricingSaving}
-          className="mt-4 rounded bg-[#3476ef] px-4 py-2 text-sm text-white hover:bg-[#2d68cf] disabled:opacity-60"
-        >
-          {pricingSaving ? "Saving..." : "Save Monthly Costs"}
-        </button>
+        {pricingError ? <FormAlert message={pricingError} className="mt-3" /> : null}
+        <ActionButton
+          label="Save Monthly Costs"
+          loadingLabel="Saving…"
+          loading={pricingSaving}
+          className="mt-4"
+          onClick={() => void handleSavePricing()}
+        />
       </AdminFormPanel>
 
       <AdminFormPanel title="Condo Fee Amount (Admin Override):" headerColor="primary">
@@ -233,14 +248,14 @@ export function ParkingTab({ refreshKey, onRefresh }: ParkingTabProps) {
             className="mt-1 w-full max-w-sm rounded border border-slate-300 px-3 py-1.5"
           />
         </label>
-        <button
-          type="button"
-          onClick={handleSaveCondoFeeAmount}
-          disabled={condoFeeSaving}
-          className="mt-4 rounded bg-[#3476ef] px-4 py-2 text-sm text-white hover:bg-[#2d68cf] disabled:opacity-60"
-        >
-          {condoFeeSaving ? "Saving..." : "Save Condo Fee Amount"}
-        </button>
+        {condoFeeError ? <FormAlert message={condoFeeError} className="mt-3" /> : null}
+        <ActionButton
+          label="Save Condo Fee Amount"
+          loadingLabel="Saving…"
+          loading={condoFeeSaving}
+          className="mt-4"
+          onClick={() => void handleSaveCondoFeeAmount()}
+        />
       </AdminFormPanel>
 
       <AdminFormPanel title="Current Parking Spaces:" headerColor="primary">
@@ -280,16 +295,10 @@ export function ParkingTab({ refreshKey, onRefresh }: ParkingTabProps) {
       </AdminFormPanel>
 
       <AdminFormPanel title="Parking Request Waitlist:" headerColor="primary">
-        {assignmentNotice && (
-          <p className="mb-3 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
-            {assignmentNotice}
-          </p>
-        )}
-        {assignmentError && (
-          <p className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {assignmentError}
-          </p>
-        )}
+        {assignmentNotice ? (
+          <FormAlert message={assignmentNotice} variant="success" className="mb-3" />
+        ) : null}
+        {assignmentError ? <FormAlert message={assignmentError} className="mb-3" /> : null}
         {waitingRequests.length === 0 ? (
           <p className="py-6 text-center text-slate-500">No waiting parking requests.</p>
         ) : (
@@ -341,14 +350,13 @@ export function ParkingTab({ refreshKey, onRefresh }: ParkingTabProps) {
                           </option>
                         ))}
                       </select>
-                      <button
-                        type="button"
-                        onClick={() => handleAssignRequest(request.id)}
-                        disabled={assigningRequestId === request.id || options.length === 0}
-                        className="rounded bg-[#3476ef] px-3 py-1.5 text-sm text-white hover:bg-[#2d68cf] disabled:opacity-60"
-                      >
-                        {assigningRequestId === request.id ? "Assigning..." : "Assign"}
-                      </button>
+                      <ActionButton
+                        label="Assign"
+                        loadingLabel="Assigning…"
+                        loading={assigningRequestId === request.id || assigning}
+                        disabled={options.length === 0}
+                        onClick={() => void handleAssignRequest(request.id)}
+                      />
                     </div>
                   </div>
                   {options.length === 0 && (

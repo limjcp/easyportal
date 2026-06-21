@@ -1,15 +1,23 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaUser } from "react-icons/fa";
 import { AdminFormPanel } from "../../components/AdminFormPanel";
 import { adminRepository } from "../../data/adminRepository";
 import type { ProfileFieldOption } from "../../../resident/data/types";
+import { SaveBar } from "../../../shared/SaveBar";
+import { useAsyncAction } from "../../../shared/useAsyncAction";
 import { PortalSettingsAlert } from "./PortalSettingsAlert";
-import { SaveBar } from "./SaveBar";
 
 export function ProfileTab() {
   const [fields, setFields] = useState<ProfileFieldOption[]>([]);
   const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
+
+  const { run: handleSave, loading: saving, error } = useAsyncAction(
+    useCallback(async () => {
+      await adminRepository.updateProfileFieldOptions(fields);
+      setSaved(true);
+    }, [fields]),
+    { successMessage: "Profile settings saved." }
+  );
 
   useEffect(() => {
     adminRepository.getProfileFieldOptions().then(setFields);
@@ -26,13 +34,6 @@ export function ProfileTab() {
       })
     );
     setSaved(false);
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    await adminRepository.updateProfileFieldOptions(fields);
-    setSaving(false);
-    setSaved(true);
   };
 
   return (
@@ -88,7 +89,7 @@ export function ProfileTab() {
           </div>
         </AdminFormPanel>
       </div>
-      <SaveBar onSave={handleSave} saved={saved} saving={saving} />
+      <SaveBar onSave={() => void handleSave()} saved={saved} saving={saving} error={error} />
     </div>
   );
 }

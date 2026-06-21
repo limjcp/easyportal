@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AdminPanelTable,
   AdminTabs,
@@ -23,6 +23,16 @@ import { CertificateViewModal } from "../components/CertificateViewModal";
 import { IncidentReportViewModal } from "../components/IncidentReportViewModal";
 import { PortalSignupViewModal } from "../components/PortalSignupViewModal";
 import { Modal } from "../../shared/Modal";
+import { ConfirmModal } from "../../shared/ConfirmModal";
+import { ColumnPrefsModal } from "../../shared/ColumnPrefsModal";
+import { downloadCsv } from "../../shared/exportCsv";
+import {
+  filterColumnsByKey,
+  loadVisibleColumnKeys,
+  saveVisibleColumnKeys,
+} from "../../shared/tableColumnPrefs";
+import { useAsyncAction } from "../../shared/useAsyncAction";
+import { FaDownload } from "react-icons/fa";
 import { getMasterReportColumns } from "../config/masterReportColumns";
 import { getBoardApprovalColumns } from "../config/boardApprovalColumns";
 import { getCertificateColumns } from "../config/certificateColumns";
@@ -36,6 +46,20 @@ type MasterReportDetailPageProps = {
   route: CompanyRoute & { page: "master-report-detail" };
   onNavigate: (route: CompanyRoute) => void;
 };
+
+const INCIDENT_REPORT_COLUMN_PREFS_KEY = "company-master-report-incident-columns";
+const INCIDENT_REPORT_COLUMN_OPTIONS = [
+  { key: "id", label: "ID" },
+  { key: "address", label: "Address" },
+  { key: "incidentDate", label: "Incident Date" },
+  { key: "unit", label: "Unit" },
+  { key: "location", label: "Location" },
+  { key: "status", label: "Status" },
+  { key: "pendingReply", label: "Pending Reply" },
+  { key: "resolutionTime", label: "Resolution Time" },
+  { key: "severity", label: "Severity" },
+  { key: "view", label: "View" },
+];
 
 export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetailPageProps) {
   const [rows, setRows] = useState<MasterReportRow[]>([]);
@@ -60,6 +84,15 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
   const [poPrefill, setPoPrefill] = useState<PurchaseOrderPrefill | undefined>();
   const [relatedServiceRequestPOs, setRelatedServiceRequestPOs] = useState<PurchaseOrder[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [columnPrefsOpen, setColumnPrefsOpen] = useState(false);
+  const [bulkArchiveConfirmOpen, setBulkArchiveConfirmOpen] = useState(false);
+  const [visibleIncidentColumnKeys, setVisibleIncidentColumnKeys] = useState<Set<string>>(() =>
+    loadVisibleColumnKeys(
+      INCIDENT_REPORT_COLUMN_PREFS_KEY,
+      INCIDENT_REPORT_COLUMN_OPTIONS.map((column) => column.key)
+    )
+  );
+  const remindRowRef = useRef<MasterReportRow | null>(null);
 
   const tab = route.tab ?? "current";
   const isCertificates = route.reportType === "certificates";
@@ -72,6 +105,35 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
     route.reportType
   );
   const isAmenity = route.reportType === "amenity-reservations";
+
+  const reloadRows = useCallback(() => {
+    if (isSettingsTab) return;
+    companyRepository
+      .getMasterReports(route.reportType, {
+        buildingId: buildingId !== "all" ? buildingId : undefined,
+        tab,
+      })
+      .then((result) => setRows(result.rows))
+      .catch(() => setRows([]));
+  }, [route.reportType, tab, buildingId, isSettingsTab]);
+
+  const refreshCertificateDetail = useCallback(() => {
+    if (!detailRow) return;
+    companyRepository.getCertificateDetail(detailRow.id).then((d) => setCertificateDetail(d ?? null));
+    reloadRows();
+  }, [detailRow, reloadRows]);
+
+  const refreshBoardApprovalDetail = useCallback(() => {
+    if (!detailRow) return;
+    companyRepository.getBoardApprovalDetail(detailRow.id).then((d) => setBoardApprovalDetail(d ?? null));
+    reloadRows();
+  }, [detailRow, reloadRows]);
+
+  const refreshIncidentDetail = useCallback(() => {
+    if (!detailRow) return;
+    companyRepository.getIncidentReportDetail(detailRow.id).then((d) => setIncidentDetail(d ?? null));
+    reloadRows();
+  }, [detailRow, reloadRows]);
 
   useEffect(() => {
     companyRepository.getMasterReportBuildings().then(setBuildings);
@@ -233,9 +295,48 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
     setCreatePoOpen(true);
   }, []);
 
-  const handleBoardApprovalRemind = useCallback((row: MasterReportRow) => {
-    alert(`Send vote reminders for "${row.title}" — coming soon.`);
-  }, []);
+  const { run: sendVoteReminders } = useAsyncAction(
+    useCallback(async () => {
+      const row = remindRowRef.current;
+      if (!row) return;
+      await companyRepository.sendBoardApprovalVoteReminders(row.id);
+    }, []),
+    { successMessage: "Vote reminders sent." }
+  );
+
+  const handleBoardApprovalRemind = useCallback(
+    (row: MasterReportRow) => {
+      remindRowRef.current = row;
+      void sendVoteReminders();
+    },
+    [sendVoteReminders]
+  );
+
+  const { run: bulkArchiveIncidentReports, loading: bulkArchiving } = useAsyncAction(
+    useCallback(async () => {
+      if (tab !== "current" || filtered.length === 0) return;
+      await companyRepository.bulkArchiveIncidentReports(filtered.map((row) => row.id));
+      reloadRows();
+      setBulkArchiveConfirmOpen(false);
+    }, [filtered, reloadRows, tab]),
+    { successMessage: "Incident reports archived." }
+  );
+
+  const handleExport = () => {
+    downloadCsv(
+      `${route.reportType}-${tab}.csv`,
+      ["ID", "Community", "Date", "Title", "Status", "Unit", "Owner"],
+      filtered.map((row) => [
+        row.id,
+        row.buildingLabel,
+        row.date,
+        row.title,
+        row.status,
+        row.unit ?? "",
+        row.owner ?? "",
+      ])
+    );
+  };
 
   const closeDetail = () => {
     setDetailRow(null);
@@ -268,6 +369,11 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
     openPortalSignupView,
     handleBoardApprovalRemind,
   ]);
+
+  const visibleColumns = useMemo(() => {
+    if (!isIncidentReports) return columns;
+    return filterColumnsByKey(columns, visibleIncidentColumnKeys);
+  }, [columns, isIncidentReports, visibleIncidentColumnKeys]);
 
   const filters = getMasterReportFilters({
     reportType: route.reportType,
@@ -427,14 +533,15 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
           <button
             type="button"
             className="rounded bg-[#337ab7] px-3 py-1.5 text-sm text-white hover:bg-[#286090]"
-            onClick={() => alert("Change Column Display Defaults — coming soon.")}
+            onClick={() => setColumnPrefsOpen(true)}
           >
             Change Column Display Defaults
           </button>
           <button
             type="button"
-            className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-            onClick={() => alert("Archive Incident Reports — coming soon.")}
+            className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            onClick={() => setBulkArchiveConfirmOpen(true)}
+            disabled={tab !== "current" || filtered.length === 0 || bulkArchiving}
           >
             Archive Incident Reports
           </button>
@@ -442,7 +549,7 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
       )}
 
       {isSettingsTab ? (
-        <CertificateSettingsPanel />
+        <CertificateSettingsPanel buildingId={buildingId !== "all" ? buildingId : undefined} buildings={buildings} />
       ) : showAmenityEmpty ? (
         <div className="rounded-sm border border-slate-200 bg-white px-6 py-16 shadow-sm">
           <p className="text-center text-base font-semibold text-slate-800">
@@ -470,12 +577,22 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
           page={page}
           onPageChange={setPage}
           filters={isCertificates ? [] : filters}
-          columns={columns}
+          columns={visibleColumns}
           emptyMessage={emptyMessage}
           sortKey={sortKey}
           sortDir={sortDir}
           onSortChange={
             isCertificates || isBoardApprovals || isIncidentReports ? handleSortChange : undefined
+          }
+          toolbarExtra={
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
+              onClick={handleExport}
+            >
+              <FaDownload className="text-slate-500" />
+              Export CSV
+            </button>
           }
         />
       )}
@@ -486,6 +603,7 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
           detail={certificateDetail}
           loading={detailLoading}
           onClose={closeDetail}
+          onRefresh={refreshCertificateDetail}
         />
       ) : isBoardApprovals ? (
         <BoardApprovalViewModal
@@ -493,6 +611,7 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
           detail={boardApprovalDetail}
           loading={detailLoading}
           onClose={closeDetail}
+          onRefresh={refreshBoardApprovalDetail}
         />
       ) : isIncidentReports ? (
         <IncidentReportViewModal
@@ -500,6 +619,7 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
           detail={incidentDetail}
           loading={detailLoading}
           onClose={closeDetail}
+          onRefresh={refreshIncidentDetail}
           onViewRelated={(selectedUnit, selectedOwner) => {
             setUnit(selectedUnit);
             setOwner(selectedOwner);
@@ -548,6 +668,31 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
             loadRelatedServiceRequestPOs(detailRow.id);
           }
         }}
+      />
+
+      <ColumnPrefsModal
+        open={columnPrefsOpen}
+        onClose={() => setColumnPrefsOpen(false)}
+        title="Change Column Display Defaults"
+        columns={INCIDENT_REPORT_COLUMN_OPTIONS}
+        visibleKeys={visibleIncidentColumnKeys}
+        onSave={(keys) => {
+          saveVisibleColumnKeys(INCIDENT_REPORT_COLUMN_PREFS_KEY, keys);
+          setVisibleIncidentColumnKeys(new Set(keys));
+        }}
+      />
+
+      <ConfirmModal
+        open={bulkArchiveConfirmOpen}
+        onClose={() => {
+          if (bulkArchiving) return;
+          setBulkArchiveConfirmOpen(false);
+        }}
+        title="Archive Incident Reports"
+        message={`Archive ${filtered.length} incident report(s) currently shown in this list?`}
+        variant="danger"
+        loading={bulkArchiving}
+        onConfirm={() => void bulkArchiveIncidentReports()}
       />
     </div>
   );

@@ -2,7 +2,7 @@ import type {
   ConsultationSubmission,
   CreateConsultationSubmissionInput,
 } from "../../resident/data/types";
-import { supabase } from "../../lib/supabaseClient";
+import { requireSupabase, supabase } from "../../lib/supabaseClient";
 import { store } from "../../legacy/resident/sharedStore";
 
 const nextConsultationId = () => `consult-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -23,26 +23,41 @@ function mapRow(row: Record<string, unknown>): ConsultationSubmission {
 }
 
 async function submitToSupabase(
-  input: CreateConsultationSubmissionInput
+  input: CreateConsultationSubmissionInput,
+  recaptchaToken?: string | null
 ): Promise<ConsultationSubmission> {
-  const { data, error } = await supabase!
-    .from("consultation_submissions")
-    .insert({
+  const { data, error } = await requireSupabase().functions.invoke("consultation-submit", {
+    body: {
       name: input.name.trim(),
-      corporation_number: input.corporationNumber.trim(),
-      municipal_address: input.municipalAddress.trim(),
+      corporationNumber: input.corporationNumber.trim(),
+      municipalAddress: input.municipalAddress.trim(),
       email: input.email.trim(),
       phone: input.phone.trim(),
       survey: input.survey,
-    })
-    .select("*")
-    .single();
+      recaptchaToken: recaptchaToken ?? null,
+    },
+  });
 
-  if (error || !data) {
-    throw new Error(error?.message ?? "Failed to submit consultation");
+  const body = data as ({ error?: string } & Partial<ConsultationSubmission>) | null;
+  if (error || body?.error) {
+    throw new Error(body?.error ?? error?.message ?? "Failed to submit consultation");
+  }
+  if (!body?.id) {
+    throw new Error("Failed to submit consultation");
   }
 
-  return mapRow(data as Record<string, unknown>);
+  return {
+    id: body.id as string,
+    submittedAt: String(body.submittedAt),
+    name: body.name as string,
+    corporationNumber: (body.corporationNumber as string) ?? "",
+    municipalAddress: (body.municipalAddress as string) ?? "",
+    email: body.email as string,
+    phone: (body.phone as string) ?? "",
+    survey: body.survey as ConsultationSubmission["survey"],
+    status: body.status as "new" | "contacted",
+    unread: body.unread as boolean,
+  };
 }
 
 function submitToMock(input: CreateConsultationSubmissionInput): ConsultationSubmission {
@@ -63,9 +78,12 @@ function submitToMock(input: CreateConsultationSubmissionInput): ConsultationSub
 }
 
 export const consultationRepository = {
-  async submitConsultation(input: CreateConsultationSubmissionInput): Promise<ConsultationSubmission> {
+  async submitConsultation(
+    input: CreateConsultationSubmissionInput,
+    recaptchaToken?: string | null
+  ): Promise<ConsultationSubmission> {
     if (supabase) {
-      return submitToSupabase(input);
+      return submitToSupabase(input, recaptchaToken);
     }
     return submitToMock(input);
   },

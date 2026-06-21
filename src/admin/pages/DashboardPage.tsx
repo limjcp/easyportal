@@ -11,9 +11,11 @@ type DashboardSummary = {
   unitsCount: number;
   floorCount: number;
   usersCount: number;
+  imageUrl?: string;
 };
 
 type DashboardPageProps = {
+  refreshKey: number;
   onNavigate: (route: AdminRoute) => void;
   unreadSuggestions: number;
   pendingApprovals: number;
@@ -22,6 +24,7 @@ type DashboardPageProps = {
 };
 
 export function DashboardPage({
+  refreshKey,
   onNavigate,
   unreadSuggestions,
   pendingApprovals,
@@ -34,7 +37,11 @@ export function DashboardPage({
   useEffect(() => {
     adminRepository.getBoardMembers().then(setBoardMembers);
     adminRepository.getDashboardSummary().then(setSummary);
-  }, []);
+  }, [refreshKey]);
+
+  const heroBackground = summary?.imageUrl
+    ? `linear-gradient(to top, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.2) 50%, transparent 100%), url(${summary.imageUrl})`
+    : "linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%), url('/images/building-card.svg')";
 
   return (
     <div className="grid gap-4 xl:grid-cols-[1.05fr_1.1fr_1fr]">
@@ -101,8 +108,7 @@ export function DashboardPage({
         <div
           className="relative h-36 bg-cover bg-center"
           style={{
-            backgroundImage:
-              "linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%), url('/images/building-card.svg')",
+            backgroundImage: heroBackground,
           }}
         >
           <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/20 to-transparent" />

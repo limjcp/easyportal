@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ActionButton } from "../../shared/ActionButton";
+import { ConfirmModal } from "../../shared/ConfirmModal";
+import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
-import { companyRepository } from "../data/companyRepository";
+import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useAuth } from "../../auth/AuthProvider";
+import { companyRepository, requiresExplicitBuildingAssignments } from "../data/companyRepository";
 import type {
   CompanyBuilding,
   CompanyEmployee,
@@ -45,6 +50,13 @@ type EmployeeNotificationRow = {
   required?: boolean;
 };
 
+type EmailHistoryRow = {
+  id: string;
+  date: string;
+  subject: string;
+  status: string;
+};
+
 type EmployeeEditTab = (typeof TAB_OPTIONS)[number]["id"];
 
 function formatLastLogin(value: string | undefined): string {
@@ -77,6 +89,7 @@ type EditEmployeeModalProps = {
 };
 
 export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmployeeModalProps) {
+  const auth = useAuth();
   const [activeTab, setActiveTab] = useState<EmployeeEditTab>("profile");
   const [status, setStatus] = useState<"active" | "inactive">("active");
   const [firstName, setFirstName] = useState("");
@@ -94,8 +107,58 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
   const [notifications, setNotifications] = useState<EmployeeNotificationRow[]>(defaultNotificationRows());
   const [buildingIds, setBuildingIds] = useState<string[]>([]);
   const [buildings, setBuildings] = useState<CompanyBuilding[]>([]);
-  const [saving, setSaving] = useState(false);
   const [loadingDefaults, setLoadingDefaults] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [emailDetail, setEmailDetail] = useState<EmailHistoryRow | null>(null);
+  const [emailLoginMessage, setEmailLoginMessage] = useState<string | null>(null);
+
+  const { run: runArchive, loading: archiving } = useAsyncAction(
+    useCallback(async () => {
+      if (!employee) return;
+      await companyRepository.archiveEmployee(employee.membershipId ?? employee.id);
+      setConfirmArchive(false);
+      onSaved();
+      onClose();
+    }, [employee, onSaved, onClose]),
+    { successMessage: "Employee archived." }
+  );
+
+  const { run: runEmailLogin, loading: emailingLogin } = useAsyncAction(
+    useCallback(async () => {
+      if (!employee) return;
+      const result = await companyRepository.emailEmployeeLoginDetails(employee.membershipId ?? employee.id);
+      setEmailLoginMessage(result.message);
+    }, [employee]),
+    { successMessage: "Login details queued." }
+  );
+
+  const { run, loading, error, setError, clearError } = useAsyncAction(
+    useCallback(async () => {
+      if (!employee) return;
+      if (requiresExplicitBuildingAssignments(role) && buildingIds.length === 0) {
+        throw new Error("Select at least one building assignment for this role.");
+      }
+      await companyRepository.updateEmployee(employee.id, {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim(),
+        role,
+        assignedBuildingIds: buildingIds,
+      });
+      await companyRepository.saveEmployeePermissions(employee.membershipId ?? employee.id, permissions);
+      if (sendEmailLogin) {
+        await companyRepository.emailEmployeeLoginDetails(employee.membershipId ?? employee.id);
+      }
+      await auth.refreshAuth();
+    }, [employee, firstName, lastName, email, role, buildingIds, permissions, sendEmailLogin, auth]),
+    {
+      successMessage: "Employee updated.",
+      onSuccess: () => {
+        onSaved();
+        onClose();
+      },
+    }
+  );
 
   useEffect(() => {
     if (open && employee) {
@@ -114,10 +177,11 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
       setRole(employee.role);
       setBuildingIds([...employee.assignedBuildingIds]);
       setNotifications(defaultNotificationRows());
+      clearError();
       companyRepository.getBuildings().then(setBuildings);
       companyRepository.getEmployeePermissions(employee.membershipId ?? employee.id).then(setPermissions);
     }
-  }, [open, employee]);
+  }, [open, employee, clearError]);
 
   const assignedBuildings = useMemo(
     () => buildings.filter((building) => buildingIds.includes(building.id)),
@@ -160,24 +224,13 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
     ];
   }, [employee]);
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!employee) return;
     if (!firstName.trim() || !lastName.trim() || !email.trim()) {
-      alert("Please fill in all required fields.");
+      setError("Please fill in all required fields.");
       return;
     }
-    setSaving(true);
-    await companyRepository.updateEmployee(employee.id, {
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      email: email.trim(),
-      role,
-      assignedBuildingIds: buildingIds,
-    });
-    await companyRepository.saveEmployeePermissions(employee.membershipId ?? employee.id, permissions);
-    setSaving(false);
-    onSaved();
-    onClose();
+    void run();
   };
 
   const toggleBuilding = (id: string) => {
@@ -228,6 +281,7 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
   if (!employee) return null;
 
   return (
+    <>
     <Modal
       open={open}
       onClose={onClose}
@@ -237,29 +291,22 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
         <div className="flex w-full flex-wrap items-center justify-end gap-2">
           <button
             type="button"
-            onClick={() => window.alert("Archive is mock-only in this phase.")}
+            onClick={() => setConfirmArchive(true)}
+            disabled={loading || archiving}
             className="rounded border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700"
           >
             Archive
           </button>
-          <button
-            type="button"
+          <ActionButton
+            label="Save Changes"
+            loading={loading}
             onClick={handleSave}
-            disabled={saving}
-            className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white"
-          >
-            Save Changes
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700"
-          >
-            Cancel
-          </button>
+          />
+          <ActionButton label="Cancel" variant="secondary" onClick={onClose} disabled={loading} />
         </div>
       }
     >
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <div className="space-y-4 text-sm">
         <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
           {TAB_OPTIONS.map((tab) => (
@@ -341,6 +388,17 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
                     />
                     Email Login Details
                   </label>
+                  {emailLoginMessage ? (
+                    <p className="text-xs text-green-700 sm:col-span-2">{emailLoginMessage}</p>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={emailingLogin}
+                    onClick={() => void runEmailLogin()}
+                    className="text-left text-xs text-[#3476ef] hover:underline sm:col-span-2"
+                  >
+                    Send login details now
+                  </button>
                   <label className="space-y-1">
                     <span className="text-xs uppercase text-slate-500">Title</span>
                     <input
@@ -479,7 +537,7 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
             </div>
             <div className="space-y-3 p-3">
               <div className="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                Company Owners, Administrators, and Accountants have access to all buildings regardless of assignment.
+                Company Owners and Administrators with no assignments have access to all buildings.
               </div>
               <div className="max-h-40 overflow-y-auto rounded border border-slate-200 p-2">
                 <p className="mb-2 text-xs font-semibold text-slate-600">Add Buildings:</p>
@@ -660,7 +718,7 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
                         <td className="px-2 py-2 text-center">
                           <button
                             type="button"
-                            onClick={() => window.alert("Email detail modal is mock-only in this phase.")}
+                            onClick={() => setEmailDetail(historyRow)}
                             className="rounded bg-[#3476ef] px-2 py-1 text-xs text-white"
                           >
                             Details
@@ -676,5 +734,36 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
         ) : null}
       </div>
     </Modal>
+
+    <ConfirmModal
+      open={confirmArchive}
+      onClose={() => setConfirmArchive(false)}
+      title="Archive Employee"
+      message={`Remove ${employee.firstName} ${employee.lastName} from the company? This deletes their company membership and building assignments.`}
+      confirmLabel="Archive"
+      variant="danger"
+      onConfirm={() => void runArchive()}
+      loading={archiving}
+    />
+
+    <Modal open={!!emailDetail} onClose={() => setEmailDetail(null)} title="Email Details" size="md">
+      {emailDetail ? (
+        <div className="space-y-2 text-sm text-slate-700">
+          <p>
+            <strong>Date:</strong> {emailDetail.date}
+          </p>
+          <p>
+            <strong>Subject:</strong> {emailDetail.subject}
+          </p>
+          <p>
+            <strong>Status:</strong> {emailDetail.status}
+          </p>
+          <p>
+            <strong>Recipient:</strong> {employee.email}
+          </p>
+        </div>
+      ) : null}
+    </Modal>
+    </>
   );
 }

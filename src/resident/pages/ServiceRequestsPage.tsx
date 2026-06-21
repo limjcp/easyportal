@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { EmptyState } from "../../shared/EmptyState";
+import { useResidentServiceRequests } from "../../shared/queries/residentListQueries";
+import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { ServiceRequestDetailModal } from "../modals/ServiceRequestDetailModal";
-import { residentRepo } from "../data/mockRepository";
-import type { ServiceRequest } from "../data/types";
 
 type ServiceRequestsPageProps = {
   onAddNew: () => void;
@@ -17,16 +17,16 @@ function statusClass(status: string): string {
 }
 
 export function ServiceRequestsPage({ onAddNew, refreshKey = 0 }: ServiceRequestsPageProps) {
-  const [items, setItems] = useState<ServiceRequest[]>([]);
+  const { invalidateBuilding } = useInvalidatePortalQueries();
+  const { data: items = [], refetch } = useResidentServiceRequests();
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
 
-  const reload = () => {
-    residentRepo.getServiceRequests().then(setItems);
-  };
+  void refreshKey;
 
-  useEffect(() => {
-    reload();
-  }, [refreshKey]);
+  const reload = () => {
+    invalidateBuilding();
+    void refetch();
+  };
 
   if (items.length === 0) {
     return (
@@ -80,17 +80,15 @@ export function ServiceRequestsPage({ onAddNew, refreshKey = 0 }: ServiceRequest
                   {item.status}
                 </span>
               </div>
-              <p className="mt-1 line-clamp-2 text-slate-600">{item.description}</p>
-              <p className="mt-2 text-xs text-slate-400">
-                {item.location} · {item.severity} · {item.createdAt}
-              </p>
+              <p className="mt-1 text-slate-600">{item.description}</p>
+              <p className="mt-2 text-xs text-slate-500">{item.createdAt}</p>
             </button>
           ))}
         </div>
       </div>
 
       <ServiceRequestDetailModal
-        open={selectedRequestId !== null}
+        open={!!selectedRequestId}
         requestId={selectedRequestId}
         onClose={() => setSelectedRequestId(null)}
         onUpdated={reload}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaBuilding, FaImage, FaAddressBook } from "react-icons/fa";
 import { AdminFormPanel } from "../../components/AdminFormPanel";
 import { adminRepository } from "../../data/adminRepository";
@@ -14,17 +14,31 @@ import {
   CORPORATIONS,
 } from "../../data/mock/buildingDefinitionConstants";
 import type { BuildingDefinition, CompanyBuilding } from "../../../resident/data/types";
+import { ActionButton } from "../../../shared/ActionButton";
 import { FileUploadZone } from "../../../shared/FileUploadZone";
+import { FormAlert } from "../../../shared/FormAlert";
+import { useAsyncAction } from "../../../shared/useAsyncAction";
 import { toDataUrl, validateBuildingImageFile } from "../../../shared/attachmentUtils";
 
 type BuildingTabProps = {
+  refreshKey: number;
   onRefresh: () => void;
 };
 
-export function BuildingTab({ onRefresh }: BuildingTabProps) {
+export function BuildingTab({ refreshKey, onRefresh }: BuildingTabProps) {
   const [form, setForm] = useState<BuildingDefinition | null>(null);
   const [linkableBuildings, setLinkableBuildings] = useState<CompanyBuilding[]>([]);
   const [saved, setSaved] = useState(false);
+
+  const { run: handleSave, loading: saving, error } = useAsyncAction(
+    useCallback(async () => {
+      if (!form) return;
+      await adminRepository.updateBuildingDefinition(form);
+      setSaved(true);
+      onRefresh();
+    }, [form, onRefresh]),
+    { successMessage: "Building definition saved." }
+  );
 
   useEffect(() => {
     adminRepository.getBuildingDefinition().then(setForm);
@@ -33,7 +47,7 @@ export function BuildingTab({ onRefresh }: BuildingTabProps) {
       .getBuildings()
       .then((buildings) => setLinkableBuildings(buildings.filter((b) => b.id !== activeId)))
       .catch(() => setLinkableBuildings([]));
-  }, [onRefresh]);
+  }, [refreshKey]);
 
   if (!form) return <div className="py-8 text-center text-slate-500">Loading...</div>;
 
@@ -59,12 +73,6 @@ export function BuildingTab({ onRefresh }: BuildingTabProps) {
       ids = ids.filter((x) => x !== id);
     }
     update("linkedBuildingIds", ids);
-  };
-
-  const handleSave = async () => {
-    await adminRepository.updateBuildingDefinition(form);
-    setSaved(true);
-    onRefresh();
   };
 
   const handleImageSelect = async (file: File | null) => {
@@ -201,11 +209,17 @@ export function BuildingTab({ onRefresh }: BuildingTabProps) {
         )}
       </AdminFormPanel>
 
-      <div className="flex items-center gap-3 border-t border-slate-200 pt-4">
-        <button type="button" onClick={handleSave} className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white">
-          Save Changes
-        </button>
-        {saved && <span className="text-sm text-green-600">Saved successfully.</span>}
+      <div className="space-y-3 border-t border-slate-200 pt-4">
+        {error ? <FormAlert message={error} /> : null}
+        <div className="flex items-center gap-3">
+          <ActionButton
+            label="Save Changes"
+            loadingLabel="Saving…"
+            loading={saving}
+            onClick={() => void handleSave()}
+          />
+          {saved && !saving ? <span className="text-sm text-green-600">Saved successfully.</span> : null}
+        </div>
       </div>
     </div>
   );

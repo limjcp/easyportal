@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
-import { FaArrowRight, FaUserPlus } from "react-icons/fa";
+import { useCallback, useEffect, useState } from "react";
+import { FaUserPlus } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { adminRepository } from "../data/adminRepository";
 import { BUILDING_ADMIN_ROLES } from "../data/mock/buildingPermissions";
 import type { BuildingAdmin } from "../../resident/data/types";
@@ -20,8 +23,21 @@ export function AddBuildingAdminModal({ open, onClose, onCreated }: AddBuildingA
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  const { run: submitAdmin, loading: saving, error, setError, clearError } = useAsyncAction(
+    useCallback(async () => {
+      const created = await adminRepository.createBuildingAdmin({
+        role,
+        firstName,
+        lastName,
+        email,
+        password,
+      });
+      onCreated(created);
+      onClose();
+    }, [role, firstName, lastName, email, password, onCreated, onClose]),
+    { successMessage: "Building admin created.", showErrorToast: false }
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -31,8 +47,8 @@ export function AddBuildingAdminModal({ open, onClose, onCreated }: AddBuildingA
     setEmail("");
     setPassword("");
     setPasswordConfirm("");
-    setError(null);
-  }, [open]);
+    clearError();
+  }, [open, clearError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,23 +60,8 @@ export function AddBuildingAdminModal({ open, onClose, onCreated }: AddBuildingA
       setError("Passwords do not match.");
       return;
     }
-    setSaving(true);
-    setError(null);
-    try {
-      const created = await adminRepository.createBuildingAdmin({
-        role,
-        firstName,
-        lastName,
-        email,
-        password,
-      });
-      onCreated(created);
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create building admin.");
-    } finally {
-      setSaving(false);
-    }
+    clearError();
+    await submitAdmin();
   };
 
   return (
@@ -79,21 +80,16 @@ export function AddBuildingAdminModal({ open, onClose, onCreated }: AddBuildingA
           >
             Cancel
           </button>
-          <button
+          <ActionButton
+            label="Continue"
+            loading={saving}
             type="submit"
             form="add-building-admin-form"
-            disabled={saving}
-            className="inline-flex items-center gap-2 rounded bg-[#3476ef] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d68cf] disabled:opacity-60"
-          >
-            Continue
-            <FaArrowRight />
-          </button>
+          />
         </div>
       }
     >
-      {error ? (
-        <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
-      ) : null}
+      {error ? <FormAlert message={error} className="mb-3" /> : null}
       <form id="add-building-admin-form" onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label className="text-sm font-medium text-slate-700">

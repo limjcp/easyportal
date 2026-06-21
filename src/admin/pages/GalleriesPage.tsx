@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FormAlert } from "../../shared/FormAlert";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { OptionsDropdown } from "../components/AdminBadges";
 import { AdminPanelTable } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
@@ -20,10 +22,49 @@ export function GalleriesPage({ route, onNavigate, refreshKey, onRefresh }: Gall
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
   const [addOpen, setAddOpen] = useState(false);
+  const pendingAlbumRef = useRef<{ id: string; title?: string } | null>(null);
+  const pendingCreateTitleRef = useRef("");
 
   useEffect(() => {
     adminRepository.getGalleryAlbums().then(setItems);
   }, [refreshKey]);
+
+  const { run: createAlbumRun } = useAsyncAction(
+    useCallback(async () => {
+      const title = pendingCreateTitleRef.current;
+      if (!title) return;
+      await adminRepository.createAlbum(title);
+      onRefresh();
+    }, [onRefresh]),
+    { successMessage: "Album created." }
+  );
+
+  const createAlbum = async (title: string) => {
+    pendingCreateTitleRef.current = title;
+    await createAlbumRun();
+  };
+
+  const { run: updateAlbumRun, error: updateError } = useAsyncAction(
+    useCallback(async () => {
+      const pending = pendingAlbumRef.current;
+      if (!pending?.title) return;
+      await adminRepository.updateAlbum(pending.id, { title: pending.title });
+      onRefresh();
+    }, [onRefresh]),
+    { successMessage: "Album updated.", showErrorToast: false }
+  );
+
+  const { run: deleteAlbumRun, error: deleteError } = useAsyncAction(
+    useCallback(async () => {
+      const pending = pendingAlbumRef.current;
+      if (!pending) return;
+      await adminRepository.deleteAlbum(pending.id);
+      onRefresh();
+    }, [onRefresh]),
+    { successMessage: "Album deleted." }
+  );
+
+  const actionError = updateError ?? deleteError;
 
   return (
     <>
@@ -36,6 +77,7 @@ export function GalleriesPage({ route, onNavigate, refreshKey, onRefresh }: Gall
           </button>
         }
       />
+      {actionError ? <FormAlert message={actionError} className="mb-3" /> : null}
       <AdminPanelTable
         title="Galleries"
         data={items}
@@ -58,10 +100,19 @@ export function GalleriesPage({ route, onNavigate, refreshKey, onRefresh }: Gall
                     label: "Edit",
                     onClick: () => {
                       const title = prompt("Edit album title:", row.title);
-                      if (title) adminRepository.updateAlbum(row.id, { title }).then(onRefresh);
+                      if (title) {
+                        pendingAlbumRef.current = { id: row.id, title };
+                        void updateAlbumRun();
+                      }
                     },
                   },
-                  { label: "Delete", onClick: () => adminRepository.deleteAlbum(row.id).then(onRefresh) },
+                  {
+                    label: "Delete",
+                    onClick: () => {
+                      pendingAlbumRef.current = { id: row.id };
+                      void deleteAlbumRun();
+                    },
+                  },
                 ]}
               />
             ),
@@ -71,10 +122,7 @@ export function GalleriesPage({ route, onNavigate, refreshKey, onRefresh }: Gall
       <AddAlbumModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onSubmit={async (title) => {
-          await adminRepository.createAlbum(title);
-          onRefresh();
-        }}
+        onSubmit={createAlbum}
       />
     </>
   );

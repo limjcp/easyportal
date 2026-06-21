@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaBuilding } from "react-icons/fa";
 import { Modal } from "../../../shared/Modal";
+import { ActionButton } from "../../../shared/ActionButton";
+import { FormAlert } from "../../../shared/FormAlert";
+import { useAsyncAction } from "../../../shared/useAsyncAction";
 import { AdminFormPanel, InfoBanner, StepCard } from "../../components/AdminFormPanel";
 import { adminRepository } from "../../data/adminRepository";
 import type { AddUnitRangeType, BuildingUnitGroup } from "../../../resident/data/types";
@@ -18,25 +21,12 @@ export function UnitsTab({ refreshKey, onRefresh }: UnitsTabProps) {
   const [addType, setAddType] = useState<AddUnitRangeType>("all");
   const [viewUnit, setViewUnit] = useState<{ floor: string; unit: string; occupied: boolean } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
 
-  useEffect(() => {
-    adminRepository
-      .getBuildingUnits()
-      .then(setGroups)
-      .catch((err) => {
-        setActionError(err instanceof Error ? err.message : "Failed to load units.");
-      });
-  }, [refreshKey]);
-
-  const handleAdd = async () => {
-    if (!floor.trim() || !start.trim() || !end.trim()) {
-      alert("Floor/Area, Start, and End are required.");
-      return;
-    }
-    setAdding(true);
-    setActionError(null);
-    try {
+  const { run: handleAdd, loading: adding } = useAsyncAction(
+    useCallback(async () => {
+      if (!floor.trim() || !start.trim() || !end.trim()) {
+        throw new Error("Floor/Area, Start, and End are required.");
+      }
       const updated = await adminRepository.addBuildingUnits({
         floorArea: floor.trim(),
         start,
@@ -48,12 +38,22 @@ export function UnitsTab({ refreshKey, onRefresh }: UnitsTabProps) {
       setStart("");
       setEnd("");
       onRefresh();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to add units.");
-    } finally {
-      setAdding(false);
+    }, [floor, start, end, addType, onRefresh]),
+    {
+      successMessage: "Units added.",
+      onError: (message) => setActionError(message),
+      showErrorToast: false,
     }
-  };
+  );
+
+  useEffect(() => {
+    adminRepository
+      .getBuildingUnits()
+      .then(setGroups)
+      .catch((err) => {
+        setActionError(err instanceof Error ? err.message : "Failed to load units.");
+      });
+  }, [refreshKey]);
 
   const openUnit = (group: BuildingUnitGroup, unit: string) => {
     const occupied = group.occupiedUnits?.includes(unit) ?? false;
@@ -68,9 +68,7 @@ export function UnitsTab({ refreshKey, onRefresh }: UnitsTabProps) {
         subtitle="Define your units here."
       />
 
-      {actionError ? (
-        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</div>
-      ) : null}
+      {actionError ? <FormAlert message={actionError} className="mb-3" /> : null}
 
       <div className="mx-auto grid max-w-4xl gap-4 sm:grid-cols-3">
         <StepCard step={1} text="Enter the first and last unit for each floor/area, we'll fill in the rest." />
@@ -101,14 +99,17 @@ export function UnitsTab({ refreshKey, onRefresh }: UnitsTabProps) {
             </select>
           </label>
         </div>
-        <button
-          type="button"
-          onClick={() => void handleAdd()}
-          disabled={adding}
-          className="mt-4 rounded bg-[#89c64c] px-4 py-2 text-sm text-white disabled:opacity-60"
-        >
-          {adding ? "Adding…" : "Add Units"}
-        </button>
+        <ActionButton
+          label="Add Units"
+          loadingLabel="Adding…"
+          loading={adding}
+          variant="success"
+          className="mt-4"
+          onClick={() => {
+            setActionError(null);
+            void handleAdd();
+          }}
+        />
       </AdminFormPanel>
 
       <AdminFormPanel

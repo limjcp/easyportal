@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaWrench } from "react-icons/fa";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
 import { IncidentReportAttachmentGrid } from "../../shared/IncidentReportAttachmentThumb";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { residentRepo } from "../data/mockRepository";
 import type { ResidentServiceRequestDetail } from "../data/types";
 
@@ -25,10 +28,41 @@ export function ServiceRequestDetailModal({
   onUpdated,
 }: ServiceRequestDetailModalProps) {
   const [request, setRequest] = useState<ResidentServiceRequestDetail | null>(null);
-  const [loading, setLoading] = useState(false);
   const [commentText, setCommentText] = useState("");
-  const [addingComment, setAddingComment] = useState(false);
   const [showCommentForm, setShowCommentForm] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!requestId) return;
+    const updated = await residentRepo.getServiceRequestById(requestId);
+    if (updated) setRequest(updated);
+    onUpdated();
+  }, [onUpdated, requestId]);
+
+  const { run: loadRequest, loading, error: loadError } = useAsyncAction(
+    useCallback(async () => {
+      if (!requestId) return;
+      const data = await residentRepo.getServiceRequestById(requestId);
+      setRequest(data);
+    }, [requestId]),
+    {
+      errorMessage: "Failed to load service request.",
+      onError: () => onClose(),
+    }
+  );
+
+  const { run: addComment, loading: addingComment, error: commentError, clearError } = useAsyncAction(
+    useCallback(async () => {
+      if (!requestId || !commentText.trim()) return;
+      await residentRepo.addServiceRequestComment(requestId, commentText.trim());
+      setCommentText("");
+      setShowCommentForm(false);
+      await refresh();
+    }, [commentText, refresh, requestId]),
+    {
+      successMessage: "Comment added.",
+      errorMessage: "Failed to add comment.",
+    }
+  );
 
   useEffect(() => {
     if (!open || !requestId) {
@@ -37,38 +71,16 @@ export function ServiceRequestDetailModal({
       setShowCommentForm(false);
       return;
     }
-    setLoading(true);
-    residentRepo
-      .getServiceRequestById(requestId)
-      .then(setRequest)
-      .catch((err) => {
-        alert(err instanceof Error ? err.message : "Failed to load service request.");
-        onClose();
-      })
-      .finally(() => setLoading(false));
-  }, [open, requestId]);
+    void loadRequest();
+  }, [loadRequest, open, requestId]);
 
-  const refresh = async () => {
-    if (!requestId) return;
-    const updated = await residentRepo.getServiceRequestById(requestId);
-    if (updated) setRequest(updated);
-    onUpdated();
+  const handleAddComment = () => {
+    clearError();
+    if (!commentText.trim()) return;
+    void addComment();
   };
 
-  const handleAddComment = async () => {
-    if (!requestId || !commentText.trim()) return;
-    setAddingComment(true);
-    try {
-      await residentRepo.addServiceRequestComment(requestId, commentText.trim());
-      setCommentText("");
-      setShowCommentForm(false);
-      await refresh();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to add comment.");
-    } finally {
-      setAddingComment(false);
-    }
-  };
+  const displayError = loadError ?? commentError;
 
   return (
     <Modal
@@ -83,6 +95,7 @@ export function ServiceRequestDetailModal({
         </button>
       }
     >
+      {displayError ? <FormAlert message={displayError} className="mb-3" /> : null}
       {loading || !request ? (
         <p className="text-sm text-slate-500">{loading ? "Loading…" : "Service request not found."}</p>
       ) : (
@@ -149,19 +162,19 @@ export function ServiceRequestDetailModal({
                     placeholder="Enter comment..."
                   />
                   <div className="flex gap-2">
-                    <button
-                      type="button"
+                    <ActionButton
+                      label="Save"
+                      loadingLabel="Saving…"
+                      loading={addingComment}
+                      className="px-3 py-1 text-xs"
                       onClick={handleAddComment}
-                      disabled={addingComment}
-                      className="rounded bg-[#3476ef] px-3 py-1 text-xs text-white disabled:opacity-50"
-                    >
-                      Save
-                    </button>
+                    />
                     <button
                       type="button"
                       onClick={() => {
                         setShowCommentForm(false);
                         setCommentText("");
+                        clearError();
                       }}
                       className="rounded border border-slate-300 px-3 py-1 text-xs text-black"
                     >

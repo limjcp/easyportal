@@ -1,17 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   FaBan,
   FaEnvelope,
   FaExclamationCircle,
   FaEye,
   FaFolderOpen,
-  FaSave,
   FaUser,
   FaUserCircle,
 } from "react-icons/fa";
 import { AdminFormPanel } from "../components/AdminFormPanel";
 import { Modal } from "../../shared/Modal";
+import { ActionButton } from "../../shared/ActionButton";
+import { FormAlert } from "../../shared/FormAlert";
 import { StatusBadge } from "../../shared/StatusBadge";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import { adminRepository } from "../data/adminRepository";
 import type {
   AdminUser,
@@ -66,9 +68,32 @@ export function AdminProfileModal({ open, onClose, onProfileSaved }: AdminProfil
   const [prefs, setPrefs] = useState<NotificationPreference[]>([]);
   const [emails, setEmails] = useState<EmailRecord[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<EmailRecord | null>(null);
-  const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingAvatarUrl = useRef<string | null>(null);
+
+  const { run: saveProfile, loading: saving, error } = useAsyncAction(
+    useCallback(async () => {
+      if (!draft) return;
+      if (!draft.firstName.trim() || !draft.lastName.trim() || !draft.email.trim()) {
+        throw new Error("First name, last name, and email are required.");
+      }
+      const updated = await adminRepository.updateAdminUser({
+        firstName: draft.firstName.trim(),
+        lastName: draft.lastName.trim(),
+        email: draft.email.trim(),
+        timezone: draft.timezone,
+        telHome: draft.telHome?.trim() ?? "",
+        telMobile: draft.telMobile?.trim() ?? "",
+        telBusiness: draft.telBusiness?.trim() ?? "",
+        avatarUrl: draft.avatarUrl,
+      });
+      setSavedUser(updated);
+      setDraft(userToDraft(updated));
+      onProfileSaved?.(updated);
+      onClose();
+    }, [draft, onProfileSaved, onClose]),
+    { successMessage: "Profile saved." }
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -126,28 +151,8 @@ export function AdminProfileModal({ open, onClose, onProfileSaved }: AdminProfil
     onClose();
   };
 
-  const handleSaveProfile = async () => {
-    if (!draft) return;
-    if (!draft.firstName.trim() || !draft.lastName.trim() || !draft.email.trim()) {
-      alert("First name, last name, and email are required.");
-      return;
-    }
-    setSaving(true);
-    const updated = await adminRepository.updateAdminUser({
-      firstName: draft.firstName.trim(),
-      lastName: draft.lastName.trim(),
-      email: draft.email.trim(),
-      timezone: draft.timezone,
-      telHome: draft.telHome?.trim() ?? "",
-      telMobile: draft.telMobile?.trim() ?? "",
-      telBusiness: draft.telBusiness?.trim() ?? "",
-      avatarUrl: draft.avatarUrl,
-    });
-    setSavedUser(updated);
-    setDraft(userToDraft(updated));
-    setSaving(false);
-    onProfileSaved?.(updated);
-    onClose();
+  const handleSaveProfile = () => {
+    void saveProfile();
   };
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -175,15 +180,13 @@ export function AdminProfileModal({ open, onClose, onProfileSaved }: AdminProfil
               >
                 Cancel
               </button>
-              <button
-                type="button"
+              <ActionButton
+                label="Save Changes"
+                loadingLabel="Saving…"
+                loading={saving}
+                disabled={!draft}
                 onClick={handleSaveProfile}
-                disabled={saving || !draft}
-                className="inline-flex items-center gap-2 rounded bg-[#00a8ff] px-5 py-2 text-sm font-medium text-white hover:bg-[#0096e6] disabled:opacity-50"
-              >
-                <FaSave />
-                Save Changes
-              </button>
+              />
             </div>
           ) : (
             <div className="flex w-full justify-end">
@@ -220,6 +223,7 @@ export function AdminProfileModal({ open, onClose, onProfileSaved }: AdminProfil
           <div className="bg-white p-4">
             {tab === "profile" && draft && (
               <div className="space-y-4">
+                {error ? <FormAlert message={error} /> : null}
                 <div className="grid gap-4 md:grid-cols-2">
                   <AdminFormPanel title="Avatar" headerColor="purple">
                     <div className="flex flex-col items-center gap-4">
