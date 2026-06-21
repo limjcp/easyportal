@@ -40,7 +40,7 @@ import type {
   ServiceRequestCategory,
 } from "../../../resident/data/types";
 import { todayIsoDate } from "../base";
-import { formatUsDate } from "./shared";
+import { formatUsDate } from "../../../shared/dateFormat";
 
 export function mapAdminNews(row: Record<string, unknown>): AdminNewsItem {
   return {
