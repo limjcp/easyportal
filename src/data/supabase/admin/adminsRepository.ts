@@ -12,6 +12,7 @@ import {
 } from "../../../admin/data/mock/buildingPermissions";
 import { mapDbError, sb } from "../base";
 import { provisionUser } from "../provisionUser";
+import { invokeSendPortalEmail } from "../sendPortalEmail";
 import { bid } from "./shared";
 import { mapCompanyPermissionDbRows } from "../portalModulePermissions";
 import { refreshBuildingCounts } from "../unitsUsersRepository";
@@ -264,7 +265,12 @@ export const adminsRepository = {
 
   async emailBuildingAdminLoginDetails(id: string) {
     const admin = await this.getBuildingAdmin(id);
-    return !!admin;
+    if (!admin) throw new Error("Building admin not found.");
+    await invokeSendPortalEmail({
+      type: "building_admin_login_details",
+      membershipId: id,
+    });
+    return true;
   },
 
   async getBuildingRolePermissions(role: string): Promise<PermissionModuleRow[]> {

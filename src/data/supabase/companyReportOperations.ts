@@ -17,6 +17,7 @@ import {
   removeBuildingDocument,
   uploadBuildingDocument,
 } from "./storage";
+import { invokeSendPortalEmail } from "./sendPortalEmail";
 
 export type CertificateProcessingOption = {
   status: string;
@@ -384,6 +385,7 @@ export async function refundAndArchiveCertificate(id: string) {
 
 export async function resendCertificateToUser(id: string) {
   await loadCertificateBuildingId(id);
+  await invokeSendPortalEmail({ type: "certificate_resend", certificateId: id });
   const actor = await getActorName();
   await addCertificateHistoryEntry(id, "Certificate resent to user", actor);
 }

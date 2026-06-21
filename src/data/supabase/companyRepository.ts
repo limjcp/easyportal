@@ -52,6 +52,7 @@ import { loadEntityComments, loadIncidentReportAttachments } from "./admin/share
 import * as companyReportOps from "./companyReportOperations";
 import type { CertificateSettingsData } from "./companyReportOperations";
 import { provisionUser } from "./provisionUser";
+import { invokeSendPortalEmail } from "./sendPortalEmail";
 import { createDefaultPermissionsForRole, DEFAULT_ROLE_NAMES } from "../../company/data/mock/permissions";
 import { ensureCompanyRolePermissions, mapCompanyPermissionDbRows, mergePermissionRows } from "./portalModulePermissions";
 import { certificateDetailFromRow } from "../../company/data/mock/certificateDetails";
@@ -607,8 +608,11 @@ export const supabaseCompanyRepository = {
     return employees.find((e) => e.id === id);
   },
 
-  async emailEmployeeLoginDetails(_employeeId: string) {
-    return { ok: true, message: "Login invite queued." };
+  async emailEmployeeLoginDetails(employeeId: string) {
+    return invokeSendPortalEmail({
+      type: "employee_login_details",
+      membershipId: employeeId,
+    });
   },
 
   async archiveEmployee(membershipId: string): Promise<void> {
@@ -820,6 +824,7 @@ export const supabaseCompanyRepository = {
   async inviteVendor(vendorId: string, email: string): Promise<Vendor | undefined> {
     await sb().from("vendor_invitations").insert({ vendor_id: vendorId, invited_email: email });
     await sb().from("vendors").update({ status: "pending_invite", email }).eq("id", vendorId);
+    await invokeSendPortalEmail({ type: "vendor_invite", vendorId, email });
     return this.getVendors().then((v) => v.find((x) => x.id === vendorId));
   },
 

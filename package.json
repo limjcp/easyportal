@@ -11,7 +11,7 @@
     "create-super-admin": "bun run scripts/create-super-admin.ts",
     "supabase": "supabase",
     "db:push": "supabase db push",
-    "functions:deploy": "supabase functions deploy provision-user onboarding-lookup onboarding-register cao-compliance-sync qbo-oauth-start qbo-oauth-callback qbo-sync",
+    "functions:deploy": "supabase functions deploy provision-user onboarding-lookup onboarding-register cao-compliance-sync qbo-oauth-start qbo-oauth-callback qbo-sync send-portal-email",
     "db:link": "supabase link",
     "db:types": "supabase gen types typescript --local > src/types/database.types.ts"
   },
