@@ -20,6 +20,7 @@ import {
   mapBuildingUnitGroup,
   mapBuildingUnitGroupDefinition,
 } from "./mappers";
+import { assertEdgeFunctionOk, parseEdgeFunctionError } from "../parseEdgeFunctionError";
 import { bid, expandRange } from "./shared";
 
 export const buildingRepository = {
@@ -480,8 +481,7 @@ export const buildingRepository = {
       body: { buildingId },
     });
     const body = data as { error?: string; customers?: number; invoices?: number } | null;
-    if (body?.error) throw new Error(body.error);
-    if (error) throw new Error(error.message || "QuickBooks sync failed.");
+    await assertEdgeFunctionOk(body, error, "QuickBooks sync failed.");
     return { imported: body?.customers ?? 0, skipped: 0, invoices: body?.invoices ?? 0 };
   },
 
@@ -494,8 +494,9 @@ export const buildingRepository = {
       },
     });
     const body = data as { error?: string; url?: string } | null;
-    if (body?.error) throw new Error(body.error);
-    if (error) throw new Error(error.message || "QuickBooks connect failed.");
+    if (body?.error || error) {
+      throw new Error(await parseEdgeFunctionError(body, error, "QuickBooks connect failed."));
+    }
     if (!body?.url) throw new Error("Invalid response from QuickBooks connect.");
     return body.url;
   },

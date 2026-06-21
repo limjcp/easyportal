@@ -39,6 +39,7 @@ import { AgmMeetingsPage } from "./pages/AgmMeetingsPage";
 import { ComplianceDashboardPage } from "./pages/ComplianceDashboardPage";
 import { ConsultationLeadsPage } from "./pages/ConsultationLeadsPage";
 import type { CompanyBuilding } from "../resident/data/types";
+import { setActiveBuildingId } from "../data/supabase/buildingContext";
 
 type AdminPortalProps = {
   onSwitchToResident?: () => void;
@@ -93,6 +94,7 @@ export function AdminPortal({
 
   useEffect(() => {
     if (!activeBuildingId) return;
+    setActiveBuildingId(activeBuildingId);
     setRefreshKey((k) => k + 1);
     const dashboardRoute: AdminRoute = { page: "dashboard" };
     setRouteState(dashboardRoute);

@@ -63,7 +63,24 @@ Deno.serve(async (req) => {
     });
 
     const allowed = await canAccessBuilding(admin, user.id, buildingId);
-    if (!allowed) return jsonResponse({ error: "Not authorized for this building." }, 403);
+    if (!allowed) {
+      console.warn(
+        JSON.stringify({
+          event: "qbo_oauth_start_denied",
+          userId: user.id,
+          buildingId,
+        })
+      );
+      return jsonResponse({ error: "Not authorized for this building." }, 403);
+    }
+
+    console.info(
+      JSON.stringify({
+        event: "qbo_oauth_start_allowed",
+        userId: user.id,
+        buildingId,
+      })
+    );
 
     const { data: stateRow, error: stateError } = await admin
       .from("quickbooks_oauth_states")
