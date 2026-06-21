@@ -1,8 +1,14 @@
 import type { Session, User } from "@supabase/supabase-js";
 import { requireSupabase } from "../lib/supabaseClient";
+import {
+  clearRememberMePreference,
+  clearSupabaseAuthStorage,
+  getRememberMe,
+  setRememberMe,
+} from "../lib/supabaseAuthStorage";
 import type { LoginPortalRole } from "../resident/data/types";
 
-const REMEMBER_KEY = "mvpcondos_remember_me";
+export { clearSupabaseAuthStorage, getRememberMe, setRememberMe };
 
 export async function signInWithPassword(email: string, password: string) {
   const { data, error } = await requireSupabase().auth.signInWithPassword({ email, password });
@@ -13,6 +19,8 @@ export async function signInWithPassword(email: string, password: string) {
 export async function signOut() {
   const { error } = await requireSupabase().auth.signOut();
   if (error) throw error;
+  clearSupabaseAuthStorage();
+  clearRememberMePreference();
 }
 
 export async function resetPasswordForEmail(email: string) {
@@ -65,15 +73,6 @@ export async function updateLastLogin(userId: string) {
     .from("profiles")
     .update({ last_login_at: new Date().toISOString() })
     .eq("id", userId);
-}
-
-export function setRememberMe(enabled: boolean): void {
-  if (enabled) sessionStorage.setItem(REMEMBER_KEY, "1");
-  else sessionStorage.removeItem(REMEMBER_KEY);
-}
-
-export function getRememberMe(): boolean {
-  return sessionStorage.getItem(REMEMBER_KEY) === "1";
 }
 
 export type PortalAccess = {

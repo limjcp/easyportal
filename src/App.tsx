@@ -235,6 +235,12 @@ export default function App() {
     setView(nextView);
   };
 
+  useEffect(() => {
+    if (auth.initializing || view !== "login") return;
+    if (!auth.session) return;
+    handleGoToPortal();
+  }, [auth.initializing, auth.session, view, auth.activePortal, auth.portalAccess]);
+
   const handleLogout = async () => {
     setActiveBuilding(null);
     setActiveBuildingId(null);
@@ -295,7 +301,7 @@ export default function App() {
     );
   }
 
-  if (auth.initializing && view !== "marketing" && view !== "login") {
+  if (auth.initializing && view !== "marketing") {
     return (
       <ToastProvider>
         <CookieConsentProvider>

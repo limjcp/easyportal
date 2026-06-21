@@ -5,6 +5,7 @@ import {
 } from "../data/supabase/buildingContext";
 import { verifyRecaptchaOnServer } from "../shared/recaptcha";
 import {
+  clearSupabaseAuthStorage,
   getRememberMe,
   resolvePortalAccess,
   resetPasswordForEmail,
@@ -72,6 +73,8 @@ export function LoginPage({ onLogin, onOpenMarketing, initialMode = "signin" }: 
     setSubmitting(true);
     try {
       await verifyRecaptchaOnServer("login");
+      setRememberMe(rememberMe);
+      clearSupabaseAuthStorage();
       const { user } = await signInWithPassword(username.trim(), password);
       if (!user) throw new Error("Login failed");
       const access = await resolvePortalAccess(user.id);
@@ -85,7 +88,6 @@ export function LoginPage({ onLogin, onOpenMarketing, initialMode = "signin" }: 
       if (access.defaultPortal === "resident" || access.portals.includes("resident")) {
         await ensureActiveBuildingForUser(user.id);
       }
-      setRememberMe(rememberMe);
       onLogin(access.defaultPortal, username.trim());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed.");
