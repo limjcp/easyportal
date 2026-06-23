@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { FaBell } from "react-icons/fa";
 import { Modal } from "../../../shared/Modal";
 import { ActionButton } from "../../../shared/ActionButton";
+import { CrudPanel } from "../../../shared/CrudPanel";
 import { FormAlert } from "../../../shared/FormAlert";
 import { useAsyncAction } from "../../../shared/useAsyncAction";
 import { AdminFormPanel, InfoBanner } from "../../components/AdminFormPanel";
@@ -15,6 +16,7 @@ type RemindersTabProps = {
 
 export function RemindersTab({ refreshKey, onRefresh }: RemindersTabProps) {
   const [reminders, setReminders] = useState<BuildingReminder[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -22,7 +24,19 @@ export function RemindersTab({ refreshKey, onRefresh }: RemindersTabProps) {
   const [schedule, setSchedule] = useState("");
 
   useEffect(() => {
-    adminRepository.getBuildingReminders().then(setReminders);
+    let cancelled = false;
+    setLoading(true);
+    adminRepository
+      .getBuildingReminders()
+      .then((data) => {
+        if (!cancelled) setReminders(data);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [refreshKey]);
 
   const { run: handleCreate, loading: creating, error } = useAsyncAction(
@@ -47,7 +61,7 @@ export function RemindersTab({ refreshKey, onRefresh }: RemindersTabProps) {
   );
 
   return (
-    <div className="space-y-4">
+    <CrudPanel className="space-y-4" loading={loading}>
       <InfoBanner
         icon={<FaBell />}
         title="Admin Building Reminders"
@@ -113,6 +127,6 @@ export function RemindersTab({ refreshKey, onRefresh }: RemindersTabProps) {
           </label>
         </div>
       </Modal>
-    </div>
+    </CrudPanel>
   );
 }

@@ -5,10 +5,15 @@ import { ActionButton } from "../../shared/ActionButton";
 import { FileUploadZone } from "../../shared/FileUploadZone";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import {
+  mergeServiceCategoryOptions,
+  mergeServiceLocationOptions,
+  resolveServiceRequestLocation,
+} from "../../shared/serviceRequestPresets";
 import { AdminSectionHeader } from "../components/CommentSection";
 import { adminRepository } from "../data/adminRepository";
 import { validateAttachmentFile } from "../../shared/attachmentUtils";
-import type { CreateAdminServiceRequestInput, ServiceRequestCategory } from "../../resident/data/types";
+import type { CreateAdminServiceRequestInput } from "../../resident/data/types";
 
 type AdminServiceRequestModalProps = {
   open: boolean;
@@ -25,13 +30,15 @@ export function AdminServiceRequestModal({
   const [resident, setResident] = useState("");
   const [visibility, setVisibility] = useState("Only Administrators");
   const [location, setLocation] = useState("");
+  const [customLocation, setCustomLocation] = useState("");
   const [contact, setContact] = useState("");
   const [permissionToEnter, setPermissionToEnter] = useState("");
   const [permissionNotes, setPermissionNotes] = useState("");
   const [severity, setSeverity] = useState("");
   const [category, setCategory] = useState("");
   const [customCategory, setCustomCategory] = useState("");
-  const [categories, setCategories] = useState<ServiceRequestCategory[]>([]);
+  const [dbCategoryNames, setDbCategoryNames] = useState<string[]>([]);
+  const [buildingCommonAreas, setBuildingCommonAreas] = useState<string[]>([]);
   const [description, setDescription] = useState("");
   const [uploadSlots, setUploadSlots] = useState([1, 2, 3]);
   const [slotFiles, setSlotFiles] = useState<Record<number, File>>({});
@@ -41,13 +48,14 @@ export function AdminServiceRequestModal({
 
   const { run: handleSubmit, loading: submitting, error } = useAsyncAction(
     useCallback(async () => {
-      if (!resident || !location || !permissionToEnter || !severity || !category || !description) {
+      const resolvedLocation = resolveServiceRequestLocation(location, customLocation);
+      const resolvedCategory = category === "Other" ? customCategory.trim() : category;
+      if (!resident || !resolvedLocation || !permissionToEnter || !severity || !category || !description) {
         throw new Error("Please fill in all required fields.");
       }
-      if (category === "Other" && !customCategory.trim()) {
+      if (category === "Other" && !resolvedCategory) {
         throw new Error("Please enter a custom category name.");
       }
-      const resolvedCategory = category === "Other" ? customCategory.trim() : category;
       const files = Object.values(slotFiles);
       for (const file of files) {
         const validationError = validateAttachmentFile(file);
@@ -61,7 +69,7 @@ export function AdminServiceRequestModal({
         unit: derivedUnit || undefined,
         visibility,
         contact,
-        location,
+        location: resolvedLocation,
         permissionToEnter,
         permissionNotes,
         severity,
@@ -77,6 +85,7 @@ export function AdminServiceRequestModal({
       visibility,
       contact,
       location,
+      customLocation,
       permissionToEnter,
       permissionNotes,
       severity,
@@ -96,6 +105,7 @@ export function AdminServiceRequestModal({
       setResident("");
       setVisibility("Only Administrators");
       setLocation("");
+      setCustomLocation("");
       setContact("");
       setPermissionToEnter("");
       setPermissionNotes("");
@@ -105,6 +115,8 @@ export function AdminServiceRequestModal({
       setDescription("");
       setUploadSlots([1, 2, 3]);
       setSlotFiles({});
+      setDbCategoryNames([]);
+      setBuildingCommonAreas([]);
       return;
     }
     adminRepository.getUnitsUsersCurrent().then((rows) => {
@@ -116,12 +128,12 @@ export function AdminServiceRequestModal({
     });
     adminRepository.getServiceCategories().then((items) => {
       const active = items.filter((item) => item.status === "active");
-      setCategories(active);
-      if (category && !active.some((item) => item.name === category)) {
-        setCategory("");
-      }
+      setDbCategoryNames(active.map((item) => item.name));
     });
-  }, [open, category]);
+    adminRepository.getBuildingDefinition().then((definition) => {
+      setBuildingCommonAreas(definition.commonAreas);
+    });
+  }, [open]);
 
   useEffect(() => {
     if (category !== "Other") {
@@ -129,11 +141,21 @@ export function AdminServiceRequestModal({
     }
   }, [category]);
 
-  const categoryOptions = useMemo(() => {
-    const names = categories.map((categoryItem) => categoryItem.name);
-    const withOther = names.some((name) => name === "Other") ? names : [...names, "Other"];
-    return ["", ...withOther];
-  }, [categories]);
+  useEffect(() => {
+    if (location !== "Other") {
+      setCustomLocation("");
+    }
+  }, [location]);
+
+  const categoryOptions = useMemo(
+    () => ["", ...mergeServiceCategoryOptions(dbCategoryNames)],
+    [dbCategoryNames]
+  );
+
+  const locationOptions = useMemo(
+    () => ["", ...mergeServiceLocationOptions(buildingCommonAreas, derivedUnit || resident || undefined)],
+    [buildingCommonAreas, derivedUnit, resident]
+  );
 
   return (
     <Modal
@@ -179,7 +201,20 @@ export function AdminServiceRequestModal({
         <div>
           <AdminSectionHeader title="Request Location" />
           <div className="space-y-3 p-3">
-            <InputField label="Location *" value={location} onChange={setLocation} placeholder="Location" />
+            <SelectField
+              label="Location *"
+              value={location}
+              onChange={setLocation}
+              options={locationOptions}
+            />
+            {location === "Other" && (
+              <InputField
+                label="Custom Location *"
+                value={customLocation}
+                onChange={setCustomLocation}
+                placeholder="Type custom location"
+              />
+            )}
             <InputField label="Contact Phone" value={contact} onChange={setContact} placeholder="Enter Phone" />
             <SelectField
               label="Permission To Enter *"

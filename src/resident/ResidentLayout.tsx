@@ -3,6 +3,7 @@ import { FaFacebookF, FaInstagram, FaTwitter, FaYoutube } from "react-icons/fa";
 import { useAuth } from "../auth/AuthProvider";
 import { getActiveBuildingId } from "../data/supabase/buildingContext";
 import { MvpLogo } from "../shared/MvpLogo";
+import { PageBusyProvider } from "../shared/PageBusyProvider";
 import { normalizeExternalUrl } from "../shared/urlUtils";
 import { ResidentNav } from "./components/ResidentNav";
 import { UserMenu } from "./components/UserMenu";
@@ -40,6 +41,7 @@ export function ResidentLayout({
   const showBuildingAdmin = auth.portalAccess?.portals.includes("building") ?? false;
 
   return (
+    <PageBusyProvider>
     <div
       className="relative min-h-screen overflow-hidden bg-slate-950 text-white"
       style={{ ["--portal-primary" as string]: themeColor }}
@@ -70,6 +72,7 @@ export function ResidentLayout({
         <Footer defaultLanguage={portalTileSettings.defaultLanguage} />
       </div>
     </div>
+    </PageBusyProvider>
   );
 }
 

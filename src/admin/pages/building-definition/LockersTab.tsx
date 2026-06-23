@@ -3,6 +3,7 @@ import { FaLock } from "react-icons/fa";
 import { AdminFormPanel, InfoBanner, StepCard } from "../../components/AdminFormPanel";
 import { adminRepository } from "../../data/adminRepository";
 import { ActionButton } from "../../../shared/ActionButton";
+import { CrudPanel } from "../../../shared/CrudPanel";
 import { FormAlert } from "../../../shared/FormAlert";
 import { useAsyncAction } from "../../../shared/useAsyncAction";
 import type { AddUnitRangeType, BuildingLockerGroup } from "../../../resident/data/types";
@@ -14,6 +15,7 @@ type LockersTabProps = {
 
 export function LockersTab({ refreshKey, onRefresh }: LockersTabProps) {
   const [groups, setGroups] = useState<BuildingLockerGroup[]>([]);
+  const [loading, setLoading] = useState(true);
   const [floor, setFloor] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -34,18 +36,30 @@ export function LockersTab({ refreshKey, onRefresh }: LockersTabProps) {
   );
 
   useEffect(() => {
-    adminRepository.getBuildingLockers().then(setGroups);
+    let cancelled = false;
+    setLoading(true);
+    adminRepository
+      .getBuildingLockers()
+      .then((data) => {
+        if (!cancelled) setGroups(data);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [refreshKey]);
 
   return (
-    <div className="space-y-4">
+    <CrudPanel className="space-y-4" loading={loading}>
       <InfoBanner
         icon={<FaLock />}
         title="Lockers Definition"
         subtitle="Define your lockers here."
       />
 
-      <div className="mx-auto grid max-w-4xl gap-4 sm:grid-cols-3">
+      <div className="mx-auto grid w-full gap-4 sm:grid-cols-3">
         <StepCard step={1} text="Enter the first and last locker for each floor/area." />
         <StepCard step={2} text="Once added, you can edit or delete any lockers that need adjustment." />
         <StepCard step={3} text="Continue until all lockers have been added!" />
@@ -115,6 +129,6 @@ export function LockersTab({ refreshKey, onRefresh }: LockersTabProps) {
           </table>
         )}
       </AdminFormPanel>
-    </div>
+    </CrudPanel>
   );
 }

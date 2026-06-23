@@ -15,6 +15,7 @@ import {
 } from "../../data/mock/buildingDefinitionConstants";
 import type { BuildingDefinition, CompanyBuilding } from "../../../resident/data/types";
 import { ActionButton } from "../../../shared/ActionButton";
+import { CrudPanel } from "../../../shared/CrudPanel";
 import { FileUploadZone } from "../../../shared/FileUploadZone";
 import { FormAlert } from "../../../shared/FormAlert";
 import { useAsyncAction } from "../../../shared/useAsyncAction";
@@ -49,7 +50,7 @@ export function BuildingTab({ refreshKey, onRefresh }: BuildingTabProps) {
       .catch(() => setLinkableBuildings([]));
   }, [refreshKey]);
 
-  if (!form) return <div className="py-8 text-center text-slate-500">Loading...</div>;
+  if (!form) return null;
 
   const update = <K extends keyof BuildingDefinition>(field: K, value: BuildingDefinition[K]) => {
     setForm({ ...form, [field]: value });
@@ -91,7 +92,7 @@ export function BuildingTab({ refreshKey, onRefresh }: BuildingTabProps) {
   };
 
   return (
-    <div className="space-y-4">
+    <CrudPanel className="space-y-4" loading={!form}>
       <div className="grid gap-4 lg:grid-cols-12">
         <div className="space-y-4 lg:col-span-7">
           <AdminFormPanel title="Building Details" icon={<FaBuilding className="text-slate-500" />}>
@@ -221,7 +222,7 @@ export function BuildingTab({ refreshKey, onRefresh }: BuildingTabProps) {
           {saved && !saving ? <span className="text-sm text-green-600">Saved successfully.</span> : null}
         </div>
       </div>
-    </div>
+    </CrudPanel>
   );
 }
 

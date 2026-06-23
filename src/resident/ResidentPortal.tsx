@@ -41,6 +41,11 @@ import {
   extractResidentSubPath,
   pathToResidentRoute,
 } from "../routing/residentRoutePaths";
+import { queryKeys } from "../shared/queryKeys";
+import { useInvalidatePortalQueries } from "../shared/queries/useInvalidatePortalQueries";
+import { useTenantContext } from "../shared/queries/useTenantContext";
+import { useNavigateWithBusy } from "../shared/useNavigateWithBusy";
+import type { ServiceRequest } from "./data/types";
 
 type ResidentPortalProps = {
   onSwitchToAdmin: () => void;
@@ -96,12 +101,13 @@ function ResidentPortalInner({ onSwitchToAdmin, onLogout, onGoToWebsite }: Resid
     const sub = extractResidentSubPath(location.pathname, RESIDENT_PATH_PREFIX);
     return pathToResidentRoute(sub);
   }, [location.pathname]);
-  const navigate = useCallback(
+  const navigateRaw = useCallback(
     (next: ResidentRoute) => {
       routerNavigate(buildResidentPath(RESIDENT_PATH_PREFIX, next));
     },
     [routerNavigate]
   );
+  const navigate = useNavigateWithBusy(navigateRaw);
 
   useEffect(() => {
     const sub = extractResidentSubPath(location.pathname, RESIDENT_PATH_PREFIX);
@@ -122,6 +128,8 @@ function ResidentPortalInner({ onSwitchToAdmin, onLogout, onGoToWebsite }: Resid
   const [uploadOpen, setUploadOpen] = useState(false);
   const [rsvpsOpen, setRsvpsOpen] = useState(false);
   const [listRefresh, setListRefresh] = useState(0);
+  const { queryClient } = useInvalidatePortalQueries();
+  const { userId, buildingId } = useTenantContext();
 
   const bumpList = () => setListRefresh((k) => k + 1);
 
@@ -162,8 +170,17 @@ function ResidentPortalInner({ onSwitchToAdmin, onLogout, onGoToWebsite }: Resid
         open={serviceModalOpen}
         onClose={() => setServiceModalOpen(false)}
         onSubmit={async (input) => {
-          await residentRepo.createServiceRequest(input);
-          bumpList();
+          const created = await residentRepo.createServiceRequest(input);
+          if (userId && buildingId) {
+            queryClient.setQueryData<ServiceRequest[]>(
+              queryKeys.building.residentServiceRequests(userId, buildingId),
+              (old) => {
+                if (!old) return [created];
+                if (old.some((row) => row.id === created.id)) return old;
+                return [created, ...old];
+              }
+            );
+          }
         }}
       />
 

@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaEnvelope, FaInfoCircle, FaUserCircle } from "react-icons/fa";
 import { AdminPanelTable } from "../../admin/components/AdminPanelTable";
 import type { SortDirection } from "../../admin/components/AdminPanelTable";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { FormAlert } from "../../shared/FormAlert";
 import { RowActionsMenu } from "../../shared/RowActionsMenu";
 import { Tooltip } from "../../shared/Tooltip";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { useCompanyBuildings, useCompanyEmployees } from "../../shared/queries/companyQueries";
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
+import { isQueryInitiallyLoading } from "../../shared/useQueryPageBusy";
 import { companyRepository } from "../data/companyRepository";
 import { AddEmployeeModal } from "../modals/AddEmployeeModal";
 import { EditEmployeeModal } from "../modals/EditEmployeeModal";
@@ -49,8 +51,12 @@ function exportEmployeesCsv(employees: CompanyEmployee[], buildings: CompanyBuil
 
 export function EmployeesPage() {
   const { invalidateCompany } = useInvalidatePortalQueries();
-  const { data: employees = [], error: employeesError, refetch: refetchEmployees } = useCompanyEmployees();
-  const { data: buildings = [], refetch: refetchBuildings } = useCompanyBuildings();
+  const employeesQuery = useCompanyEmployees();
+  const { data: employees = [], error: employeesError, refetch: refetchEmployees } = employeesQuery;
+  const buildingsQuery = useCompanyBuildings();
+  const { data: buildings = [], refetch: refetchBuildings } = buildingsQuery;
+  const pageLoading =
+    isQueryInitiallyLoading(employeesQuery) || isQueryInitiallyLoading(buildingsQuery);
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
@@ -145,7 +151,7 @@ export function EmployeesPage() {
   }, [employees, search]);
 
   return (
-    <div>
+    <CrudPanel loading={pageLoading}>
       {loadError ? <FormAlert message={loadError} className="mb-4" /> : null}
       <div className="mb-4 flex flex-wrap gap-2">
         <button
@@ -173,7 +179,7 @@ export function EmployeesPage() {
 
       <AdminPanelTable
         title="Employees"
-        headerColor="purple"
+        headerColor="brand"
         data={employees}
         search={search}
         onSearchChange={setSearch}
@@ -294,6 +300,6 @@ export function EmployeesPage() {
         }}
         onSaved={load}
       />
-    </div>
+    </CrudPanel>
   );
 }

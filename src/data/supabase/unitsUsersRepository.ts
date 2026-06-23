@@ -655,8 +655,21 @@ export const unitsUsersRepository = {
   },
 
   async listAssignableUnits(): Promise<Array<{ id: string; label: string }>> {
-    const rows = await this.getUnitsUsersUnoccupied();
-    return rows.map((u) => ({ id: u.unitId, label: u.unitLabel }));
+    return this.listBuildingUnitsForAssignment();
+  },
+
+  async listBuildingUnitsForAssignment(): Promise<Array<{ id: string; label: string }>> {
+    const buildingId = await bid();
+    const { data, error } = await sb()
+      .from("units")
+      .select("id, label")
+      .eq("building_id", buildingId)
+      .order("label");
+    mapDbError(error);
+    return (data ?? []).map((u) => ({
+      id: u.id as string,
+      label: u.label as string,
+    }));
   },
 
   async updateUnitsUsersUserDetail(

@@ -7,6 +7,7 @@ import {
 } from "react-icons/fa";
 import { MvpLogo } from "../shared/MvpLogo";
 import { Modal } from "../shared/Modal";
+import { PageBusyProvider } from "../shared/PageBusyProvider";
 import { cn } from "../utils/cn";
 import { VendorNotifications } from "./components/VendorNotifications";
 import { vendorRepository } from "./data/vendorRepository";
@@ -64,6 +65,7 @@ export function VendorLayout({
   }
 
   return (
+    <PageBusyProvider>
     <div className="min-h-screen bg-[#e7edf3] text-slate-700">
       <div className="bg-[#0d9488] text-white shadow-sm">
         <div className="mx-auto flex max-w-[1080px] items-center justify-between px-4 py-2 text-xs sm:px-6 sm:text-sm">
@@ -194,5 +196,6 @@ export function VendorLayout({
         <p className="text-center text-slate-600">Are you sure you want to logout?</p>
       </Modal>
     </div>
+    </PageBusyProvider>
   );
 }

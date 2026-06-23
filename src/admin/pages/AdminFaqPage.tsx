@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useLocalList } from "../../shared/useLocalList";
 import { OptionsDropdown } from "../components/AdminBadges";
 import { AdminPanelTable } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
@@ -17,7 +19,10 @@ type AdminFaqPageProps = {
 };
 
 export function AdminFaqPage({ route, onNavigate, refreshKey, onRefresh }: AdminFaqPageProps) {
-  const [items, setItems] = useState<FaqItem[]>([]);
+  const { data: items, reload, loading } = useLocalList(
+    useCallback(() => adminRepository.getFaqs(), []),
+    refreshKey
+  );
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
@@ -25,17 +30,14 @@ export function AdminFaqPage({ route, onNavigate, refreshKey, onRefresh }: Admin
   const pendingFaqRef = useRef<{ id: string; answer?: string } | null>(null);
   const pendingCreateRef = useRef<{ question: string; answer: string } | null>(null);
 
-  useEffect(() => {
-    adminRepository.getFaqs().then(setItems);
-  }, [refreshKey]);
-
   const { run: createFaqRun } = useAsyncAction(
     useCallback(async () => {
       const pending = pendingCreateRef.current;
       if (!pending) return;
       await adminRepository.createFaq(pending);
       onRefresh();
-    }, [onRefresh]),
+      await reload();
+    }, [onRefresh, reload]),
     { successMessage: "FAQ added." }
   );
 
@@ -45,7 +47,8 @@ export function AdminFaqPage({ route, onNavigate, refreshKey, onRefresh }: Admin
       if (!pending?.answer) return;
       await adminRepository.updateFaq(pending.id, { answer: pending.answer });
       onRefresh();
-    }, [onRefresh]),
+      await reload();
+    }, [onRefresh, reload]),
     { successMessage: "FAQ updated.", showErrorToast: false }
   );
 
@@ -55,14 +58,15 @@ export function AdminFaqPage({ route, onNavigate, refreshKey, onRefresh }: Admin
       if (!pending) return;
       await adminRepository.deleteFaq(pending.id);
       onRefresh();
-    }, [onRefresh]),
+      await reload();
+    }, [onRefresh, reload]),
     { successMessage: "FAQ deleted." }
   );
 
   const actionError = updateError ?? deleteError;
 
   return (
-    <>
+    <CrudPanel loading={loading}>
       <AdminPageActions
         route={route}
         onNavigate={onNavigate}
@@ -122,6 +126,6 @@ export function AdminFaqPage({ route, onNavigate, refreshKey, onRefresh }: Admin
           await createFaqRun();
         }}
       />
-    </>
+    </CrudPanel>
   );
 }

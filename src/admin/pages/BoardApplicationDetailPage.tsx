@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { usePageContentBusy } from "../../shared/usePageContentBusy";
 import { AdminPanelHeader } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
 import { AdminPageActions } from "../components/AdminPageActions";
@@ -51,8 +52,10 @@ export function BoardApplicationDetailPage({
     { successMessage: "Application status updated.", showErrorToast: false }
   );
 
+  usePageContentBusy(!application);
+
   if (!application) {
-    return <div className="py-8 text-center text-slate-500">Loading...</div>;
+    return null;
   }
 
   return (

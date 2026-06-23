@@ -1,17 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { FaDownload, FaSearch } from "react-icons/fa";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { useResidentDocumentFolders, useResidentDocuments } from "../../shared/queries/residentListQueries";
+import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
+import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
 import { DataTable } from "../../shared/DataTable";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { residentRepo } from "../data/mockRepository";
 import type { DocumentFile } from "../data/types";
 
 export function DocumentsPage({ refreshKey = 0 }: { refreshKey?: number }) {
-  const { data: folders = [] } = useResidentDocumentFolders();
+  const { invalidateBuilding } = useInvalidatePortalQueries();
+  const foldersQuery = useResidentDocumentFolders();
+  const { data: folders = [], refetch: refetchFolders } = foldersQuery;
   const [folderId, setFolderId] = useState("");
-  const { data: documents = [] } = useResidentDocuments(folderId);  const [search, setSearch] = useState("");
+  const documentsQuery = useResidentDocuments(folderId);
+  const { data: documents = [], refetch: refetchDocuments } = documentsQuery;
+  const pageLoading =
+    isQueryPageLoading(foldersQuery) ||
+    (Boolean(folderId) && isQueryPageLoading(documentsQuery));
+  const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(5);
   const [page, setPage] = useState(0);
   const downloadDocRef = useRef<DocumentFile | null>(null);
@@ -34,7 +44,12 @@ export function DocumentsPage({ refreshKey = 0 }: { refreshKey?: number }) {
     void downloadDocument();
   };
 
-  void refreshKey;
+  useEffect(() => {
+    if (refreshKey === 0) return;
+    invalidateBuilding();
+    void refetchFolders();
+    void refetchDocuments();
+  }, [refreshKey, invalidateBuilding, refetchFolders, refetchDocuments]);
 
   useEffect(() => {
     if (folders.length > 0) {
@@ -59,6 +74,7 @@ export function DocumentsPage({ refreshKey = 0 }: { refreshKey?: number }) {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
 
   return (
+    <CrudPanel loading={pageLoading}>
     <div className="rounded-sm bg-white/95 p-4 shadow-lg sm:p-6">
       <ModuleMessageBanner moduleId="documents" />
       {downloadError ? <FormAlert message={downloadError} className="mb-4" /> : null}
@@ -153,5 +169,6 @@ export function DocumentsPage({ refreshKey = 0 }: { refreshKey?: number }) {
         </button>
       </div>
     </div>
+    </CrudPanel>
   );
 }

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { StatusBadge } from "../../admin/components/AdminBadges";
 import { AdminPanelTable } from "../../admin/components/AdminPanelTable";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import {
@@ -9,6 +10,7 @@ import {
   useCompanyVendors,
 } from "../../shared/queries/companyQueries";
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
+import { isQueryInitiallyLoading } from "../../shared/useQueryPageBusy";
 import { companyRepository } from "../data/companyRepository";
 import { VendorFormModal } from "../modals/VendorFormModal";
 import type { CompanyBuilding, Vendor } from "../../resident/data/types";
@@ -20,9 +22,16 @@ type VendorsPageProps = {
 
 export function VendorsPage({ onNavigate }: VendorsPageProps) {
   const { invalidateCompany } = useInvalidatePortalQueries();
-  const { data: vendors = [], refetch: refetchVendors } = useCompanyVendors();
-  const { data: buildings = [] } = useCompanyBuildings();
-  const { data: activePoCounts = {}, refetch: refetchPoCounts } = useCompanyActivePoCountsByVendor();
+  const vendorsQuery = useCompanyVendors();
+  const { data: vendors = [], refetch: refetchVendors } = vendorsQuery;
+  const buildingsQuery = useCompanyBuildings();
+  const { data: buildings = [] } = buildingsQuery;
+  const poCountsQuery = useCompanyActivePoCountsByVendor();
+  const { data: activePoCounts = {}, refetch: refetchPoCounts } = poCountsQuery;
+  const pageLoading =
+    isQueryInitiallyLoading(vendorsQuery) ||
+    isQueryInitiallyLoading(buildingsQuery) ||
+    isQueryInitiallyLoading(poCountsQuery);
   const [search, setSearch] = useState("");
   const [tradeFilter, setTradeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -135,7 +144,7 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
   const actionError = inviteError ?? deactivateError;
 
   return (
-    <div>
+    <CrudPanel loading={pageLoading}>
       <div className="mb-4 rounded bg-[#5c2d91] px-4 py-2 text-sm font-semibold text-white">
         Vendor / Trades Registry
       </div>
@@ -180,7 +189,7 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
 
       <AdminPanelTable
         title="Vendors"
-        headerColor="purple"
+        headerColor="brand"
         data={sorted}
         search={search}
         onSearchChange={setSearch}
@@ -320,6 +329,6 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
         onSaved={load}
         vendor={editVendor}
       />
-    </div>
+    </CrudPanel>
   );
 }

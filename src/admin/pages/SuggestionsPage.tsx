@@ -1,9 +1,14 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { AdminPanelTable } from "../components/AdminPanelTable";
 import { UnreadBadge } from "../components/AdminBadges";
 import { adminRepository } from "../data/adminRepository";
 import { useAdminSuggestions } from "../../shared/queries/adminListQueries";
+import { prependBuildingQueryListItem, useBuildingListRefresh } from "../../shared/queries/mutationHelpers";
+import { queryKeys } from "../../shared/queryKeys";
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
+import { useTenantContext } from "../../shared/queries/useTenantContext";
+import { isQueryInitiallyLoading } from "../../shared/useQueryPageBusy";
 import { AddSuggestionModal } from "../modals/AddSuggestionModal";
 import { AdminPageActions } from "../components/AdminPageActions";
 import type { AdminRoute } from "../navigation";
@@ -17,20 +22,32 @@ type SuggestionsPageProps = {
 };
 
 export function SuggestionsPage({ route, onNavigate, refreshKey, onRefresh }: SuggestionsPageProps) {
-  const { invalidateBuilding } = useInvalidatePortalQueries();
-  const { data: items = [] } = useAdminSuggestions();
+  const { queryClient } = useInvalidatePortalQueries();
+  const { userId, buildingId } = useTenantContext();
+  const listQueryKey =
+    userId && buildingId ? queryKeys.building.adminSuggestions(userId, buildingId) : null;
+  const suggestionsQuery = useAdminSuggestions();
+  const { data: items = [], refetch } = suggestionsQuery;
+  const { refreshList } = useBuildingListRefresh<AdminSuggestion>(
+    queryClient,
+    buildingId,
+    listQueryKey,
+    refetch
+  );
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
   const [visibilityFilter, setVisibilityFilter] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
 
-  void refreshKey;
+  const syncFromRefreshKey = useCallback(() => {
+    void refreshList();
+  }, [refreshList]);
 
-  const handleRefresh = () => {
-    invalidateBuilding();
-    onRefresh();
-  };
+  useEffect(() => {
+    if (refreshKey === 0) return;
+    syncFromRefreshKey();
+  }, [refreshKey, syncFromRefreshKey]);
 
   const filtered =
     visibilityFilter === "all"
@@ -38,7 +55,7 @@ export function SuggestionsPage({ route, onNavigate, refreshKey, onRefresh }: Su
       : items.filter((i) => i.visibility.toLowerCase().includes(visibilityFilter.toLowerCase()));
 
   return (
-    <>
+    <CrudPanel loading={isQueryInitiallyLoading(suggestionsQuery)}>
       <AdminPageActions
         route={route}
         onNavigate={onNavigate}
@@ -80,31 +97,23 @@ export function SuggestionsPage({ route, onNavigate, refreshKey, onRefresh }: Su
             key: "id",
             header: "ID",
             render: (row) => (
-              <span>
-                {row.id}
+              <span className="flex items-center gap-2">
                 {row.unread && <UnreadBadge />}
+                {row.id}
               </span>
             ),
           },
+          { key: "text", header: "Suggestion", render: (row) => row.text },
           { key: "visibility", header: "Visibility", render: (row) => row.visibility },
-          { key: "date", header: "Date", render: (row) => row.createdAt },
+          { key: "createdAt", header: "Created", render: (row) => row.createdAt },
           {
-            key: "suggestion",
-            header: "Suggestion",
-            render: (row) => (
-              <p className="line-clamp-2 max-w-md text-sm">{row.text}</p>
-            ),
-          },
-          { key: "createdBy", header: "Created By", render: (row) => row.createdBy },
-          { key: "unit", header: "Unit", render: (row) => row.unit },
-          {
-            key: "action",
-            header: "Action",
+            key: "actions",
+            header: "Actions",
             render: (row) => (
               <button
                 type="button"
                 onClick={() => onNavigate({ page: "suggestion-detail", id: row.id })}
-                className="rounded bg-[#3476ef] px-3 py-1 text-xs text-white"
+                className="rounded bg-[#3476ef] px-2 py-1 text-xs text-white hover:bg-[#2d68cf]"
               >
                 View
               </button>
@@ -117,10 +126,10 @@ export function SuggestionsPage({ route, onNavigate, refreshKey, onRefresh }: Su
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onSubmit={async (input) => {
-          await adminRepository.createSuggestion(input);
-          handleRefresh();
+          const created = await adminRepository.createSuggestion(input);
+          if (listQueryKey) prependBuildingQueryListItem(queryClient, listQueryKey, created);
         }}
       />
-    </>
+    </CrudPanel>
   );
 }

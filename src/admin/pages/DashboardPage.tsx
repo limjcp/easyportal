@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaUserCircle } from "react-icons/fa";
+import { usePageContentBusy } from "../../shared/usePageContentBusy";
 import { adminRepository } from "../data/adminRepository";
 import type { AdminRoute } from "../navigation";
 import type { BoardMember } from "../../resident/data/types";
@@ -38,6 +39,8 @@ export function DashboardPage({
     adminRepository.getBoardMembers().then(setBoardMembers);
     adminRepository.getDashboardSummary().then(setSummary);
   }, [refreshKey]);
+
+  usePageContentBusy(summary === null);
 
   const heroBackground = summary?.imageUrl
     ? `linear-gradient(to top, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.2) 50%, transparent 100%), url(${summary.imageUrl})`

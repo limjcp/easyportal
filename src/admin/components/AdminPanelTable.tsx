@@ -10,7 +10,7 @@ type AdminTabsProps = {
 
 export function AdminTabs({ tabs, activeTab, onChange }: AdminTabsProps) {
   return (
-    <div className="mb-4 flex min-w-0 gap-1 overflow-x-auto border-b border-slate-300 overscroll-x-contain">
+    <div className="mb-4 flex min-w-0 flex-wrap gap-1 border-b border-slate-300">
       {tabs.map((tab) => (
         <button
           key={tab.id}
@@ -35,13 +35,14 @@ export function AdminPanelHeader({
   color = "purple",
 }: {
   title: string;
-  color?: "purple" | "green" | "orange" | "red";
+  color?: "purple" | "green" | "orange" | "red" | "brand";
 }) {
   const colors = {
     purple: "bg-[#3476ef]",
     green: "bg-[#89c64c]",
     orange: "bg-[#e8913a]",
     red: "bg-red-600",
+    brand: "bg-[#7D5DA7]",
   };
   return (
     <div className={cn("px-4 py-2 text-sm font-semibold text-white", colors[color])}>
@@ -80,7 +81,7 @@ const hideBelowClass: Record<NonNullable<AdminTableColumn<unknown>["hideBelow"]>
 type AdminPanelTableProps<T> = {
   title: string;
   showHeader?: boolean;
-  headerColor?: "purple" | "green" | "orange" | "red";
+  headerColor?: "purple" | "green" | "orange" | "red" | "brand";
   data: T[];
   columns: AdminTableColumn<T>[];
   search: string;
@@ -206,11 +207,11 @@ export function AdminPanelTable<T>({
         ))}
         {toolbarExtra}
       </div>
-      <div className="overflow-x-auto overscroll-x-contain">
+      <div className="overflow-x-auto overscroll-x-contain lg:overflow-x-visible">
         {pageData.length === 0 ? (
           <div className="py-12 text-center text-sm text-slate-500">{emptyMessage}</div>
         ) : (
-          <table className="w-full min-w-[640px] text-left text-sm">
+          <table className="w-full min-w-0 text-left text-sm lg:min-w-full">
             <thead>
               <tr className="border-b border-slate-200 bg-white text-slate-600">
                 {columns.map((col) => (
@@ -256,7 +257,7 @@ export function AdminPanelTable<T>({
                     <td
                       key={col.key}
                       className={cn(
-                        "max-w-[14rem] px-3 py-2.5 align-top text-slate-700 sm:px-4",
+                        "max-w-[14rem] px-3 py-2.5 align-top text-slate-700 sm:px-4 xl:max-w-none",
                         col.hideBelow && hideBelowClass[col.hideBelow],
                         col.className
                       )}

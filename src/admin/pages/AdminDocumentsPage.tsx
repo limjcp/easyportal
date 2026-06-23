@@ -7,9 +7,11 @@ import {
 } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
 import { ActionButton } from "../../shared/ActionButton";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { FileUploadZone } from "../../shared/FileUploadZone";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useLocalList } from "../../shared/useLocalList";
 import { OptionsDropdown } from "../components/AdminBadges";
 import { AdminPanelTable } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
@@ -34,15 +36,16 @@ export function AdminDocumentsPage({
   refreshKey,
   onRefresh,
 }: AdminDocumentsPageProps) {
-  const [folders, setFolders] = useState<DocumentFolder[]>([]);
-  const [documents, setDocuments] = useState<DocumentFile[]>([]);
+  const { data: folders, loading: foldersLoading } = useLocalList(
+    useCallback(() => adminRepository.getDocumentFolders(), []),
+    refreshKey
+  );
   const [storage, setStorage] = useState<DocumentStorageStats | null>(null);
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [viewDoc, setViewDoc] = useState<DocumentFile | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   const folderId = useMemo(() => {
     if (route.folderId && folders.some((f) => f.id === route.folderId)) {
@@ -51,8 +54,15 @@ export function AdminDocumentsPage({
     return folders[0]?.id ?? "";
   }, [route.folderId, folders]);
 
+  const { data: documents, reload: reloadDocuments, error: loadError, loading: documentsLoading } = useLocalList(
+    useCallback(async () => {
+      if (!folderId) return [];
+      return adminRepository.getDocuments(folderId);
+    }, [folderId]),
+    refreshKey
+  );
+
   useEffect(() => {
-    adminRepository.getDocumentFolders().then(setFolders);
     adminRepository.getDocumentStorageStats().then(setStorage);
   }, [refreshKey]);
 
@@ -64,20 +74,8 @@ export function AdminDocumentsPage({
   }, [folders, route.folderId, onNavigate]);
 
   useEffect(() => {
-    if (!folderId) {
-      setDocuments([]);
-      return;
-    }
-    setLoadError(null);
-    void adminRepository
-      .getDocuments(folderId)
-      .then(setDocuments)
-      .catch((err) => {
-        setDocuments([]);
-        setLoadError(err instanceof Error ? err.message : "Failed to load documents.");
-      });
     setPage(1);
-  }, [folderId, refreshKey]);
+  }, [folderId]);
 
   const selectedFolder = folders.find((f) => f.id === folderId);
 
@@ -107,7 +105,7 @@ export function AdminDocumentsPage({
   const freeMb = storage ? storage.totalMb - storage.usedMb : 0;
 
   return (
-    <>
+    <CrudPanel loading={foldersLoading || documentsLoading}>
       <AdminPageActions
         route={route}
         onNavigate={onNavigate}
@@ -272,7 +270,11 @@ export function AdminDocumentsPage({
                     { label: "Download", onClick: () => void handleDownload(row) },
                     {
                       label: "Delete",
-                      onClick: () => adminRepository.deleteDocument(row.id).then(onRefresh),
+                      onClick: () =>
+                        adminRepository.deleteDocument(row.id).then(async () => {
+                          onRefresh();
+                          await reloadDocuments();
+                        }),
                     },
                   ]}
                 />
@@ -291,6 +293,7 @@ export function AdminDocumentsPage({
           await adminRepository.createDocument(file, input);
           setUploadOpen(false);
           onRefresh();
+          await reloadDocuments();
         }}
       />
 
@@ -334,7 +337,7 @@ export function AdminDocumentsPage({
           </dl>
         )}
       </Modal>
-    </>
+    </CrudPanel>
   );
 }
 

@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useLocalList } from "../../shared/useLocalList";
 import { StatusBadge } from "../components/AdminBadges";
 import { AdminPanelTable } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
@@ -17,17 +19,16 @@ type PollsPageProps = {
 };
 
 export function PollsPage({ route, onNavigate, refreshKey, onRefresh }: PollsPageProps) {
-  const [items, setItems] = useState<Poll[]>([]);
+  const { data: items, reload, loading } = useLocalList(
+    useCallback(() => adminRepository.getPolls(), []),
+    refreshKey
+  );
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
   const [visibilityFilter, setVisibilityFilter] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
   const pendingTitleRef = useRef("");
-
-  useEffect(() => {
-    adminRepository.getPolls().then(setItems);
-  }, [refreshKey]);
 
   const { run: createPollRun, error: createError } = useAsyncAction(
     useCallback(async () => {
@@ -36,13 +37,14 @@ export function PollsPage({ route, onNavigate, refreshKey, onRefresh }: PollsPag
       const poll = await adminRepository.createPoll({ title });
       setAddOpen(false);
       onRefresh();
+      await reload();
       onNavigate({ page: "poll-edit", id: poll.id });
-    }, [onRefresh, onNavigate]),
+    }, [onRefresh, onNavigate, reload]),
     { successMessage: "Poll created.", showErrorToast: false }
   );
 
   return (
-    <>
+    <CrudPanel loading={loading}>
       <AdminPageActions
         route={route}
         onNavigate={onNavigate}
@@ -122,6 +124,6 @@ export function PollsPage({ route, onNavigate, refreshKey, onRefresh }: PollsPag
           await createPollRun();
         }}
       />
-    </>
+    </CrudPanel>
   );
 }

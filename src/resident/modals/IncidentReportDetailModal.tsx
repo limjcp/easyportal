@@ -5,6 +5,7 @@ import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
 import { IncidentReportAttachmentGrid } from "../../shared/IncidentReportAttachmentThumb";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useBusyWhile } from "../../shared/useBusyWhile";
 import { residentRepo } from "../data/mockRepository";
 import type { ResidentIncidentReportDetail } from "../data/types";
 
@@ -47,6 +48,7 @@ export function IncidentReportDetailModal({
     {
       errorMessage: "Failed to load incident report.",
       onError: () => onClose(),
+      trackBusy: false,
     }
   );
 
@@ -82,6 +84,8 @@ export function IncidentReportDetailModal({
 
   const displayError = loadError ?? commentError;
 
+  useBusyWhile(open && loading);
+
   return (
     <Modal
       open={open}
@@ -96,9 +100,10 @@ export function IncidentReportDetailModal({
       }
     >
       {displayError ? <FormAlert message={displayError} className="mb-3" /> : null}
-      {loading || !report ? (
-        <p className="text-sm text-slate-500">{loading ? "Loading…" : "Report not found."}</p>
-      ) : (
+      {!loading && !report ? (
+        <p className="text-sm text-slate-500">Report not found.</p>
+      ) : null}
+      {report ? (
         <div className="space-y-4">
           {report.archived ? (
             <p className="rounded border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-700">
@@ -204,7 +209,7 @@ export function IncidentReportDetailModal({
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </Modal>
   );
 }

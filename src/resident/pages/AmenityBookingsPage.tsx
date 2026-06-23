@@ -1,9 +1,12 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { useResidentAmenityBookingsData } from "../../shared/queries/residentListQueries";
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
+import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
+import { useTabChangeWithBusy } from "../../shared/useTabChangeWithBusy";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { residentRepo } from "../data/mockRepository";
 import type {
@@ -51,7 +54,9 @@ function statusClass(status: AmenityBooking["status"]) {
 
 export function AmenityBookingsPage({ refreshKey = 0 }: { refreshKey?: number }) {
   const { invalidateBuilding } = useInvalidatePortalQueries();
-  const { data, refetch } = useResidentAmenityBookingsData();
+  const bookingsQuery = useResidentAmenityBookingsData();
+  const { data, refetch } = bookingsQuery;
+  const pageLoading = isQueryPageLoading(bookingsQuery);
   const settings = data?.settings ?? {
     partyRoomFee: "",
     elevatorInstructions: "",
@@ -79,14 +84,21 @@ export function AmenityBookingsPage({ refreshKey = 0 }: { refreshKey?: number })
   const [error, setPageError] = useState<string | null>(null);
   const actionBookingIdRef = useRef<string>("");
 
-  void refreshKey;
-
   const reload = useCallback(async () => {
     invalidateBuilding();
     await refetch();
   }, [invalidateBuilding, refetch]);
 
+  useEffect(() => {
+    if (refreshKey === 0) return;
+    void reload();
+  }, [refreshKey, reload]);
+
   const clearPageError = () => setPageError(null);
+  const handleTabChange = useTabChangeWithBusy((next: TabId) => {
+    setTab(next);
+    clearPageError();
+  });
 
   const { run: submitElevator, loading: submittingElevator } = useAsyncAction(
     useCallback(async () => {
@@ -180,7 +192,7 @@ export function AmenityBookingsPage({ refreshKey = 0 }: { refreshKey?: number })
   };
 
   return (
-    <div className="space-y-4">
+    <CrudPanel className="space-y-4" loading={pageLoading}>
       <ModuleMessageBanner moduleId="amenityBookings" />
 
       <div className="flex flex-wrap gap-2">
@@ -188,10 +200,7 @@ export function AmenityBookingsPage({ refreshKey = 0 }: { refreshKey?: number })
           <button
             key={entry.id}
             type="button"
-            onClick={() => {
-              setTab(entry.id);
-              clearPageError();
-            }}
+            onClick={() => handleTabChange(entry.id)}
             className={`rounded px-3 py-1.5 text-xs font-medium ${
               tab === entry.id
                 ? "bg-[#2e3f4f] text-white"
@@ -479,6 +488,6 @@ export function AmenityBookingsPage({ refreshKey = 0 }: { refreshKey?: number })
           )}
         </div>
       ) : null}
-    </div>
+    </CrudPanel>
   );
 }

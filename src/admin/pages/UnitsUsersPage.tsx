@@ -15,6 +15,9 @@ import {
   saveVisibleColumnKeys,
 } from "../../shared/tableColumnPrefs";
 import { unitDetailDirty, userDetailDirty } from "../../shared/formDirty";
+import { CrudPanel } from "../../shared/CrudPanel";
+import { usePageBusy } from "../../shared/PageBusyProvider";
+import { runWithBusy } from "../../shared/runWithBusy";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import {
   cloneUnitDetail,
@@ -22,12 +25,14 @@ import {
   updatePrimaryUnitProfileSection,
   updateUserProfileSection,
 } from "../utils/profileSectionAdd";
+import { guessUnitIdForResidentName } from "../utils/pendingUnitAssignment";
 import type { ResidentDetailSection } from "../../resident/data/types";
 import { ResidentTypePortalModulesModal } from "../modals/ResidentTypePortalModulesModal";
 import { IncidentReportDetailModal } from "../modals/IncidentReportDetailModal";
 import { FaEdit } from "react-icons/fa";
 import { useAdminUnitsUsersData } from "../../shared/queries/adminListQueries";
-import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
+import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
+import { useTabChangeWithBusy } from "../../shared/useTabChangeWithBusy";
 import type {
   UnitsUsersAccountStatus,
   UnitsUsersArchivedRow,
@@ -172,7 +177,7 @@ const UNITS_USERS_COLUMN_OPTIONS: Record<
     { key: "name", label: "Name" },
     { key: "type", label: "Type" },
     { key: "email", label: "Email" },
-    { key: "actions", label: "Actions" },
+    { key: "unitAssignment", label: "Unit / Actions" },
   ],
   unoccupied: [
     { key: "unit", label: "Unit" },
@@ -237,9 +242,11 @@ function LegacyToggleRow({ label, enabled }: { label: string; enabled?: boolean 
   );
 }
 
-export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
-  const { invalidateBuilding } = useInvalidatePortalQueries();
-  const { data: unitsUsersData } = useAdminUnitsUsersData();
+export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
+  const pageBusy = usePageBusy();
+  const unitsUsersQuery = useAdminUnitsUsersData();
+  const { data: unitsUsersData, refetch } = unitsUsersQuery;
+  const handleTabChange = useTabChangeWithBusy((tab: UnitsUsersTab) => setActiveTab(tab));
   const currentRows = unitsUsersData?.current ?? [];
   const pendingRows = unitsUsersData?.pending ?? [];
   const unoccupiedRows = unitsUsersData?.unoccupied ?? [];
@@ -292,17 +299,53 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
   const [assignUnitOpen, setAssignUnitOpen] = useState(false);
   const [assignOccupancyId, setAssignOccupancyId] = useState("");
   const [assignUnitId, setAssignUnitId] = useState("");
-  const [assignableUnits, setAssignableUnits] = useState<Array<{ id: string; label: string }>>([]);
+  const [buildingUnits, setBuildingUnits] = useState<Array<{ id: string; label: string }>>([]);
+  const [pendingUnitSelections, setPendingUnitSelections] = useState<Record<string, string>>({});
+  const pendingUnitTouchedRef = useRef<Set<string>>(new Set());
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmKind, setConfirmKind] = useState<"deleteUser" | "passwordReset" | null>(null);
   const [savingEmail, setSavingEmail] = useState(false);
   const [savingRestore, setSavingRestore] = useState(false);
   const pendingLoginDetailsRef = useRef<{ occupancyId: string; email: string } | null>(null);
 
-  const refreshLists = useCallback(() => {
-    invalidateBuilding();
-    onRefresh();
-  }, [invalidateBuilding, onRefresh]);
+  const refetchLists = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
+
+  const syncFromRefreshKey = useCallback(() => {
+    void refetchLists();
+  }, [refetchLists]);
+
+  useEffect(() => {
+    if (refreshKey === 0) return;
+    syncFromRefreshKey();
+  }, [refreshKey, syncFromRefreshKey]);
+
+  useEffect(() => {
+    if (activeTab !== "pending") return;
+    let cancelled = false;
+    void adminRepository.listBuildingUnitsForAssignment().then((units) => {
+      if (!cancelled) setBuildingUnits(units);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, refreshKey]);
+
+  useEffect(() => {
+    if (activeTab !== "pending") return;
+    setPendingUnitSelections((prev) => {
+      const next: Record<string, string> = {};
+      for (const row of pendingRows) {
+        if (pendingUnitTouchedRef.current.has(row.id)) {
+          next[row.id] = prev[row.id] ?? "";
+        } else {
+          next[row.id] = guessUnitIdForResidentName(row.name, buildingUnits);
+        }
+      }
+      return next;
+    });
+  }, [activeTab, pendingRows, buildingUnits]);
 
   const { run: saveUnitDetail, loading: savingUnit } = useAsyncAction(
     useCallback(async () => {
@@ -330,9 +373,40 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
       await adminRepository.assignUnitToOccupancy(assignOccupancyId, assignUnitId);
       setAssignUnitOpen(false);
       setActiveTab("current");
-      refreshLists();
-    }, [assignOccupancyId, assignUnitId, refreshLists]),
+      refetchLists();
+    }, [assignOccupancyId, assignUnitId, refetchLists]),
     { successMessage: "Unit assigned successfully.", onError: setActionError, showErrorToast: false }
+  );
+
+  const hasPendingAssignments = useMemo(
+    () => pendingRows.some((row) => Boolean(pendingUnitSelections[row.id])),
+    [pendingRows, pendingUnitSelections]
+  );
+
+  const { run: applyPendingUnits, loading: applyingPendingUnits } = useAsyncAction(
+    useCallback(async () => {
+      const toApply = pendingRows.filter((row) => pendingUnitSelections[row.id]);
+      if (toApply.length === 0) return;
+      const failures: string[] = [];
+      for (const row of toApply) {
+        const unitId = pendingUnitSelections[row.id];
+        if (!unitId) continue;
+        try {
+          await adminRepository.assignUnitToOccupancy(row.id, unitId);
+        } catch (err) {
+          failures.push(
+            `${row.name}: ${err instanceof Error ? err.message : "Assignment failed."}`
+          );
+        }
+      }
+      if (failures.length > 0) {
+        throw new Error(failures.join(" "));
+      }
+      pendingUnitTouchedRef.current.clear();
+      setPendingUnitSelections({});
+      await refetchLists();
+    }, [pendingRows, pendingUnitSelections, refetchLists]),
+    { successMessage: "Units applied.", onError: setActionError, showErrorToast: false }
   );
 
   const { run: archiveUser, loading: savingArchive } = useAsyncAction(
@@ -342,8 +416,8 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
       setSelectedUser(null);
       setUserDraft(null);
       setUserDetailBaseline(null);
-      refreshLists();
-    }, [selectedUser, refreshLists]),
+      refetchLists();
+    }, [selectedUser, refetchLists]),
     { successMessage: "User archived successfully.", onError: setActionError, showErrorToast: false }
   );
 
@@ -355,8 +429,8 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
       setUserDraft(null);
       setUserDetailBaseline(null);
       setConfirmKind(null);
-      refreshLists();
-    }, [selectedUser, refreshLists]),
+      refetchLists();
+    }, [selectedUser, refetchLists]),
     { successMessage: "User deleted successfully.", onError: setActionError, showErrorToast: false }
   );
 
@@ -418,8 +492,8 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
         setUserDraft(cloned);
         setUserDetailBaseline(cloneUserDetail(refreshed));
       }
-      refreshLists();
-    }, [userDraft, userDetailTab, refreshLists]),
+      refetchLists();
+    }, [userDraft, userDetailTab, refetchLists]),
     { successMessage: "Changes saved successfully.", onError: setActionError, showErrorToast: false }
   );
 
@@ -450,7 +524,7 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
       setNewResidentPasswordConfirm("");
       setAddResidentOpen(false);
       setActiveTab("current");
-      refreshLists();
+      refetchLists();
     }, [
       newResidentFirstName,
       newResidentLastName,
@@ -459,7 +533,7 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
       newResidentPasswordConfirm,
       newResidentType,
       newResidentUnit,
-      refreshLists,
+      refetchLists,
     ]),
     { successMessage: "Resident created successfully.", onError: setActionError, showErrorToast: false }
   );
@@ -494,7 +568,7 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
         setUnitDraft(cloneUnitDetail(refreshed));
         setUnitDetailBaseline(cloneUnitDetail(refreshed));
       }
-      refreshLists();
+      refetchLists();
     }, [
       selectedUnit,
       newOccupantFirstName,
@@ -502,15 +576,23 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
       newOccupantEmail,
       newOccupantPassword,
       newOccupantPasswordConfirm,
-      refreshLists,
+      refetchLists,
     ]),
     { successMessage: "Occupant added successfully.", onError: setActionError, showErrorToast: false }
   );
 
   const saving =
-    savingUnit || savingAssign || savingArchive || savingDelete || savingUser || savingEmail || savingRestore || savingCreate || savingOccupant;
+    savingUnit ||
+    savingAssign ||
+    applyingPendingUnits ||
+    savingArchive ||
+    savingDelete ||
+    savingUser ||
+    savingEmail ||
+    savingRestore ||
+    savingCreate ||
+    savingOccupant;
 
-  void refreshKey;
 
   const isUserDetailDirty = useMemo(
     () => userDetailDirty(userDetailBaseline, userDraft),
@@ -594,7 +676,8 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
 
   const openUnitDetail = (unitId: string) => {
     setActionError(null);
-    adminRepository.getUnitsUsersUnitDetail(unitId).then((detail) => {
+    void runWithBusy(pageBusy, async () => {
+      const detail = await adminRepository.getUnitsUsersUnitDetail(unitId);
       if (!detail) return;
       setSelectedUnit(detail);
       setUnitDraft(cloneUnitDetail(detail));
@@ -622,7 +705,8 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
 
   const openUserDetail = (userId: string) => {
     setActionError(null);
-    adminRepository.getUnitsUsersUserDetail(userId).then((detail) => {
+    void runWithBusy(pageBusy, async () => {
+      const detail = await adminRepository.getUnitsUsersUserDetail(userId);
       if (!detail) return;
       const cloned = cloneUserDetail(detail);
       setSelectedUser(detail);
@@ -736,17 +820,19 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
     setSortDir("asc");
   };
 
-  const openAssignUnit = async (occupancyId: string) => {
+  const openAssignUnit = (occupancyId: string) => {
     setActionError(null);
     setAssignOccupancyId(occupancyId);
     setAssignUnitId("");
-    try {
-      const units = await adminRepository.listAssignableUnits();
-      setAssignableUnits(units);
-      setAssignUnitOpen(true);
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to load units.");
-    }
+    void runWithBusy(pageBusy, async () => {
+      try {
+        const units = await adminRepository.listBuildingUnitsForAssignment();
+        setBuildingUnits(units);
+        setAssignUnitOpen(true);
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : "Failed to load units.");
+      }
+    });
   };
 
   const handleAssignUnit = () => {
@@ -800,7 +886,7 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
     setActionError(null);
     try {
       await adminRepository.restoreUnitOccupancy(occupancyId);
-      refreshLists();
+      refetchLists();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Failed to restore record.");
     } finally {
@@ -908,17 +994,35 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
       render: (row) => emailCell(row.email),
     },
     {
-      key: "actions",
-      header: "",
+      key: "unitAssignment",
+      header: "Unit",
       className: "text-center",
       render: (row) => (
-        <OptionsDropdown
-          options={[
-            { label: "Assign Unit", onClick: () => openAssignUnit(row.id) },
-            { label: "View User Details", onClick: () => openUserDetail(row.id) },
-            { label: "Merge Account", disabled: true, onClick: () => undefined },
-          ]}
-        />
+        <div className="flex items-center justify-center gap-2">
+          <select
+            value={pendingUnitSelections[row.id] ?? ""}
+            onChange={(event) => {
+              const value = event.target.value;
+              pendingUnitTouchedRef.current.add(row.id);
+              setPendingUnitSelections((prev) => ({ ...prev, [row.id]: value }));
+            }}
+            className="min-w-[10rem] max-w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm"
+          >
+            <option value="">None</option>
+            {buildingUnits.map((unit) => (
+              <option key={unit.id} value={unit.id}>
+                {unit.label}
+              </option>
+            ))}
+          </select>
+          <OptionsDropdown
+            options={[
+              { label: "Assign Unit", onClick: () => openAssignUnit(row.id) },
+              { label: "View User Details", onClick: () => openUserDetail(row.id) },
+              { label: "Merge Account", disabled: true, onClick: () => undefined },
+            ]}
+          />
+        </div>
       ),
     },
   ];
@@ -1116,10 +1220,11 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
   }
 
   return (
+    <CrudPanel loading={isQueryPageLoading(unitsUsersQuery)}>
     <div>
       <div className="mb-4 rounded bg-[#3476ef] px-4 py-2 text-sm font-semibold text-white">Units & Users</div>
 
-      <AdminTabs tabs={TABS} activeTab={activeTab} onChange={(tab) => setActiveTab(tab as UnitsUsersTab)} />
+      <AdminTabs tabs={TABS} activeTab={activeTab} onChange={(tab) => handleTabChange(tab as UnitsUsersTab)} />
 
       {actionError ? <FormAlert message={actionError} className="mb-3" /> : null}
 
@@ -1147,6 +1252,15 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
           >
             Add a New Resident
           </button>
+          {activeTab === "pending" ? (
+            <ActionButton
+              label="Apply Units"
+              loading={applyingPendingUnits}
+              loadingLabel="Applying…"
+              disabled={!hasPendingAssignments}
+              onClick={() => void applyPendingUnits()}
+            />
+          ) : null}
         </div>
       </div>
 
@@ -2315,22 +2429,22 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
         }
       >
         <label className="block space-y-1 text-sm text-slate-700">
-          <span>Select unoccupied unit</span>
+          <span>Select unit</span>
           <select
             value={assignUnitId}
             onChange={(event) => setAssignUnitId(event.target.value)}
             className="w-full rounded border border-slate-300 px-2 py-2"
           >
             <option value="">Choose a unit…</option>
-            {assignableUnits.map((unit) => (
+            {buildingUnits.map((unit) => (
               <option key={unit.id} value={unit.id}>
                 {unit.label}
               </option>
             ))}
           </select>
         </label>
-        {assignableUnits.length === 0 ? (
-          <p className="mt-2 text-sm text-amber-700">No unoccupied units available. Add units in Building Definition first.</p>
+        {buildingUnits.length === 0 ? (
+          <p className="mt-2 text-sm text-amber-700">No units available. Add units in Building Definition first.</p>
         ) : null}
       </Modal>
 
@@ -2495,8 +2609,9 @@ export function UnitsUsersPage({ refreshKey, onRefresh }: UnitsUsersPageProps) {
         open={!!incidentReportModalId}
         reportId={incidentReportModalId}
         onClose={() => setIncidentReportModalId(null)}
-        onUpdated={refreshLists}
+        onUpdated={refetchLists}
       />
     </div>
+    </CrudPanel>
   );
 }

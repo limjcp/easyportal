@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { FaBuilding } from "react-icons/fa";
 import { Modal } from "../../../shared/Modal";
 import { ActionButton } from "../../../shared/ActionButton";
+import { CrudPanel } from "../../../shared/CrudPanel";
 import { FormAlert } from "../../../shared/FormAlert";
 import { useAsyncAction } from "../../../shared/useAsyncAction";
 import { AdminFormPanel, InfoBanner } from "../../components/AdminFormPanel";
@@ -16,17 +17,27 @@ type UnitGroupsTabProps = {
 export function UnitGroupsTab({ refreshKey, onRefresh }: UnitGroupsTabProps) {
   const [groups, setGroups] = useState<BuildingUnitGroupDefinition[]>([]);
   const [units, setUnits] = useState<BuildingUnitGroup[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [name, setName] = useState("");
   const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
 
   useEffect(() => {
-    Promise.all([adminRepository.getBuildingUnitGroups(), adminRepository.getBuildingUnits()]).then(
-      ([g, u]) => {
-        setGroups(g);
-        setUnits(u);
-      }
-    );
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([adminRepository.getBuildingUnitGroups(), adminRepository.getBuildingUnits()])
+      .then(([g, u]) => {
+        if (!cancelled) {
+          setGroups(g);
+          setUnits(u);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [refreshKey]);
 
   const allUnits = units.flatMap((g) => g.units.map((u) => ({ floor: g.floorArea, unit: u })));
@@ -46,7 +57,7 @@ export function UnitGroupsTab({ refreshKey, onRefresh }: UnitGroupsTabProps) {
   );
 
   return (
-    <div className="space-y-4">
+    <CrudPanel className="space-y-4" loading={loading}>
       <InfoBanner
         icon={<FaBuilding />}
         title="Building Unit Groups"
@@ -120,6 +131,6 @@ export function UnitGroupsTab({ refreshKey, onRefresh }: UnitGroupsTabProps) {
           </div>
         </div>
       </Modal>
-    </div>
+    </CrudPanel>
   );
 }

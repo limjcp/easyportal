@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FaChevronDown, FaSignOutAlt, FaUser, FaUserCircle } from "react-icons/fa";
 import { MvpLogo } from "../shared/MvpLogo";
 import { Modal } from "../shared/Modal";
+import { PageBusyProvider } from "../shared/PageBusyProvider";
+import { PORTAL_MAIN_SECTION_CLASS, PORTAL_SHELL_CLASS } from "../shared/portalLayout";
+import { cn } from "../utils/cn";
 import { AdminProfileModal } from "./modals/AdminProfileModal";
 import { AdminSidebarNav } from "./components/AdminSidebarNav";
 import { adminNavGroups, filterAdminNavGroups, formatBuildingOptionLabel } from "./navigation";
@@ -181,14 +184,19 @@ export function AdminLayout({
         </div>
       </aside>
 
-      <section className="min-w-0 flex-1 overflow-x-auto bg-[#ecf1f4] p-3 sm:p-4">
+      <section className={PORTAL_MAIN_SECTION_CLASS}>
         <div className="min-w-0 max-w-full">{children}</div>
       </section>
     </div>
   );
 
   const adminCard = (
-    <div className="overflow-hidden rounded-sm border border-slate-300 bg-white shadow-sm">
+    <div
+      className={cn(
+        "overflow-hidden bg-white",
+        embedded ? "border-0 shadow-none" : "rounded-sm border border-slate-300 shadow-sm"
+      )}
+    >
       {!embedded && (
         <div className="bg-white">
           <div className="flex flex-col justify-between gap-6 px-5 py-6 md:flex-row md:items-start">
@@ -216,10 +224,15 @@ export function AdminLayout({
   );
 
   if (embedded) {
-    return <div className="min-w-0">{adminCard}</div>;
+    return (
+      <PageBusyProvider>
+        <div className="min-w-0">{adminCard}</div>
+      </PageBusyProvider>
+    );
   }
 
   return (
+    <PageBusyProvider>
     <div className="min-h-screen bg-[#e7edf3] text-slate-700">
       <div className="bg-[#3476ef] text-white shadow-sm">
         <div className="mx-auto flex max-w-[2048px] items-center justify-between px-4 py-2 text-xs sm:px-6 sm:text-sm">
@@ -297,7 +310,7 @@ export function AdminLayout({
         </div>
       </div>
 
-      <div className="mx-auto max-w-[1200px] px-4 py-4 sm:px-6 sm:py-6">{adminCard}</div>
+      <div className={cn(PORTAL_SHELL_CLASS, "py-4 sm:py-6")}>{adminCard}</div>
 
       <AdminProfileModal
         open={profileOpen}
@@ -338,6 +351,7 @@ export function AdminLayout({
         <p className="text-center text-slate-600">Are you sure you want to logout?</p>
       </Modal>
     </div>
+    </PageBusyProvider>
   );
 }
 

@@ -4,6 +4,7 @@ import { Modal } from "../../shared/Modal";
 import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useBusyWhile } from "../../shared/useBusyWhile";
 import { adminRepository } from "../data/adminRepository";
 import { BUILDING_ADMIN_ROLES } from "../data/mock/buildingPermissions";
 import type { BuildingAdmin } from "../../resident/data/types";
@@ -23,6 +24,9 @@ export function EditBuildingAdminModal({ open, adminId, onClose, onSaved }: Edit
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"active" | "inactive">("active");
+  const [loading, setLoading] = useState(false);
+
+  useBusyWhile(open && loading);
 
   const { run: submitAdmin, loading: saving, error } = useAsyncAction(
     useCallback(async () => {
@@ -41,7 +45,11 @@ export function EditBuildingAdminModal({ open, adminId, onClose, onSaved }: Edit
   );
 
   useEffect(() => {
-    if (!open || !adminId) return;
+    if (!open || !adminId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     adminRepository.getBuildingAdmin(adminId).then((admin) => {
       if (!admin) return;
       const roleOption = BUILDING_ADMIN_ROLES.find((r) => r.label === admin.role);
@@ -50,7 +58,7 @@ export function EditBuildingAdminModal({ open, adminId, onClose, onSaved }: Edit
       setLastName(admin.lastName);
       setEmail(admin.email);
       setStatus(admin.status);
-    });
+    }).finally(() => setLoading(false));
   }, [open, adminId]);
 
   const handleSubmit = async (e: React.FormEvent) => {

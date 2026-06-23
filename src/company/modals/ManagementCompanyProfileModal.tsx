@@ -3,6 +3,7 @@ import { FaBuilding, FaTimes, FaTrash } from "react-icons/fa";
 import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useBusyWhile } from "../../shared/useBusyWhile";
 import { PurplePanel } from "../components/PurplePanel";
 import {
   RegionFields,
@@ -136,7 +137,9 @@ export function ManagementCompanyProfileModal({
 
   useEffect(() => {
     if (open) loadProfile();
-  }, [open]);
+  }, [open]  );
+
+  useBusyWhile(open && loading);
 
   useEffect(() => {
     if (!open) return;
@@ -175,9 +178,7 @@ export function ManagementCompanyProfileModal({
           </button>
         </div>
 
-        {loading ? (
-          <p className="p-8 text-center text-sm text-slate-500">Loading…</p>
-        ) : (
+        {loading ? null : (
           <>
             <div className="max-h-[65vh] overflow-y-auto p-4">
               {error ? <FormAlert message={error} className="mb-4" /> : null}

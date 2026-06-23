@@ -1,30 +1,30 @@
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
+import { CrudPanel } from "../../shared/CrudPanel";
+import { useLocalList } from "../../shared/useLocalList";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { residentRepo } from "../data/mockRepository";
 import type { ResidentRoute } from "../navigation";
-import type { GalleryAlbum } from "../data/types";
 
 type GalleryPageProps = {
   onNavigate: (route: ResidentRoute) => void;
 };
 
 export function GalleryPage({ onNavigate }: GalleryPageProps) {
-  const [albums, setAlbums] = useState<GalleryAlbum[]>([]);
+  const { data: albums, loading } = useLocalList(useCallback(() => residentRepo.getAlbums(), []));
 
-  useEffect(() => {
-    residentRepo.getAlbums().then(setAlbums);
-  }, []);
-
-  if (albums.length === 0) {
+  if (!loading && albums.length === 0) {
     return (
-      <div className="flex min-h-[200px] items-center justify-center rounded-sm bg-white/90 px-6 py-12 text-slate-500 shadow-lg">
-        No photo albums available.
-      </div>
+      <CrudPanel>
+        <div className="flex min-h-[200px] items-center justify-center rounded-sm bg-white/90 px-6 py-12 text-slate-500 shadow-lg">
+          No photo albums available.
+        </div>
+      </CrudPanel>
     );
   }
 
   return (
-    <div>
+    <CrudPanel loading={loading}>
+      <div>
       <ModuleMessageBanner moduleId="galleries" />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {albums.map((album) => (
@@ -48,6 +48,7 @@ export function GalleryPage({ onNavigate }: GalleryPageProps) {
           </button>
         ))}
       </div>
-    </div>
+      </div>
+    </CrudPanel>
   );
 }

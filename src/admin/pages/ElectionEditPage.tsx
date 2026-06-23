@@ -4,6 +4,7 @@ import { ConfirmModal } from "../../shared/ConfirmModal";
 import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { usePageContentBusy } from "../../shared/usePageContentBusy";
 import { AdminPanelHeader } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
 import { AdminPageActions } from "../components/AdminPageActions";
@@ -173,8 +174,10 @@ export function ElectionEditPage({ route, onNavigate }: ElectionEditPageProps) {
     { showSuccessToast: false, showErrorToast: false }
   );
 
+  usePageContentBusy(!election);
+
   if (!election) {
-    return <div className="py-8 text-center text-slate-500">Loading...</div>;
+    return null;
   }
 
   const update = (updates: Partial<BoardElection>) => {

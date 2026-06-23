@@ -1,24 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { FaFile, FaFolderOpen, FaTrash } from "react-icons/fa";
 import { Modal } from "../../../shared/Modal";
 import { ActionButton } from "../../../shared/ActionButton";
+import { CrudPanel } from "../../../shared/CrudPanel";
 import { FileUploadZone } from "../../../shared/FileUploadZone";
 import { FormAlert } from "../../../shared/FormAlert";
 import { useAsyncAction } from "../../../shared/useAsyncAction";
+import { useLocalList } from "../../../shared/useLocalList";
 import { adminRepository } from "../../data/adminRepository";
-import type { PublicPortalDocument } from "../../../resident/data/types";
 import { PortalSettingsAlert } from "./PortalSettingsAlert";
 
 export function PublicDocumentsTab() {
-  const [docs, setDocs] = useState<PublicPortalDocument[]>([]);
+  const { data: docs, reload, loading } = useLocalList(
+    useCallback(() => adminRepository.getPublicPortalDocuments(), [])
+  );
   const [uploadOpen, setUploadOpen] = useState(false);
   const [title, setTitle] = useState("");
-
-  const load = () => adminRepository.getPublicPortalDocuments().then(setDocs);
-
-  useEffect(() => {
-    load();
-  }, []);
 
   const { run: handleUpload, loading: uploading, error } = useAsyncAction(
     useCallback(async () => {
@@ -29,13 +26,14 @@ export function PublicDocumentsTab() {
       });
       setTitle("");
       setUploadOpen(false);
-      load();
-    }, [title]),
+      await reload();
+    }, [title, reload]),
     { successMessage: "Document uploaded." }
   );
 
   return (
-    <div className="space-y-4">
+    <CrudPanel loading={loading}>
+      <div className="space-y-4">
       <PortalSettingsAlert title="Public Portal Documents" icon={<FaFile />}>
         <p>
           These documents will be available to any user visiting the home/login page of your resident portal.
@@ -82,7 +80,9 @@ export function PublicDocumentsTab() {
                   <td className="px-4 py-2">
                     <button
                       type="button"
-                      onClick={() => adminRepository.deletePublicPortalDocument(d.id).then(load)}
+                      onClick={() =>
+                        adminRepository.deletePublicPortalDocument(d.id).then(() => reload())
+                      }
                       className="text-red-600 hover:text-red-800"
                       aria-label="Delete"
                     >
@@ -128,6 +128,7 @@ export function PublicDocumentsTab() {
         </div>
         <p className="mt-2 text-xs text-slate-500">Mock upload — separate from admin Documents module.</p>
       </Modal>
-    </div>
+      </div>
+    </CrudPanel>
   );
 }

@@ -7,11 +7,15 @@ import { SectionHeader } from "../../shared/SectionHeader";
 import { FileUploadZone } from "../../shared/FileUploadZone";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { validateAttachmentFile } from "../../shared/attachmentUtils";
+import {
+  mergeServiceCategoryOptions,
+  mergeServiceLocationOptions,
+  resolveServiceRequestLocation,
+} from "../../shared/serviceRequestPresets";
 import type { CreateServiceRequestInput } from "../data/types";
 import { residentRepo } from "../data/mockRepository";
 
 const DEFAULT_VISIBILITY = "All users in this unit can see this request";
-const LOCATION_OPTIONS = ["Common Area"];
 
 type ServiceRequestModalProps = {
   open: boolean;
@@ -22,6 +26,7 @@ type ServiceRequestModalProps = {
 const initialFormState = () => ({
   contact: "",
   location: "",
+  customLocation: "",
   visibility: DEFAULT_VISIBILITY,
   permissionToEnter: "",
   permissionNotes: "",
@@ -36,11 +41,14 @@ const initialFormState = () => ({
 export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestModalProps) {
   const [form, setForm] = useState(initialFormState);
   const [slotFiles, setSlotFiles] = useState<Record<number, File>>({});
-  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [dbCategoryNames, setDbCategoryNames] = useState<string[]>([]);
+  const [buildingCommonAreas, setBuildingCommonAreas] = useState<string[]>([]);
+  const [defaultUnitLocation, setDefaultUnitLocation] = useState("");
 
   const {
     contact,
     location,
+    customLocation,
     visibility,
     permissionToEnter,
     permissionNotes,
@@ -56,27 +64,31 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
     if (!open) {
       setForm(initialFormState());
       setSlotFiles({});
+      setDbCategoryNames([]);
+      setBuildingCommonAreas([]);
+      setDefaultUnitLocation("");
       return;
     }
 
     residentRepo.getUser().then((user) => {
-      const defaultLocation =
+      const unitLocation =
         user.unit && user.name ? `${user.name} - ${user.unit}` : user.unit || user.name || "";
       const createdByLabel =
         user.name && user.role ? `${user.name} - ${user.role}` : user.name || user.role || "";
+      setDefaultUnitLocation(unitLocation);
       setForm({
         ...initialFormState(),
-        location: defaultLocation,
+        location: unitLocation,
         visibility: DEFAULT_VISIBILITY,
         createdBy: createdByLabel,
       });
     });
 
     residentRepo.getServiceCategories().then((categories) => {
-      const names = categories.map((categoryItem) => categoryItem.name);
-      const withOther = names.some((name) => name === "Other") ? names : [...names, "Other"];
-      setCategoryOptions(withOther);
+      setDbCategoryNames(categories.map((categoryItem) => categoryItem.name));
     });
+
+    residentRepo.getBuildingCommonAreas().then(setBuildingCommonAreas);
   }, [open]);
 
   useEffect(() => {
@@ -85,20 +97,30 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
     }
   }, [category]);
 
-  const serviceCategoryOptions = useMemo(() => ["", ...categoryOptions], [categoryOptions]);
-
-  const locationOptions = useMemo(() => {
-    const options = location ? [location, ...LOCATION_OPTIONS] : LOCATION_OPTIONS;
-    return Array.from(new Set(options));
+  useEffect(() => {
+    if (location !== "Other") {
+      setForm((current) => ({ ...current, customLocation: "" }));
+    }
   }, [location]);
+
+  const serviceCategoryOptions = useMemo(
+    () => ["", ...mergeServiceCategoryOptions(dbCategoryNames)],
+    [dbCategoryNames]
+  );
+
+  const locationOptions = useMemo(
+    () => ["", ...mergeServiceLocationOptions(buildingCommonAreas, defaultUnitLocation || undefined)],
+    [buildingCommonAreas, defaultUnitLocation]
+  );
 
   const { run: submitRequest, loading: submitting, error, clearError, setError } = useAsyncAction(
     useCallback(async () => {
       const resolvedCategory = category === "Other" ? customCategory.trim() : category;
+      const resolvedLocation = resolveServiceRequestLocation(location, customLocation);
       const files = Object.values(slotFiles);
       await onSubmit({
         contact,
-        location,
+        location: resolvedLocation,
         visibility,
         permissionToEnter,
         permissionNotes,
@@ -112,6 +134,7 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
       category,
       contact,
       customCategory,
+      customLocation,
       description,
       location,
       onClose,
@@ -130,11 +153,12 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
 
   const handleSubmit = async () => {
     clearError();
-    if (!contact || !permissionToEnter || !severity || !category || !description) {
+    const resolvedLocation = resolveServiceRequestLocation(location, customLocation);
+    const resolvedCategory = category === "Other" ? customCategory.trim() : category;
+    if (!contact || !resolvedLocation || !permissionToEnter || !severity || !category || !description) {
       setError("Please fill in all required fields.");
       return;
     }
-    const resolvedCategory = category === "Other" ? customCategory.trim() : category;
     if (!resolvedCategory) {
       setError("Please enter a custom category name.");
       return;
@@ -192,6 +216,16 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
         />
         <InputField label="Permission To Enter notes" value={permissionNotes} onChange={(v) => setForm((c) => ({ ...c, permissionNotes: v }))} placeholder="Please call ahead, etc." />
       </div>
+      {location === "Other" && (
+        <div className="mt-3">
+          <InputField
+            label="Custom Location *"
+            value={customLocation}
+            onChange={(v) => setForm((c) => ({ ...c, customLocation: v }))}
+            placeholder="Type custom location"
+          />
+        </div>
+      )}
 
       <SectionHeader title="Request Description" />
       <div className="mt-3 grid gap-3 sm:grid-cols-2">

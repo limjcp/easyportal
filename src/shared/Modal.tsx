@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { FaTimes } from "react-icons/fa";
 import { cn } from "../utils/cn";
+import { useMutationBusyFlag } from "./MutationBusyContext";
 
 type ModalProps = {
   open: boolean;
@@ -11,6 +12,54 @@ type ModalProps = {
   footer?: ReactNode;
   size?: "md" | "lg" | "xl";
 };
+
+function ModalBody({
+  onClose,
+  title,
+  icon,
+  children,
+  footer,
+  size,
+}: Omit<ModalProps, "open">) {
+  const showOverlay = useMutationBusyFlag();
+
+  return (
+    <div
+      className={cn(
+        "relative w-full rounded-sm bg-white shadow-2xl",
+        size === "md" && "max-w-lg",
+        size === "lg" && "max-w-3xl",
+        size === "xl" && "max-w-5xl"
+      )}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-800">
+          {icon}
+          {title}
+        </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={showOverlay}
+          className="rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label="Close"
+        >
+          <FaTimes />
+        </button>
+      </div>
+      <div className="relative">
+        <div className="max-h-[70vh] overflow-y-auto p-4">{children}</div>
+        {footer ? (
+          <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">
+            {footer}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 export function Modal({ open, onClose, title, icon, children, footer, size = "lg" }: ModalProps) {
   useEffect(() => {
@@ -24,35 +73,15 @@ export function Modal({ open, onClose, title, icon, children, footer, size = "lg
 
   return (
     <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-8 sm:p-6 sm:pt-12">
-      <div
-        className={cn(
-          "w-full rounded-sm bg-white shadow-2xl",
-          size === "md" && "max-w-lg",
-          size === "lg" && "max-w-3xl",
-          size === "xl" && "max-w-5xl"
-        )}
-        role="dialog"
-        aria-modal="true"
+      <ModalBody
+        onClose={onClose}
+        title={title}
+        icon={icon}
+        footer={footer}
+        size={size}
       >
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-800">
-            {icon}
-            {title}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-            aria-label="Close"
-          >
-            <FaTimes />
-          </button>
-        </div>
-        <div className="max-h-[70vh] overflow-y-auto p-4">{children}</div>
-        {footer ? (
-          <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">{footer}</div>
-        ) : null}
-      </div>
+        {children}
+      </ModalBody>
     </div>
   );
 }

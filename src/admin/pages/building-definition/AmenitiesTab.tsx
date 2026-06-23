@@ -3,6 +3,7 @@ import { FaDoorOpen, FaLevelUpAlt } from "react-icons/fa";
 import { AdminFormPanel, InfoBanner, StepCard } from "../../components/AdminFormPanel";
 import { adminRepository } from "../../data/adminRepository";
 import { ActionButton } from "../../../shared/ActionButton";
+import { CrudPanel } from "../../../shared/CrudPanel";
 import { ConfirmModal } from "../../../shared/ConfirmModal";
 import { FormAlert } from "../../../shared/FormAlert";
 import { useAsyncAction } from "../../../shared/useAsyncAction";
@@ -96,7 +97,7 @@ function ResourceSection({
     <div className="space-y-4">
       <InfoBanner icon={icon} title={title} subtitle={`Define bookable ${title.toLowerCase()} for residents.`} />
 
-      <div className="mx-auto grid max-w-4xl gap-4 sm:grid-cols-3">
+      <div className="mx-auto grid w-full gap-4 sm:grid-cols-3">
         <StepCard step={1} text={`Add each ${title.toLowerCase().slice(0, -1)} by name.`} />
         <StepCard step={2} text="Optionally include a location label (floor, wing, etc.)." />
         <StepCard step={3} text="Residents choose a resource when submitting bookings." />
@@ -231,19 +232,31 @@ function ResourceSection({
 export function AmenitiesTab({ refreshKey, onRefresh }: AmenitiesTabProps) {
   const [partyRooms, setPartyRooms] = useState<BuildingAmenityResource[]>([]);
   const [elevators, setElevators] = useState<BuildingAmenityResource[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
     Promise.all([
       adminRepository.getBuildingAmenityResources("party_room"),
       adminRepository.getBuildingAmenityResources("elevator"),
-    ]).then(([rooms, lifts]) => {
-      setPartyRooms(rooms);
-      setElevators(lifts);
-    });
+    ])
+      .then(([rooms, lifts]) => {
+        if (!cancelled) {
+          setPartyRooms(rooms);
+          setElevators(lifts);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [refreshKey]);
 
   return (
-    <div className="space-y-8">
+    <CrudPanel className="space-y-8" loading={loading}>
       <ResourceSection
         resourceType="party_room"
         title="Party Rooms"
@@ -260,6 +273,6 @@ export function AmenitiesTab({ refreshKey, onRefresh }: AmenitiesTabProps) {
         refreshKey={refreshKey}
         onRefresh={onRefresh}
       />
-    </div>
+    </CrudPanel>
   );
 }

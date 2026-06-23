@@ -10,7 +10,6 @@ import { adminRepository } from "./data/adminRepository";
 import type { AdminRoute } from "./navigation";
 import { isAdminRouteAllowed } from "./navigation";
 import { useBuildingBadgeCounts, useBuildingNavAccess } from "../shared/queries/buildingQueries";
-import { useInvalidatePortalQueries } from "../shared/queries/useInvalidatePortalQueries";
 import { AdminPageActions } from "./components/AdminPageActions";
 import { AdminDocumentsPage } from "./pages/AdminDocumentsPage";
 import { AdminEventsPage } from "./pages/AdminEventsPage";
@@ -44,6 +43,7 @@ import { ComplianceDashboardPage } from "./pages/ComplianceDashboardPage";
 import { ConsultationLeadsPage } from "./pages/ConsultationLeadsPage";
 import type { CompanyBuilding } from "../resident/data/types";
 import { setActiveBuildingId } from "../data/supabase/buildingContext";
+import { useNavigateWithBusy } from "../shared/useNavigateWithBusy";
 
 type AdminPortalProps = {
   adminPathPrefix: string;
@@ -76,23 +76,24 @@ export function AdminPortal({
 }: AdminPortalProps) {
   const location = useLocation();
   const routerNavigate = useNavigate();
-  const { invalidateBuilding } = useInvalidatePortalQueries();
   const route = useMemo(() => {
     const sub = extractAdminSubPath(location.pathname, adminPathPrefix);
     return pathToAdminRoute(sub, location.search);
   }, [location.pathname, location.search, adminPathPrefix]);
-  const navigate = useCallback(
+  const navigateRaw = useCallback(
     (next: AdminRoute) => {
       routerNavigate(buildAdminPath(adminPathPrefix, next));
     },
     [adminPathPrefix, routerNavigate]
   );
+  const navigate = useNavigateWithBusy(navigateRaw);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // bumpRefresh increments refreshKey so mounted pages refetch locally (syncFromRefreshKey).
+  // Child pages must NOT call onRefresh from their refreshKey listener — that would loop.
   const bumpRefresh = useCallback(() => {
     setRefreshKey((k) => k + 1);
-    invalidateBuilding();
-  }, [invalidateBuilding]);
+  }, []);
 
   const { data: badgeCounts } = useBuildingBadgeCounts();
   const unreadSuggestions = badgeCounts?.unreadSuggestions ?? 0;

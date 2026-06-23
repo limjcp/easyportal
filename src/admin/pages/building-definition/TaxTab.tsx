@@ -6,6 +6,7 @@ import type { BuildingTaxSettings } from "../../../resident/data/types";
 import { ActionButton } from "../../../shared/ActionButton";
 import { FormAlert } from "../../../shared/FormAlert";
 import { useAsyncAction } from "../../../shared/useAsyncAction";
+import { usePageContentBusy } from "../../../shared/usePageContentBusy";
 
 export function TaxTab() {
   const [settings, setSettings] = useState<BuildingTaxSettings | null>(null);
@@ -24,7 +25,9 @@ export function TaxTab() {
     { successMessage: "Tax settings saved." }
   );
 
-  if (!settings) return <div className="py-8 text-center text-slate-500">Loading...</div>;
+  usePageContentBusy(!settings);
+
+  if (!settings) return null;
 
   const setMasterRate = (value: number | null) => {
     const next = { ...settings, masterTaxRate: value };

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionButton } from "../../shared/ActionButton";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useLocalList } from "../../shared/useLocalList";
 import { DeliveryBadge, OptionsDropdown, StatusBadge } from "../components/AdminBadges";
 import { AdminPanelTable, AdminTabs } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
@@ -31,7 +33,10 @@ type NewsNoticesPageProps = {
 };
 
 export function NewsNoticesPage({ route, onNavigate, refreshKey, onRefresh }: NewsNoticesPageProps) {
-  const [items, setItems] = useState<AdminNewsItem[]>([]);
+  const { data: items, reload, loading } = useLocalList(
+    useCallback(() => adminRepository.getNews(route.tab), [route.tab]),
+    refreshKey
+  );
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
@@ -41,7 +46,6 @@ export function NewsNoticesPage({ route, onNavigate, refreshKey, onRefresh }: Ne
 
   useEffect(() => {
     setPage(1);
-    adminRepository.getNews(route.tab).then(setItems);
   }, [route.tab, refreshKey]);
 
   const filtered = useMemo(() => {
@@ -61,7 +65,8 @@ export function NewsNoticesPage({ route, onNavigate, refreshKey, onRefresh }: Ne
       if (!id) return;
       await adminRepository.archiveNews(id);
       onRefresh();
-    }, [onRefresh]),
+      await reload();
+    }, [onRefresh, reload]),
     { successMessage: "Notice archived." }
   );
 
@@ -71,7 +76,8 @@ export function NewsNoticesPage({ route, onNavigate, refreshKey, onRefresh }: Ne
       if (!id) return;
       await adminRepository.unarchiveNews(id);
       onRefresh();
-    }, [onRefresh]),
+      await reload();
+    }, [onRefresh, reload]),
     { successMessage: "Notice restored." }
   );
 
@@ -79,8 +85,9 @@ export function NewsNoticesPage({ route, onNavigate, refreshKey, onRefresh }: Ne
     useCallback(async () => {
       const item = await adminRepository.createNews("New News/Notice");
       onRefresh();
+      await reload();
       onNavigate({ page: "news-notice-edit", id: item.id });
-    }, [onRefresh, onNavigate]),
+    }, [onRefresh, onNavigate, reload]),
     { successMessage: "News/notice created." }
   );
 
@@ -95,7 +102,7 @@ export function NewsNoticesPage({ route, onNavigate, refreshKey, onRefresh }: Ne
   };
 
   return (
-    <>
+    <CrudPanel loading={loading}>
       <AdminPageActions
         route={route}
         onNavigate={onNavigate}
@@ -210,6 +217,6 @@ export function NewsNoticesPage({ route, onNavigate, refreshKey, onRefresh }: Ne
         item={emailReportItem}
         onClose={() => setEmailReportItem(null)}
       />
-    </>
+    </CrudPanel>
   );
 }

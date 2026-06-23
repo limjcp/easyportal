@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { StatusBadge } from "../../admin/components/AdminBadges";
 import { AdminPanelTable, AdminTabs } from "../../admin/components/AdminPanelTable";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { companyRepository } from "../../company/data/companyRepository";
 import { vendorRepository } from "../data/vendorRepository";
 import type { VendorRoute } from "../navigation";
@@ -41,7 +42,7 @@ export function PurchaseOrdersPage({ route, onNavigate, refreshKey }: PurchaseOr
   };
 
   return (
-    <div>
+    <CrudPanel>
       <div className="mb-4 rounded bg-[#0d9488] px-4 py-2 text-sm font-semibold text-white">
         Purchase Orders
       </div>
@@ -98,6 +99,6 @@ export function PurchaseOrdersPage({ route, onNavigate, refreshKey }: PurchaseOr
           },
         ]}
       />
-    </div>
+    </CrudPanel>
   );
 }

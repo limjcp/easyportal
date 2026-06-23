@@ -389,6 +389,13 @@ export interface AdminServiceRequest extends ServiceRequest {
   attachments: IncidentReportAttachment[];
 }
 
+export type UpdateAdminServiceRequestInput = Partial<
+  Omit<AdminServiceRequest, "resolvedBy" | "resolvedAt"> & {
+    resolvedBy?: string | null;
+    resolvedAt?: string | null;
+  }
+>;
+
 export type CreateAdminServiceRequestInput = {
   assignedTo: string;
   resident: string;

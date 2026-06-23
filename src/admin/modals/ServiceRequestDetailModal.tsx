@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { FaPrint, FaWrench } from "react-icons/fa";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FaWrench } from "react-icons/fa";
 import { Modal } from "../../shared/Modal";
 import { ConfirmModal } from "../../shared/ConfirmModal";
 import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useBusyWhile } from "../../shared/useBusyWhile";
 import { IncidentReportAttachmentGrid } from "../../shared/IncidentReportAttachmentThumb";
 import { validateAttachmentFile } from "../../shared/attachmentUtils";
 import { AdminSectionHeader, CommentSection } from "../components/CommentSection";
@@ -12,28 +13,30 @@ import { SeverityBadge } from "../components/AdminBadges";
 import { adminRepository } from "../data/adminRepository";
 import { companyRepository } from "../../company/data/companyRepository";
 import { PurchaseOrderFormModal } from "../../company/modals/PurchaseOrderFormModal";
-import type { AdminServiceRequest, PurchaseOrder, PurchaseOrderPrefill } from "../../resident/data/types";
+import type { AdminServiceRequest, PurchaseOrder, PurchaseOrderPrefill, UpdateAdminServiceRequestInput } from "../../resident/data/types";
 
 type ServiceRequestDetailModalProps = {
   open: boolean;
   requestId: string | null;
+  categoryNames?: string[];
   onClose: () => void;
-  onUpdated: () => void;
+  onUpdated: (updated: AdminServiceRequest) => void;
   onViewRelated?: (unit: string, owner: string) => void;
 };
 
 export function ServiceRequestDetailModal({
   open,
   requestId,
+  categoryNames = [],
   onClose,
   onUpdated,
   onViewRelated,
 }: ServiceRequestDetailModalProps) {
   const [request, setRequest] = useState<AdminServiceRequest | null>(null);
+  const [loading, setLoading] = useState(false);
   const [relatedPOs, setRelatedPOs] = useState<PurchaseOrder[]>([]);
   const [createPOOpen, setCreatePOOpen] = useState(false);
   const [poPrefill, setPoPrefill] = useState<PurchaseOrderPrefill | undefined>();
-  const [serviceCategories, setServiceCategories] = useState<string[]>([]);
   const [customAdminCategory, setCustomAdminCategory] = useState("");
   const [removeAttachmentOpen, setRemoveAttachmentOpen] = useState(false);
   const [commentAuthor, setCommentAuthor] = useState("Admin");
@@ -43,30 +46,33 @@ export function ServiceRequestDetailModal({
   const pendingFileRef = useRef<File | null>(null);
   const pendingAttachmentIdRef = useRef<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const loadRelatedPOs = useCallback(async () => {
     if (!requestId) return;
-    const updated = await adminRepository.getServiceRequestById(requestId);
-    if (updated) setRequest(updated);
-    const categories = await adminRepository.getServiceCategories();
-    const activeNames = categories
-      .filter((category) => category.status === "active")
-      .map((category) => category.name);
-    setServiceCategories(activeNames.includes("Other") ? activeNames : [...activeNames, "Other"]);
     const related = await companyRepository.getPurchaseOrdersBySourceRequest(
       "admin-service-request",
       requestId
     );
     setRelatedPOs(related);
-    onUpdated();
-  }, [requestId, onUpdated]);
+  }, [requestId]);
+
+  const reloadDetail = useCallback(
+    async (notifyList = false) => {
+      if (!requestId) return null;
+      const updated = await adminRepository.getServiceRequestById(requestId);
+      if (updated) setRequest(updated);
+      if (notifyList && updated) onUpdated(updated);
+      return updated;
+    },
+    [requestId, onUpdated]
+  );
 
   const { run: runMutation, loading: mutating, error, clearError } = useAsyncAction(
     useCallback(async () => {
       const mutation = pendingMutationRef.current;
       if (!mutation) return;
       await mutation();
-      await refresh();
-    }, [refresh]),
+      await reloadDetail(true);
+    }, [reloadDetail]),
     { showSuccessToast: false, showErrorToast: false }
   );
 
@@ -90,8 +96,8 @@ export function ServiceRequestDetailModal({
         },
         pending.visibility
       );
-      await refresh();
-    }, [request, commentAuthor, refresh]),
+      await reloadDetail(false);
+    }, [request, commentAuthor, reloadDetail]),
     { successMessage: "Comment added.", showErrorToast: false }
   );
 
@@ -105,8 +111,8 @@ export function ServiceRequestDetailModal({
         return;
       }
       await adminRepository.addServiceRequestAttachment(requestId, file);
-      await refresh();
-    }, [requestId, refresh]),
+      await reloadDetail(false);
+    }, [requestId, reloadDetail]),
     { successMessage: "Attachment added.", showErrorToast: false }
   );
 
@@ -115,30 +121,57 @@ export function ServiceRequestDetailModal({
       const attachmentId = pendingAttachmentIdRef.current;
       if (!attachmentId) return;
       await adminRepository.removeServiceRequestAttachment(attachmentId);
-      await refresh();
+      await reloadDetail(false);
       setRemoveAttachmentOpen(false);
       pendingAttachmentIdRef.current = null;
-    }, [refresh]),
+    }, [reloadDetail]),
     { successMessage: "Attachment removed.", showErrorToast: false }
   );
 
   useEffect(() => {
-    if (open && requestId) {
-      adminRepository.getServiceRequestById(requestId).then(setRequest);
-      adminRepository.getAdminUser().then((user) => setCommentAuthor(user.displayName || "Admin"));
-      adminRepository.getServiceCategories().then((categories) => {
-        const activeNames = categories
-          .filter((category) => category.status === "active")
-          .map((category) => category.name);
-        setServiceCategories(activeNames.includes("Other") ? activeNames : [...activeNames, "Other"]);
-      });
-      companyRepository
-        .getPurchaseOrdersBySourceRequest("admin-service-request", requestId)
-        .then(setRelatedPOs);
+    if (!open || !requestId) {
+      setRequest(null);
+      setRelatedPOs([]);
+      setLoading(false);
+      return;
     }
-  }, [open, requestId]);
 
-  if (!open || !request) return null;
+    let cancelled = false;
+    setLoading(true);
+    setRequest(null);
+    setRelatedPOs([]);
+
+    void (async () => {
+      const [detail, user] = await Promise.all([
+        adminRepository.getServiceRequestById(requestId),
+        adminRepository.getAdminUser(),
+      ]);
+      if (cancelled) return;
+      setRequest(detail);
+      setCommentAuthor(user.displayName || "Admin");
+      setLoading(false);
+      if (detail) void loadRelatedPOs();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, requestId, loadRelatedPOs]);
+
+  const serviceCategories = useMemo(
+    () => (categoryNames.includes("Other") ? categoryNames : [...categoryNames, "Other"]),
+    [categoryNames]
+  );
+
+  const categoryOptions = useMemo(
+    () =>
+      request
+        ? Array.from(new Set([...serviceCategories, request.adminCategory].filter(Boolean)))
+        : serviceCategories,
+    [request, serviceCategories]
+  );
+
+  useBusyWhile(open && loading);
 
   const addComment = (text: string, visibility: "admin" | "public") => {
     pendingCommentRef.current = { text, visibility };
@@ -155,11 +188,13 @@ export function ServiceRequestDetailModal({
     setRemoveAttachmentOpen(true);
   };
 
-  const updateRequest = (updates: Partial<AdminServiceRequest>) => {
+  const updateRequest = (updates: UpdateAdminServiceRequestInput) => {
+    if (!request) return;
     queueMutation(() => adminRepository.updateServiceRequest(request.id, updates));
   };
 
   const markResolved = () => {
+    if (!request) return;
     queueMutation(() =>
       adminRepository.updateServiceRequest(request.id, {
         status: "Resolved",
@@ -171,9 +206,24 @@ export function ServiceRequestDetailModal({
     );
   };
 
+  const reopenRequest = () => {
+    if (!request) return;
+    queueMutation(() =>
+      adminRepository.updateServiceRequest(request.id, {
+        status: "Pending",
+        archived: false,
+        resolvedBy: null,
+        resolvedAt: null,
+        pendingReply: true,
+        actionRequired: true,
+      })
+    );
+  };
+
   const formError = error ?? commentError ?? attachmentError;
 
   const handleGeneratePO = () => {
+    if (!request) return;
     const notes = [
       `Generated from admin service request ${request.id}`,
       `Resident: ${request.resident}`,
@@ -189,42 +239,41 @@ export function ServiceRequestDetailModal({
     setCreatePOOpen(true);
   };
 
-  const categoryOptions = Array.from(
-    new Set([...serviceCategories, request.adminCategory].filter(Boolean))
-  );
-
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={`Service Request #${request.id}`}
+      title={request ? `Service Request #${request.id}` : "Service Request"}
       icon={<FaWrench className="text-[#e8913a]" />}
       size="xl"
       footer={
+        request ? (
         <div className="flex w-full flex-wrap justify-end gap-2">
-          <button
-            type="button"
+          <ActionButton
+            label="Set as Unread"
+            variant="secondary"
+            className="bg-slate-700 px-3 py-1.5 text-white hover:bg-slate-800"
+            loading={mutating}
             onClick={() => updateRequest({ pendingReply: true })}
-            className="rounded bg-slate-700 px-3 py-1.5 text-sm text-white"
-          >
-            Set as Unread
-          </button>
-          <button
-            type="button"
-            onClick={() => updateRequest({ status: "Pending", archived: false })}
-            className="rounded bg-slate-700 px-3 py-1.5 text-sm text-white"
-          >
-            Reopen and Revert to Pending
-          </button>
-          <button
-            type="button"
+          />
+          {request.status === "Resolved" ? (
+            <ActionButton
+              label="Reopen and Revert to Pending"
+              variant="secondary"
+              className="bg-slate-700 px-3 py-1.5 text-white hover:bg-slate-800"
+              loading={mutating}
+              loadingLabel="Saving…"
+              onClick={reopenRequest}
+            />
+          ) : null}
+          <ActionButton
+            label="Print"
+            variant="secondary"
+            className="bg-[#79d0df] px-3 py-1.5 text-white hover:bg-[#5fbccc]"
+            loading={false}
             onClick={() => window.print()}
-            className="inline-flex items-center gap-2 rounded bg-[#79d0df] px-3 py-1.5 text-sm text-white"
-          >
-            <FaPrint />
-            Print
-          </button>
-          {request.status === "Pending" ? (
+          />
+          {request.status !== "Resolved" ? (
             <ActionButton
               label="Resolve"
               variant="success"
@@ -241,8 +290,11 @@ export function ServiceRequestDetailModal({
             Close
           </button>
         </div>
+        ) : undefined
       }
     >
+      {request ? (
+      <>
       {formError ? <FormAlert message={formError} className="mb-4" /> : null}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {request.resolvedBy && (
@@ -427,7 +479,10 @@ export function ServiceRequestDetailModal({
         open={createPOOpen}
         prefill={poPrefill}
         onClose={() => setCreatePOOpen(false)}
-        onSaved={refresh}
+        onSaved={async () => {
+          await reloadDetail(false);
+          await loadRelatedPOs();
+        }}
       />
 
       <ConfirmModal
@@ -443,6 +498,8 @@ export function ServiceRequestDetailModal({
         loading={removingAttachment}
         onConfirm={() => void removeAttachmentRun()}
       />
+      </>
+      ) : null}
     </Modal>
   );
 }

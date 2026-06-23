@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { FaEdit, FaPlus, FaSearch, FaTrash } from "react-icons/fa";
 import { Modal } from "../../../shared/Modal";
 import { ActionButton } from "../../../shared/ActionButton";
+import { CrudPanel } from "../../../shared/CrudPanel";
 import { FileUploadZone } from "../../../shared/FileUploadZone";
 import { FormAlert } from "../../../shared/FormAlert";
 import { useAsyncAction } from "../../../shared/useAsyncAction";
+import { useLocalList } from "../../../shared/useLocalList";
 import { AdminFormPanel } from "../../components/AdminFormPanel";
 import { adminRepository } from "../../data/adminRepository";
 import type { PortalImage, PortalImageKind } from "../../../resident/data/types";
@@ -26,17 +28,14 @@ export function PortalImageGrid({
   note,
   refreshKey,
 }: PortalImageGridProps) {
-  const [images, setImages] = useState<PortalImage[]>([]);
+  const { data: images, reload, loading } = useLocalList(
+    useCallback(() => adminRepository.getPortalImages(kind), [kind]),
+    refreshKey
+  );
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PortalImage | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-
-  const load = () => adminRepository.getPortalImages(kind).then(setImages);
-
-  useEffect(() => {
-    load();
-  }, [kind, refreshKey]);
 
   const openAdd = () => {
     setEditing(null);
@@ -70,8 +69,8 @@ export function PortalImageGrid({
         });
       }
       setModalOpen(false);
-      load();
-    }, [previewUrl, editing, kind, images.length]),
+      await reload();
+    }, [previewUrl, editing, kind, images.length, reload]),
     { successMessage: "Image saved." }
   );
 
@@ -80,13 +79,14 @@ export function PortalImageGrid({
       if (!deleteId) return;
       await adminRepository.deletePortalImage(deleteId);
       setDeleteId(null);
-      load();
-    }, [deleteId]),
+      await reload();
+    }, [deleteId, reload]),
     { successMessage: "Image deleted." }
   );
 
   return (
-    <AdminFormPanel
+    <CrudPanel loading={loading}>
+      <AdminFormPanel
       title={`${images.length} ${title}`}
       headerColor="primary"
       toolbar={
@@ -184,5 +184,6 @@ export function PortalImageGrid({
         <p className="text-sm text-slate-600">Are you sure you want to delete this image?</p>
       </Modal>
     </AdminFormPanel>
+    </CrudPanel>
   );
 }

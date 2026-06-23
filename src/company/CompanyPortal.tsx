@@ -28,6 +28,7 @@ import {
 } from "../routing/companyRoutePaths";
 import { setActiveBuildingId } from "../data/supabase/buildingContext";
 import { removeBuildingQueries } from "../shared/queryInvalidation";
+import { useNavigateWithBusy } from "../shared/useNavigateWithBusy";
 
 type CompanyPortalProps = {
   onOpenResidentPortal?: () => void;
@@ -82,12 +83,13 @@ export function CompanyPortal({
     return result.data ?? [];
   }, [refetchBuildings]);
 
-  const handleNavigate = useCallback(
+  const handleNavigateRaw = useCallback(
     (next: CompanyRoute) => {
       navigate(companyRouteToPath(next));
     },
     [navigate]
   );
+  const handleNavigate = useNavigateWithBusy(handleNavigateRaw);
 
   const handleOpenBuilding = useCallback(
     async (building: CompanyBuilding) => {

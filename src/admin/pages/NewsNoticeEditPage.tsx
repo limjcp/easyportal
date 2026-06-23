@@ -4,6 +4,7 @@ import { AdminPanelHeader } from "../components/AdminPanelTable";
 import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { usePageContentBusy } from "../../shared/usePageContentBusy";
 import { adminRepository } from "../data/adminRepository";
 import { AdminPageActions } from "../components/AdminPageActions";
 import { EmailNoticesReportModal } from "../modals/EmailNoticesReportModal";
@@ -86,8 +87,10 @@ export function NewsNoticeEditPage({ route, onNavigate, onRefresh }: NewsNoticeE
     { successMessage: "News/notice saved." }
   );
 
+  usePageContentBusy(!item);
+
   if (!item) {
-    return <div className="py-8 text-center text-slate-500">Loading...</div>;
+    return null;
   }
 
   const update = (updates: Partial<AdminNewsItem>) => {

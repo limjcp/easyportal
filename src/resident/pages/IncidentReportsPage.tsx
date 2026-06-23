@@ -1,9 +1,15 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { EmptyState } from "../../shared/EmptyState";
 import { useResidentIncidentReports } from "../../shared/queries/residentListQueries";
+import { useBuildingListRefresh } from "../../shared/queries/mutationHelpers";
+import { queryKeys } from "../../shared/queryKeys";
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
+import { useTenantContext } from "../../shared/queries/useTenantContext";
+import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { IncidentReportDetailModal } from "../modals/IncidentReportDetailModal";
+import type { IncidentReport } from "../data/types";
 
 type IncidentReportsPageProps = {
   onAddNew: () => void;
@@ -17,18 +23,31 @@ function statusClass(status: string): string {
 }
 
 export function IncidentReportsPage({ onAddNew, refreshKey = 0 }: IncidentReportsPageProps) {
-  const { invalidateBuilding } = useInvalidatePortalQueries();
-  const { data: items = [], error, refetch } = useResidentIncidentReports();
+  const { queryClient } = useInvalidatePortalQueries();
+  const { userId, buildingId } = useTenantContext();
+  const listQueryKey =
+    userId && buildingId ? queryKeys.building.residentIncidentReports(userId, buildingId) : null;
+  const reportsQuery = useResidentIncidentReports();
+  const { data: items = [], error, refetch } = reportsQuery;
+  const pageLoading = isQueryPageLoading(reportsQuery);
+  const { refreshList } = useBuildingListRefresh<IncidentReport>(
+    queryClient,
+    buildingId,
+    listQueryKey,
+    refetch
+  );
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
 
-  void refreshKey;
+  const reload = useCallback(async () => {
+    await refreshList();
+  }, [refreshList]);
+
+  useEffect(() => {
+    if (refreshKey === 0) return;
+    void reload();
+  }, [refreshKey, reload]);
 
   const loadError = error instanceof Error ? error.message : error ? "Failed to load incident reports." : null;
-
-  const reload = () => {
-    invalidateBuilding();
-    void refetch();
-  };
 
   if (loadError) {
     return (
@@ -38,9 +57,10 @@ export function IncidentReportsPage({ onAddNew, refreshKey = 0 }: IncidentReport
     );
   }
 
-  if (items.length === 0) {
+  if (!pageLoading && items.length === 0) {
     return (
-      <EmptyState
+      <CrudPanel>
+        <EmptyState
         title="There are no Reports"
         subtitle="Would you like to create a new Report?"
         action={
@@ -52,12 +72,13 @@ export function IncidentReportsPage({ onAddNew, refreshKey = 0 }: IncidentReport
             + Add New!
           </button>
         }
-      />
+        />
+      </CrudPanel>
     );
   }
 
   return (
-    <>
+    <CrudPanel loading={pageLoading}>
       <div className="rounded-sm bg-white/95 p-4 shadow-lg">
         <ModuleMessageBanner moduleId="incidentReport" />
         <div className="mb-4 flex justify-end">
@@ -76,7 +97,7 @@ export function IncidentReportsPage({ onAddNew, refreshKey = 0 }: IncidentReport
               }`}
             >
               <div className="flex items-start justify-between gap-3">
-                <span className="font-medium text-slate-800">{item.category}</span>
+                <span className="font-medium text-slate-800">{item.reportType}</span>
                 <span className={`shrink-0 rounded px-2 py-0.5 text-xs ${statusClass(item.status)}`}>
                   {item.status}
                 </span>
@@ -92,8 +113,8 @@ export function IncidentReportsPage({ onAddNew, refreshKey = 0 }: IncidentReport
         open={!!selectedReportId}
         reportId={selectedReportId}
         onClose={() => setSelectedReportId(null)}
-        onUpdated={reload}
+        onUpdated={() => void reload()}
       />
-    </>
+    </CrudPanel>
   );
 }

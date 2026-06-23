@@ -2,12 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminPanelTable, AdminTabs } from "../components/AdminPanelTable";
 import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import {
   useAdminAmenityBookings,
   useAdminBuildingAmenitySettings,
 } from "../../shared/queries/adminListQueries";
+import { useBuildingListRefresh } from "../../shared/queries/mutationHelpers";
+import { queryKeys } from "../../shared/queryKeys";
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
+import { useTenantContext } from "../../shared/queries/useTenantContext";
+import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
 import { AdminPageActions } from "../components/AdminPageActions";
 import { adminRepository } from "../data/adminRepository";
 import { AmenityBookingDetailModal } from "../modals/AmenityBookingDetailModal";
@@ -50,10 +55,27 @@ function labelStatus(status: AmenityBooking["status"]) {
 }
 
 export function AmenityBookingsPage({ route, onNavigate, refreshKey, onRefresh }: AmenityBookingsPageProps) {
-  const { invalidateBuilding } = useInvalidatePortalQueries();
+  const { queryClient } = useInvalidatePortalQueries();
+  const { userId, buildingId } = useTenantContext();
   const isSettingsTab = route.tab === "settings";
-  const { data: bookings = [] } = useAdminAmenityBookings(route.tab);
-  const { data: loadedSettings } = useAdminBuildingAmenitySettings();
+  const listQueryKey =
+    userId && buildingId && !isSettingsTab
+      ? queryKeys.building.adminAmenityBookings(userId, buildingId, route.tab)
+      : null;
+  const bookingsQuery = useAdminAmenityBookings(route.tab);
+  const { data: bookings = [], refetch } = bookingsQuery;
+  const settingsQuery = useAdminBuildingAmenitySettings();
+  const { data: loadedSettings } = settingsQuery;
+  const pageLoading =
+    route.tab === "settings"
+      ? isQueryPageLoading(settingsQuery)
+      : isQueryPageLoading(bookingsQuery);
+  const { refreshList } = useBuildingListRefresh<AmenityBooking>(
+    queryClient,
+    buildingId,
+    listQueryKey,
+    refetch
+  );
   const defaultSettings: BuildingAmenitySettings = {
     partyRoomFee: "",
     elevatorInstructions: "",
@@ -65,12 +87,26 @@ export function AmenityBookingsPage({ route, onNavigate, refreshKey, onRefresh }
   const [search, setSearch] = useState("");
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
 
-  void refreshKey;
+  const syncFromRefreshKey = useCallback(() => {
+    void refreshList();
+  }, [refreshList]);
 
-  const handleRefresh = useCallback(() => {
-    invalidateBuilding();
+  const handleRefresh = useCallback(async () => {
+    await refreshList();
     onRefresh();
-  }, [invalidateBuilding, onRefresh]);
+  }, [onRefresh, refreshList]);
+
+  const patchListItem = useCallback(
+    (updated: AmenityBooking) => {
+      void refreshList(updated);
+    },
+    [refreshList]
+  );
+
+  useEffect(() => {
+    if (refreshKey === 0) return;
+    syncFromRefreshKey();
+  }, [refreshKey, syncFromRefreshKey]);
 
   useEffect(() => {
     if (loadedSettings) {
@@ -103,7 +139,7 @@ export function AmenityBookingsPage({ route, onNavigate, refreshKey, onRefresh }
   }, [bookings, search]);
 
   return (
-    <div className="space-y-4">
+    <CrudPanel className="space-y-4" loading={pageLoading}>
       <AdminPageActions route={route} onNavigate={onNavigate} />
 
       <AdminTabs
@@ -120,11 +156,11 @@ export function AmenityBookingsPage({ route, onNavigate, refreshKey, onRefresh }
       {route.tab === "settings" ? (
         <div className="rounded border border-slate-300 bg-white p-4">
           <h3 className="mb-4 text-lg font-semibold text-slate-800">Amenity Booking Settings</h3>
-          <p className="mb-4 max-w-2xl text-sm text-slate-600">
+          <p className="mb-4 w-full text-sm text-slate-600">
             Party rooms and elevators are managed under{" "}
             <strong>Building Definition → Amenities</strong>. Use this tab for fees and booking instructions only.
           </p>
-          <div className="grid max-w-2xl gap-4">
+          <div className="grid w-full max-w-3xl gap-4">
             <label className="block space-y-1 text-sm">
               <span className="font-medium text-slate-700">Default Party Room Fee</span>
               <input
@@ -229,9 +265,9 @@ export function AmenityBookingsPage({ route, onNavigate, refreshKey, onRefresh }
         bookingId={detailId}
         open={!!detailId}
         onClose={() => setDetailId(null)}
-        onUpdated={handleRefresh}
+        onUpdated={patchListItem}
         defaultPartyRoomFee={settings.partyRoomFee}
       />
-    </div>
+    </CrudPanel>
   );
 }

@@ -14,6 +14,7 @@ import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { StatusBadge } from "../../shared/StatusBadge";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useBusyWhile } from "../../shared/useBusyWhile";
 import { adminRepository } from "../data/adminRepository";
 import type {
   AdminUser,
@@ -106,6 +107,8 @@ export function AdminProfileModal({ open, onClose, onProfileSaved }: AdminProfil
     setTab("profile");
     setSelectedEmail(null);
   }, [open]);
+
+  useBusyWhile(open && !draft);
 
   useEffect(() => {
     return () => {
@@ -356,10 +359,6 @@ export function AdminProfileModal({ open, onClose, onProfileSaved }: AdminProfil
                   </div>
                 </AdminFormPanel>
               </div>
-            )}
-
-            {tab === "profile" && !draft && (
-              <p className="py-8 text-center text-sm text-slate-500">Loading profile...</p>
             )}
 
             {tab === "notifications" && (

@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import {
   useAdminServiceCategories,
   useAdminServiceRequestTerms,
   useAdminServiceRequests,
 } from "../../shared/queries/adminListQueries";
+import {
+  prependBuildingQueryListItem,
+  useBuildingListRefresh,
+} from "../../shared/queries/mutationHelpers";
+import { queryKeys } from "../../shared/queryKeys";
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
+import { useTenantContext } from "../../shared/queries/useTenantContext";
+import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
 import {
   ActionRequiredBadge,
   SeverityBadge,
@@ -34,12 +42,36 @@ export function ServiceRequestsPage({
   refreshKey,
   onRefresh,
 }: ServiceRequestsPageProps) {
-  const { invalidateBuilding } = useInvalidatePortalQueries();
+  const { queryClient } = useInvalidatePortalQueries();
+  const { userId, buildingId } = useTenantContext();
   const isArchivedTab = route.tab === "archived";
   const isListTab = route.tab !== "categories" && route.tab !== "terms";
-  const { data: requests = [] } = useAdminServiceRequests(route.tab, isArchivedTab);
-  const { data: categories = [] } = useAdminServiceCategories();
-  const { data: loadedTerms = "" } = useAdminServiceRequestTerms();
+  const listQueryKey =
+    userId && buildingId
+      ? queryKeys.building.adminServiceRequests(
+          userId,
+          buildingId,
+          `${route.tab}:${isArchivedTab ? "archived" : "active"}`
+        )
+      : null;
+  const requestsQuery = useAdminServiceRequests(route.tab, isArchivedTab);
+  const { data: requests = [], refetch } = requestsQuery;
+  const categoriesQuery = useAdminServiceCategories();
+  const { data: categories = [] } = categoriesQuery;
+  const termsQuery = useAdminServiceRequestTerms();
+  const { data: loadedTerms = "" } = termsQuery;
+  const { refreshList } = useBuildingListRefresh<AdminServiceRequest>(
+    queryClient,
+    buildingId,
+    listQueryKey,
+    refetch
+  );
+  const pageLoading =
+    route.tab === "categories"
+      ? isQueryPageLoading(categoriesQuery)
+      : route.tab === "terms"
+        ? isQueryPageLoading(termsQuery)
+        : isQueryPageLoading(requestsQuery);
   const [terms, setTerms] = useState("");
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
@@ -55,17 +87,32 @@ export function ServiceRequestsPage({
   const pendingCategoryRef = useRef<{ id: string; fee?: string } | null>(null);
   const pendingCreateRef = useRef<Parameters<typeof adminRepository.createServiceRequest>[0] | null>(null);
 
-  void refreshKey;
   void isListTab;
 
   useEffect(() => {
     if (route.tab === "terms") setTerms(loadedTerms);
   }, [loadedTerms, route.tab]);
 
-  const handleRefresh = useCallback(() => {
-    invalidateBuilding();
+  const syncFromRefreshKey = useCallback(() => {
+    void refreshList();
+  }, [refreshList]);
+
+  const handleRefresh = useCallback(async () => {
+    await refreshList();
     onRefresh();
-  }, [invalidateBuilding, onRefresh]);
+  }, [onRefresh, refreshList]);
+
+  const patchListItem = useCallback(
+    (updated: AdminServiceRequest) => {
+      void refreshList(updated);
+    },
+    [refreshList]
+  );
+
+  useEffect(() => {
+    if (refreshKey === 0) return;
+    syncFromRefreshKey();
+  }, [refreshKey, syncFromRefreshKey]);
 
   const { run: updateCategoryRun, error: categoryError } = useAsyncAction(
     useCallback(async () => {
@@ -88,11 +135,20 @@ export function ServiceRequestsPage({
     useCallback(async () => {
       const input = pendingCreateRef.current;
       if (!input) return;
-      await adminRepository.createServiceRequest(input);
-      handleRefresh();
-    }, [handleRefresh]),
+      const created = await adminRepository.createServiceRequest(input);
+      if (listQueryKey && route.tab === "current" && !isArchivedTab) {
+        prependBuildingQueryListItem(queryClient, listQueryKey, created);
+      }
+    }, [isArchivedTab, listQueryKey, queryClient, route.tab]),
     { successMessage: "Service request created." }
   );
+
+  const categoryNames = useMemo(() => {
+    const activeNames = categories
+      .filter((category) => category.status === "active")
+      .map((category) => category.name);
+    return activeNames.includes("Other") ? activeNames : [...activeNames, "Other"];
+  }, [categories]);
 
   const actionError = categoryError ?? termsError;
 
@@ -134,6 +190,7 @@ export function ServiceRequestsPage({
   };
 
   return (
+    <CrudPanel loading={pageLoading}>
     <>
       <AdminPageActions
         route={route}
@@ -373,8 +430,9 @@ export function ServiceRequestsPage({
       <ServiceRequestDetailModal
         open={!!detailId}
         requestId={detailId}
+        categoryNames={categoryNames}
         onClose={() => setDetailId(null)}
-        onUpdated={handleRefresh}
+        onUpdated={patchListItem}
         onViewRelated={(unit, owner) => {
           setUnitFilter(unit);
           setOwnerFilter(owner);
@@ -383,5 +441,6 @@ export function ServiceRequestsPage({
         }}
       />
     </>
+    </CrudPanel>
   );
 }

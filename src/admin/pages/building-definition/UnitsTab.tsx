@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { FaBuilding } from "react-icons/fa";
 import { Modal } from "../../../shared/Modal";
 import { ActionButton } from "../../../shared/ActionButton";
+import { CrudPanel } from "../../../shared/CrudPanel";
 import { FormAlert } from "../../../shared/FormAlert";
 import { useAsyncAction } from "../../../shared/useAsyncAction";
 import { AdminFormPanel, InfoBanner, StepCard } from "../../components/AdminFormPanel";
@@ -15,6 +16,7 @@ type UnitsTabProps = {
 
 export function UnitsTab({ refreshKey, onRefresh }: UnitsTabProps) {
   const [groups, setGroups] = useState<BuildingUnitGroup[]>([]);
+  const [loading, setLoading] = useState(true);
   const [floor, setFloor] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -47,12 +49,24 @@ export function UnitsTab({ refreshKey, onRefresh }: UnitsTabProps) {
   );
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
     adminRepository
       .getBuildingUnits()
-      .then(setGroups)
+      .then((data) => {
+        if (!cancelled) setGroups(data);
+      })
       .catch((err) => {
-        setActionError(err instanceof Error ? err.message : "Failed to load units.");
+        if (!cancelled) {
+          setActionError(err instanceof Error ? err.message : "Failed to load units.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [refreshKey]);
 
   const openUnit = (group: BuildingUnitGroup, unit: string) => {
@@ -61,7 +75,7 @@ export function UnitsTab({ refreshKey, onRefresh }: UnitsTabProps) {
   };
 
   return (
-    <div className="space-y-4">
+    <CrudPanel className="space-y-4" loading={loading}>
       <InfoBanner
         icon={<FaBuilding />}
         title="Units Definition"
@@ -70,7 +84,7 @@ export function UnitsTab({ refreshKey, onRefresh }: UnitsTabProps) {
 
       {actionError ? <FormAlert message={actionError} className="mb-3" /> : null}
 
-      <div className="mx-auto grid max-w-4xl gap-4 sm:grid-cols-3">
+      <div className="mx-auto grid w-full gap-4 sm:grid-cols-3">
         <StepCard step={1} text="Enter the first and last unit for each floor/area, we'll fill in the rest." />
         <StepCard step={2} text="Once added, you can edit or delete any units that need adjustment." />
         <StepCard step={3} text="Continue until all units for your building have been added!" />
@@ -173,6 +187,6 @@ export function UnitsTab({ refreshKey, onRefresh }: UnitsTabProps) {
           </div>
         )}
       </Modal>
-    </div>
+    </CrudPanel>
   );
 }

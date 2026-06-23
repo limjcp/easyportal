@@ -3,6 +3,7 @@ import { FaCar } from "react-icons/fa";
 import { AdminFormPanel, InfoBanner, StepCard } from "../../components/AdminFormPanel";
 import { adminRepository } from "../../data/adminRepository";
 import { ActionButton } from "../../../shared/ActionButton";
+import { CrudPanel } from "../../../shared/CrudPanel";
 import { FormAlert } from "../../../shared/FormAlert";
 import { useAsyncAction } from "../../../shared/useAsyncAction";
 import type {
@@ -19,6 +20,7 @@ type ParkingTabProps = {
 export function ParkingTab({ refreshKey, onRefresh }: ParkingTabProps) {
   const [groups, setGroups] = useState<BuildingParkingGroup[]>([]);
   const [parkingRequests, setParkingRequests] = useState<ParkingRequest[]>([]);
+  const [loading, setLoading] = useState(true);
   const [visitorParking, setVisitorParking] = useState(false);
   const [prefix, setPrefix] = useState("");
   const [floor, setFloor] = useState("");
@@ -52,18 +54,28 @@ export function ParkingTab({ refreshKey, onRefresh }: ParkingTabProps) {
   );
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
     Promise.all([
       adminRepository.getBuildingParking(),
       adminRepository.getParkingRequests(),
       adminRepository.getBuildingParkingPricing(),
       adminRepository.getResidentCondoFeeAmount(),
-    ]).then(([parkingGroups, requests, pricing, monthlyFee]) => {
+    ])
+      .then(([parkingGroups, requests, pricing, monthlyFee]) => {
+        if (cancelled) return;
         setGroups(parkingGroups);
         setParkingRequests(requests);
         setRegularMonthlyCost(pricing.regularMonthlyCost);
         setVisitorMonthlyCost(pricing.visitorMonthlyCost);
         setCondoFeeAmount(monthlyFee);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [refreshKey]);
 
   const refreshParkingData = useCallback(async () => {
@@ -153,14 +165,14 @@ export function ParkingTab({ refreshKey, onRefresh }: ParkingTabProps) {
   );
 
   return (
-    <div className="space-y-4">
+    <CrudPanel className="space-y-4" loading={loading}>
       <InfoBanner
         icon={<FaCar />}
         title="Parking Definition"
         subtitle="Define your parking spaces here."
       />
 
-      <div className="mx-auto grid max-w-4xl gap-4 sm:grid-cols-3">
+      <div className="mx-auto grid w-full gap-4 sm:grid-cols-3">
         <StepCard step={1} text="Enter the first and last parking space for each floor/area." />
         <StepCard step={2} text="Once added, you can edit or delete any spaces that need adjustment." />
         <StepCard step={3} text="Continue until all parking spaces have been added!" />
@@ -428,6 +440,6 @@ export function ParkingTab({ refreshKey, onRefresh }: ParkingTabProps) {
           </div>
         )}
       </AdminFormPanel>
-    </div>
+    </CrudPanel>
   );
 }

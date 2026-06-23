@@ -5,6 +5,7 @@ import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
 import { IncidentReportAttachmentGrid } from "../../shared/IncidentReportAttachmentThumb";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useBusyWhile } from "../../shared/useBusyWhile";
 import { residentRepo } from "../data/mockRepository";
 import type { ResidentServiceRequestDetail } from "../data/types";
 
@@ -47,6 +48,7 @@ export function ServiceRequestDetailModal({
     {
       errorMessage: "Failed to load service request.",
       onError: () => onClose(),
+      trackBusy: false,
     }
   );
 
@@ -82,6 +84,8 @@ export function ServiceRequestDetailModal({
 
   const displayError = loadError ?? commentError;
 
+  useBusyWhile(open && loading);
+
   return (
     <Modal
       open={open}
@@ -96,9 +100,10 @@ export function ServiceRequestDetailModal({
       }
     >
       {displayError ? <FormAlert message={displayError} className="mb-3" /> : null}
-      {loading || !request ? (
-        <p className="text-sm text-slate-500">{loading ? "Loading…" : "Service request not found."}</p>
-      ) : (
+      {!loading && !request ? (
+        <p className="text-sm text-slate-500">Service request not found.</p>
+      ) : null}
+      {request ? (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className={`rounded px-2 py-0.5 text-xs font-medium ${statusClass(request.status)}`}>
@@ -200,7 +205,7 @@ export function ServiceRequestDetailModal({
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </Modal>
   );
 }

@@ -1,4 +1,5 @@
 import { Modal } from "../../shared/Modal";
+import { useBusyWhile } from "../../shared/useBusyWhile";
 import type { PortalSignupRequest } from "../../resident/data/types";
 
 type PortalSignupViewModalProps = {
@@ -18,11 +19,11 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 export function PortalSignupViewModal({ open, detail, loading, onClose }: PortalSignupViewModalProps) {
+  useBusyWhile(!!loading);
+
   return (
     <Modal open={open} onClose={onClose} title="Portal Registration Request" size="md">
-      {loading ? (
-        <p className="text-sm text-slate-500">Loading…</p>
-      ) : detail ? (
+      {!loading && detail ? (
         <dl className="space-y-4">
           <Field label="Community" value={detail.buildingLabel} />
           <Field label="First name" value={detail.firstName} />

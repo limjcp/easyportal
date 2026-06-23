@@ -45,6 +45,7 @@ import {
   mapPollResponse,
 } from "./admin/mappers";
 import { ensureDefaultDocumentFolders } from "./admin/documentFolders";
+import { ensureDefaultServiceCategoriesForBuilding } from "./admin/operationsRepository";
 import { buildingIdOrThrow, mapDbError, nowIso, sb, todayIsoDate } from "./base";
 import { getBuildingDocumentSignedUrl, formatFileSize, getGalleryPhotoSignedUrl, inferDocumentFileType, removeBuildingDocument, uploadBuildingDocument } from "./storage";
 import { supabaseChatRepository } from "./chatRepository";
@@ -672,9 +673,21 @@ export const supabaseResidentRepository: ResidentRepository = {
 
   async getServiceCategories() {
     const buildingId = await bid();
+    await ensureDefaultServiceCategoriesForBuilding(buildingId);
     const { data, error } = await sb().from("service_request_categories").select("*").eq("building_id", buildingId);
     mapDbError(error);
     return (data ?? []).map((c) => ({ id: c.id as string, name: c.name as string, status: "active" as const, usageCount: 0 }));
+  },
+
+  async getBuildingCommonAreas() {
+    const buildingId = await bid();
+    const { data, error } = await sb()
+      .from("buildings")
+      .select("common_areas")
+      .eq("id", buildingId)
+      .maybeSingle();
+    mapDbError(error);
+    return (data?.common_areas as string[]) ?? [];
   },
 
   async createServiceRequest(input) {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaCalendarAlt } from "react-icons/fa";
 import { FormAlert } from "../../shared/FormAlert";
+import { usePageContentBusy } from "../../shared/usePageContentBusy";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { OptionsDropdown, StatusBadge } from "../components/AdminBadges";
 import { AdminEventCalendar } from "../components/AdminEventCalendar";
@@ -38,6 +39,7 @@ function formatDisplayDate(iso: string) {
 
 export function AdminEventsPage({ route, onNavigate, refreshKey, onRefresh }: AdminEventsPageProps) {
   const [items, setItems] = useState<CalendarEvent[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
@@ -51,15 +53,29 @@ export function AdminEventsPage({ route, onNavigate, refreshKey, onRefresh }: Ad
   const adminOnly = calendarFilter === "admin-only";
 
   useEffect(() => {
-    if (route.tab === "calendar") {
-      adminRepository
-        .getEvents(adminOnly ? { adminOnly: true } : {})
-        .then(setItems);
-    } else {
-      adminRepository.getEvents({ type: route.tab as AdminEventType }).then(setItems);
-    }
+    let cancelled = false;
+    setLoading(true);
+    const load =
+      route.tab === "calendar"
+        ? adminRepository.getEvents(adminOnly ? { adminOnly: true } : {})
+        : adminRepository.getEvents({ type: route.tab as AdminEventType });
+    load
+      .then((data) => {
+        if (!cancelled) {
+          setItems(data);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
     setPage(1);
+    return () => {
+      cancelled = true;
+    };
   }, [route.tab, calendarFilter, refreshKey, adminOnly]);
+
+  usePageContentBusy(loading);
 
   const { run: deleteEventRun, error: deleteError } = useAsyncAction(
     useCallback(async () => {

@@ -12,6 +12,7 @@ import type {
   IncidentContactEmail,
   IncidentReportCategory,
   ServiceRequestCategory,
+  UpdateAdminServiceRequestInput,
 } from "../../../resident/data/types";
 import { PARKING_PAYMENT_AMOUNTS } from "../../../resident/data/types";
 import { certificateDetailFromRow } from "../../../company/data/mock/certificateDetails";
@@ -45,6 +46,7 @@ import {
   removeServiceRequestAttachment,
 } from "./shared";
 import { fileToAttachmentPayload } from "../../../shared/attachmentUtils";
+import { DEFAULT_SERVICE_REQUEST_CATEGORIES } from "../../../shared/serviceRequestPresets";
 
 async function ensureServiceCategory(name: string): Promise<string> {
   const buildingId = await bid();
@@ -63,6 +65,32 @@ async function ensureServiceCategory(name: string): Promise<string> {
     .single();
   mapDbError(error);
   return data!.name as string;
+}
+
+export async function ensureDefaultServiceCategoriesForBuilding(buildingId: string): Promise<void> {
+  const { data: existing, error: existingError } = await sb()
+    .from("service_request_categories")
+    .select("id")
+    .eq("building_id", buildingId)
+    .limit(1);
+  mapDbError(existingError);
+  if (existing?.length) return;
+
+  const names = DEFAULT_SERVICE_REQUEST_CATEGORIES.filter((name) => name !== "Other");
+  for (const name of names) {
+    const normalized = normalizeCategoryName(name);
+    if (!normalized) continue;
+    const { data: rows } = await sb()
+      .from("service_request_categories")
+      .select("name")
+      .eq("building_id", buildingId);
+    const match = (rows ?? []).find((c) => isSameCategoryName(c.name as string, normalized));
+    if (match) continue;
+    const { error } = await sb()
+      .from("service_request_categories")
+      .insert({ building_id: buildingId, name: normalized });
+    mapDbError(error);
+  }
 }
 
 async function mapServiceRequestWithComments(row: Record<string, unknown>) {
@@ -151,7 +179,7 @@ export const operationsRepository = {
     if (filters?.owner && filters.owner !== "all") {
       rows = rows.filter((r) => r.resident === filters.owner);
     }
-    return Promise.all(rows.map((r) => mapServiceRequestWithComments(r as Record<string, unknown>)));
+    return rows.map((r) => mapServiceRequest(r as Record<string, unknown>));
   },
 
   async getServiceRequestById(id: string) {
@@ -208,7 +236,7 @@ export const operationsRepository = {
     return removeServiceRequestAttachment(attachmentId);
   },
 
-  async updateServiceRequest(id: string, updates: Partial<AdminServiceRequest>) {
+  async updateServiceRequest(id: string, updates: UpdateAdminServiceRequestInput) {
     const payload: Record<string, unknown> = { updated_at: nowIso() };
     if (updates.status !== undefined) {
       payload.status = updates.status;
@@ -248,6 +276,7 @@ export const operationsRepository = {
 
   async getServiceCategories() {
     const buildingId = await bid();
+    await ensureDefaultServiceCategoriesForBuilding(buildingId);
     const { data: categories, error } = await sb()
       .from("service_request_categories")
       .select("*")
@@ -331,7 +360,7 @@ export const operationsRepository = {
       .eq("building_id", buildingId)
       .order("created_at", { ascending: false });
     mapDbError(error);
-    return Promise.all((data ?? []).map((s) => mapSuggestionWithComments(s as Record<string, unknown>)));
+    return (data ?? []).map((s) => mapSuggestion(s as Record<string, unknown>));
   },
 
   async getSuggestionById(id: string) {
@@ -444,7 +473,7 @@ export const operationsRepository = {
     if (filters?.owner && filters.owner !== "all") {
       rows = rows.filter((r) => r.resident === filters.owner);
     }
-    return Promise.all(rows.map((r) => mapIncidentWithComments(r as Record<string, unknown>)));
+    return rows.map((r) => mapIncidentReport(r as Record<string, unknown>));
   },
 
   async getIncidentReportById(id: string) {

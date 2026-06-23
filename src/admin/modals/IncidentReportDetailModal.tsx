@@ -4,6 +4,7 @@ import { Modal } from "../../shared/Modal";
 import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useBusyWhile } from "../../shared/useBusyWhile";
 import { IncidentReportAttachmentGrid } from "../../shared/IncidentReportAttachmentThumb";
 import { AdminSectionHeader, CommentSection } from "../components/CommentSection";
 import { SeverityBadge, StatusBadge, UnreadBadge } from "../components/AdminBadges";
@@ -18,7 +19,7 @@ type IncidentReportDetailModalProps = {
   open: boolean;
   reportId: string | null;
   onClose: () => void;
-  onUpdated: () => void;
+  onUpdated: (updated: AdminIncidentReport) => void;
   archived?: boolean;
   onViewRelated?: (unit: string, owner: string) => void;
 };
@@ -49,23 +50,24 @@ export function IncidentReportDetailModal({
   const pendingFileRef = useRef<File | null>(null);
   const pendingAttachmentIdRef = useRef<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    if (!reportId) return;
-    const updated = await adminRepository.getIncidentReportById(reportId);
-    if (updated) setReport(updated);
-    const cats = await adminRepository.getIncidentCategories();
-    const active = cats.filter((category) => category.status === "active").map((category) => category.name);
-    setCategories(active.includes("Other") ? active : [...active, "Other"]);
-    onUpdated();
-  }, [reportId, onUpdated]);
+  const reloadDetail = useCallback(
+    async (notifyList = false) => {
+      if (!reportId) return null;
+      const updated = await adminRepository.getIncidentReportById(reportId);
+      if (updated) setReport(updated);
+      if (notifyList && updated) onUpdated(updated);
+      return updated;
+    },
+    [reportId, onUpdated]
+  );
 
   const { run: runMutation, loading: mutating, error, clearError } = useAsyncAction(
     useCallback(async () => {
       const mutation = pendingMutationRef.current;
       if (!mutation) return;
       await mutation();
-      await refresh();
-    }, [refresh]),
+      await reloadDetail(true);
+    }, [reloadDetail]),
     { showSuccessToast: false, showErrorToast: false }
   );
 
@@ -93,8 +95,8 @@ export function IncidentReportDetailModal({
         },
         pending.visibility
       );
-      await refresh();
-    }, [reportId, commentAuthor, refresh]),
+      await reloadDetail(false);
+    }, [reportId, commentAuthor, reloadDetail]),
     { successMessage: "Comment added.", showErrorToast: false }
   );
 
@@ -103,8 +105,8 @@ export function IncidentReportDetailModal({
       const file = pendingFileRef.current;
       if (!reportId || !file) return;
       await adminRepository.addIncidentReportAttachment(reportId, file);
-      await refresh();
-    }, [reportId, refresh]),
+      await reloadDetail(false);
+    }, [reportId, reloadDetail]),
     { successMessage: "Attachment added.", showErrorToast: false }
   );
 
@@ -113,8 +115,8 @@ export function IncidentReportDetailModal({
       const attachmentId = pendingAttachmentIdRef.current;
       if (!attachmentId) return;
       await adminRepository.removeIncidentReportAttachment(attachmentId);
-      await refresh();
-    }, [refresh]),
+      await reloadDetail(false);
+    }, [reloadDetail]),
     { successMessage: "Attachment removed.", showErrorToast: false }
   );
 
@@ -135,6 +137,8 @@ export function IncidentReportDetailModal({
     }
   }, [open, reportId]);
 
+  useBusyWhile(open && !!reportId && !report);
+
   const addComment = (text: string, visibility: "admin" | "public") => {
     pendingCommentRef.current = { text, visibility };
     void addCommentRun();
@@ -150,7 +154,19 @@ export function IncidentReportDetailModal({
     void removeAttachmentRun();
   };
 
-  if (!open || !report) return null;
+  if (!open) return null;
+
+  if (!report) {
+    return (
+      <Modal
+        open={open}
+        onClose={onClose}
+        title="Incident Report"
+        icon={<FaExclamationTriangle className="text-red-600" />}
+        size="xl"
+      />
+    );
+  }
 
   const markResolved = () => {
     queueMutation(() =>

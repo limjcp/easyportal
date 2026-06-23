@@ -4,6 +4,7 @@ import { Modal } from "../../shared/Modal";
 import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useBusyWhile } from "../../shared/useBusyWhile";
 import { portalModulesSnapshot } from "../../shared/formDirty";
 import { adminRepository } from "../data/adminRepository";
 import type { UnitsUsersResidentType } from "../../resident/data/types";
@@ -32,6 +33,7 @@ export function ResidentTypePortalModulesModal({
   const [modules, setModules] = useState<ResidentPortalModulePermission[]>([]);
   const [baselineSnapshot, setBaselineSnapshot] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const { run: handleSave, loading: saving, error: saveError } = useAsyncAction(
     useCallback(async () => {
@@ -59,6 +61,7 @@ export function ResidentTypePortalModulesModal({
   useEffect(() => {
     if (!open) return;
     setLoadError(null);
+    setLoading(true);
     adminRepository
       .getResidentTypePortalModules(residentType)
       .then((loaded) => {
@@ -69,8 +72,11 @@ export function ResidentTypePortalModulesModal({
         setModules([]);
         setBaselineSnapshot("");
         setLoadError(err instanceof Error ? err.message : "Failed to load portal module defaults.");
-      });
+      })
+      .finally(() => setLoading(false));
   }, [open, residentType]);
+
+  useBusyWhile(open && loading);
 
   const toggleAll = (value: boolean) => {
     setModules((prev) =>

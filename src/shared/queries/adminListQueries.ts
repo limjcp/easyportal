@@ -13,7 +13,6 @@ export function useAdminServiceRequests(tab: string, archived = false) {
     queryFn: () => adminRepository.getServiceRequests(archived),
     enabled: isBuildingReady && tab !== "categories",
     staleTime: LIST_STALE,
-    placeholderData: (prev) => prev,
   });
 }
 
@@ -50,7 +49,6 @@ export function useAdminIncidentReports(tab: string) {
     },
     enabled: isBuildingReady,
     staleTime: LIST_STALE,
-    placeholderData: (prev) => prev,
   });
 }
 
@@ -62,7 +60,6 @@ export function useAdminAmenityBookings(tab: string) {
       adminRepository.getAmenityBookings(tab as "current" | "past" | "cancelled" | "settings"),
     enabled: isBuildingReady && tab !== "settings",
     staleTime: LIST_STALE,
-    placeholderData: (prev) => prev,
   });
 }
 

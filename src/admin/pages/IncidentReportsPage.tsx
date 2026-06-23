@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FormAlert } from "../../shared/FormAlert";
 import { ConfirmModal } from "../../shared/ConfirmModal";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { useAdminIncidentReports } from "../../shared/queries/adminListQueries";
+import { useBuildingListRefresh } from "../../shared/queries/mutationHelpers";
+import { queryKeys } from "../../shared/queryKeys";
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
+import { useTenantContext } from "../../shared/queries/useTenantContext";
+import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
 import {
   OptionsDropdown,
   SeverityBadge,
@@ -60,8 +65,21 @@ export function IncidentReportsPage({
   refreshKey,
   onRefresh,
 }: IncidentReportsPageProps) {
-  const { invalidateBuilding } = useInvalidatePortalQueries();
-  const { data: tabData = [] } = useAdminIncidentReports(route.tab);
+  const { queryClient } = useInvalidatePortalQueries();
+  const { userId, buildingId } = useTenantContext();
+  const isListTab = route.tab === "current" || route.tab === "archived";
+  const listQueryKey =
+    userId && buildingId && isListTab
+      ? queryKeys.building.adminIncidentReports(userId, buildingId, route.tab)
+      : null;
+  const incidentQuery = useAdminIncidentReports(route.tab);
+  const { data: tabData = [], refetch } = incidentQuery;
+  const { refreshList } = useBuildingListRefresh<AdminIncidentReport>(
+    queryClient,
+    buildingId,
+    listQueryKey,
+    refetch
+  );
   const reports =
     route.tab === "current" || route.tab === "archived"
       ? (tabData as AdminIncidentReport[])
@@ -87,12 +105,26 @@ export function IncidentReportsPage({
   const pendingContactRef = useRef<{ email: string; status: "active" | "inactive"; id?: string; isNew: boolean } | null>(null);
   const pendingCategorySubmitRef = useRef<{ name: string; status: "active" | "inactive"; id?: string; isNew: boolean } | null>(null);
 
-  void refreshKey;
+  const syncFromRefreshKey = useCallback(() => {
+    void refreshList();
+  }, [refreshList]);
 
-  const handleRefresh = useCallback(() => {
-    invalidateBuilding();
+  const handleRefresh = useCallback(async () => {
+    await refreshList();
     onRefresh();
-  }, [invalidateBuilding, onRefresh]);
+  }, [onRefresh, refreshList]);
+
+  const patchListItem = useCallback(
+    (updated: AdminIncidentReport) => {
+      void refreshList(updated);
+    },
+    [refreshList]
+  );
+
+  useEffect(() => {
+    if (refreshKey === 0) return;
+    syncFromRefreshKey();
+  }, [refreshKey, syncFromRefreshKey]);
 
   useEffect(() => {
     setPage(1);
@@ -214,6 +246,7 @@ export function IncidentReportsPage({
   const showReportActions = route.tab === "current" || route.tab === "archived";
 
   return (
+    <CrudPanel loading={isQueryPageLoading(incidentQuery)}>
     <>
       <AdminPageActions
         route={route}
@@ -546,7 +579,7 @@ export function IncidentReportsPage({
         open={!!detailId}
         reportId={detailId}
         onClose={() => setDetailId(null)}
-        onUpdated={handleRefresh}
+        onUpdated={patchListItem}
         archived={route.tab === "archived"}
         onViewRelated={(unit, owner) => {
           setUnitFilter(unit);
@@ -600,5 +633,6 @@ export function IncidentReportsPage({
         onConfirm={() => void deleteContactRun()}
       />
     </>
+    </CrudPanel>
   );
 }

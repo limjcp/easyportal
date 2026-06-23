@@ -76,6 +76,7 @@ export interface ResidentRepository {
   addServiceRequestComment(id: string, text: string): Promise<Comment>;
   markServiceRequestRead(id: string): Promise<void>;
   getServiceCategories(): Promise<ServiceRequestCategory[]>;
+  getBuildingCommonAreas(): Promise<string[]>;
   createServiceRequest(input: CreateServiceRequestInput): Promise<ServiceRequest>;
   getPortalModuleBadgeCounts(): Promise<Record<string, number>>;
   getIncidentReports(): Promise<IncidentReport[]>;

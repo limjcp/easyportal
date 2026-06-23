@@ -5,6 +5,7 @@ import { ActionButton } from "../../shared/ActionButton";
 import { FileUploadZone } from "../../shared/FileUploadZone";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { usePageContentBusy } from "../../shared/usePageContentBusy";
 import { inferAttachmentKind, toDataUrl, validateAttachmentFile } from "../../shared/attachmentUtils";
 import { AdminPanelHeader } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
@@ -150,8 +151,10 @@ export function PollEditPage({ route, onNavigate }: PollEditPageProps) {
     void loadResults();
   }, [route.id]);
 
+  usePageContentBusy(!poll);
+
   if (!poll) {
-    return <div className="py-8 text-center text-slate-500">Loading...</div>;
+    return null;
   }
 
   const update = (updates: Partial<Poll>) => {

@@ -8,6 +8,8 @@ import {
 } from "react-icons/fa";
 import { MvpLogo } from "../shared/MvpLogo";
 import { Modal } from "../shared/Modal";
+import { PageBusyProvider } from "../shared/PageBusyProvider";
+import { PORTAL_CONTENT_PAD_CLASS, PORTAL_SHELL_CLASS } from "../shared/portalLayout";
 import { cn } from "../utils/cn";
 import { companyRepository } from "./data/companyRepository";
 import { CompanyProfileModal } from "./modals/CompanyProfileModal";
@@ -81,9 +83,10 @@ export function CompanyLayout({
   };
 
   return (
+    <PageBusyProvider>
     <div className="min-h-screen bg-[#e7edf3] text-slate-700">
       <div className="bg-[#7D5DA7] text-white shadow-sm">
-        <div className="mx-auto flex max-w-[1080px] items-center justify-between px-4 py-2 text-xs sm:px-6 sm:text-sm">
+        <div className={cn(PORTAL_SHELL_CLASS, "flex items-center justify-between py-2 text-xs sm:text-sm")}>
           <div className="flex items-center gap-2 font-semibold tracking-[0.08em]">
             <MvpLogo variant="navbar" />
           </div>
@@ -154,7 +157,7 @@ export function CompanyLayout({
         </div>
       </div>
 
-      <div className="mx-auto max-w-[1080px] px-4 py-4 sm:px-6">
+      <div className={cn(PORTAL_SHELL_CLASS, "py-4")}>
         <div className="overflow-hidden rounded-sm border border-slate-300 bg-white shadow-sm">
           <div className="flex flex-col justify-between gap-4 px-5 py-5 md:flex-row md:items-start">
             <MvpLogo />
@@ -276,7 +279,9 @@ export function CompanyLayout({
             </div>
           </div>
 
-          <div className="bg-[#ecf1f4] p-4">{children}</div>
+          <div className={cn("bg-[#ecf1f4]", activeBuilding ? "p-0" : PORTAL_CONTENT_PAD_CLASS)}>
+            {children}
+          </div>
         </div>
       </div>
 
@@ -325,5 +330,6 @@ export function CompanyLayout({
         <p className="text-center text-slate-600">Are you sure you want to logout?</p>
       </Modal>
     </div>
+    </PageBusyProvider>
   );
 }

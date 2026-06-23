@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useLocalList } from "../../shared/useLocalList";
 import { OptionsDropdown } from "../components/AdminBadges";
 import { AdminPanelTable } from "../components/AdminPanelTable";
 import { adminRepository } from "../data/adminRepository";
@@ -18,7 +20,10 @@ type GalleriesPageProps = {
 };
 
 export function GalleriesPage({ route, onNavigate, refreshKey, onRefresh }: GalleriesPageProps) {
-  const [items, setItems] = useState<GalleryAlbum[]>([]);
+  const { data: items, reload, loading } = useLocalList(
+    useCallback(() => adminRepository.getGalleryAlbums(), []),
+    refreshKey
+  );
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
@@ -27,18 +32,15 @@ export function GalleriesPage({ route, onNavigate, refreshKey, onRefresh }: Gall
   const pendingAlbumRef = useRef<{ id: string; title?: string } | null>(null);
   const pendingCreateTitleRef = useRef("");
 
-  useEffect(() => {
-    adminRepository.getGalleryAlbums().then(setItems);
-  }, [refreshKey]);
-
   const { run: createAlbumRun } = useAsyncAction(
     useCallback(async () => {
       const title = pendingCreateTitleRef.current;
       if (!title) return;
       const album = await adminRepository.createAlbum(title);
       onRefresh();
+      await reload();
       setManageAlbum(album);
-    }, [onRefresh]),
+    }, [onRefresh, reload]),
     { successMessage: "Album created." }
   );
 
@@ -53,7 +55,8 @@ export function GalleriesPage({ route, onNavigate, refreshKey, onRefresh }: Gall
       if (!pending?.title) return;
       await adminRepository.updateAlbum(pending.id, { title: pending.title });
       onRefresh();
-    }, [onRefresh]),
+      await reload();
+    }, [onRefresh, reload]),
     { successMessage: "Album updated.", showErrorToast: false }
   );
 
@@ -63,14 +66,15 @@ export function GalleriesPage({ route, onNavigate, refreshKey, onRefresh }: Gall
       if (!pending) return;
       await adminRepository.deleteAlbum(pending.id);
       onRefresh();
-    }, [onRefresh]),
+      await reload();
+    }, [onRefresh, reload]),
     { successMessage: "Album deleted." }
   );
 
   const actionError = updateError ?? deleteError;
 
   return (
-    <>
+    <CrudPanel loading={loading}>
       <AdminPageActions
         route={route}
         onNavigate={onNavigate}
@@ -135,8 +139,11 @@ export function GalleriesPage({ route, onNavigate, refreshKey, onRefresh }: Gall
         open={manageAlbum !== null}
         album={manageAlbum}
         onClose={() => setManageAlbum(null)}
-        onUpdated={onRefresh}
+        onUpdated={() => {
+          onRefresh();
+          void reload();
+        }}
       />
-    </>
+    </CrudPanel>
   );
 }

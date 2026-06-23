@@ -15,6 +15,7 @@ import type { CertificateDetail, CertificateFile } from "../../resident/data/typ
 import { cn } from "../../utils/cn";
 import { ConfirmModal } from "../../shared/ConfirmModal";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useBusyWhile } from "../../shared/useBusyWhile";
 import { companyRepository } from "../data/companyRepository";
 
 type CertificateViewModalProps = {
@@ -176,22 +177,23 @@ export function CertificateViewModal({
     }
   }, [open]);
 
+  useBusyWhile(open && loading && !detail);
+
   if (!open) return null;
 
   if (!detail) {
+    if (loading) return null;
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
         <div className="rounded-sm bg-white px-8 py-6 text-center text-sm text-slate-600 shadow-2xl">
-          <p>{loading ? "Loading certificate…" : "Certificate not found."}</p>
-          {!loading ? (
-            <button
-              type="button"
-              onClick={onClose}
-              className="mt-4 rounded border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-50"
-            >
-              Close
-            </button>
-          ) : null}
+          <p>Certificate not found.</p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-4 rounded border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-50"
+          >
+            Close
+          </button>
         </div>
       </div>
     );

@@ -3,6 +3,7 @@ import { EmptyState } from "../../shared/EmptyState";
 import { Modal } from "../../shared/Modal";
 import { SaveBar } from "../../shared/SaveBar";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useBusyWhile } from "../../shared/useBusyWhile";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { usePortalConfig } from "../context/PortalConfigContext";
 import { residentRepo } from "../data/mockRepository";
@@ -263,8 +264,10 @@ export function ResidentDetailPage({ section }: ResidentDetailPageProps) {
     }
   };
 
+  useBusyWhile(details === null || draft === null);
+
   if (details === null || draft === null) {
-    return <div className="py-8 text-center text-slate-500">Loading...</div>;
+    return null;
   }
 
   return (

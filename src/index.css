@@ -44,6 +44,10 @@ select {
   font: inherit;
 }
 
+button:not(:disabled) {
+  cursor: pointer;
+}
+
 body[data-recaptcha-context="authenticated"] .grecaptcha-badge {
   visibility: hidden !important;
 }

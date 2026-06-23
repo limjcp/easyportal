@@ -3,6 +3,7 @@ import { Modal } from "../../shared/Modal";
 import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useBusyWhile } from "../../shared/useBusyWhile";
 import { adminRepository } from "../data/adminRepository";
 import type { AmenityBooking } from "../../resident/data/types";
 
@@ -10,7 +11,7 @@ type AmenityBookingDetailModalProps = {
   bookingId: string | null;
   open: boolean;
   onClose: () => void;
-  onUpdated: () => void;
+  onUpdated: (updated: AmenityBooking) => void;
   defaultPartyRoomFee?: string;
 };
 
@@ -50,11 +51,12 @@ export function AmenityBookingDetailModal({
   const { run: executeAction, loading: saving, error, clearError } = useAsyncAction(
     useCallback(async () => {
       const action = pendingActionRef.current;
-      if (!action) return;
+      if (!action || !bookingId) return;
       await action();
-      onUpdated();
+      const updated = await adminRepository.getAmenityBookingById(bookingId);
+      if (updated) onUpdated(updated);
       onClose();
-    }, [onUpdated, onClose]),
+    }, [bookingId, onUpdated, onClose]),
     { showSuccessToast: false }
   );
 
@@ -77,16 +79,16 @@ export function AmenityBookingDetailModal({
     });
   }, [open, bookingId, defaultPartyRoomFee, clearError]);
 
-  if (!booking) {
-    return (
-      <Modal open={open} onClose={onClose} title="Booking Details" size="md">
-        <p className="text-sm text-slate-500">{open ? "Loading…" : ""}</p>
-      </Modal>
-    );
-  }
+  useBusyWhile(open && !!bookingId && !booking);
 
   return (
-    <Modal open={open} onClose={onClose} title={`${labelType(booking.bookingType)} Booking`} size="md">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={booking ? `${labelType(booking.bookingType)} Booking` : "Booking Details"}
+      size="md"
+    >
+      {booking ? (
       <div className="space-y-4 text-sm">
         <div className="grid gap-2 sm:grid-cols-2">
           <div>
@@ -226,6 +228,7 @@ export function AmenityBookingDetailModal({
           ) : null}
         </div>
       </div>
+      ) : null}
     </Modal>
   );
 }

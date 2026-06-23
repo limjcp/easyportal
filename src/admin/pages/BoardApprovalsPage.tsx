@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FormAlert } from "../../shared/FormAlert";
+import { usePageContentBusy } from "../../shared/usePageContentBusy";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { FaCheck, FaTimes } from "react-icons/fa";
 import {
@@ -39,6 +40,7 @@ export function BoardApprovalsPage({
   onRefresh,
 }: BoardApprovalsPageProps) {
   const [items, setItems] = useState<BoardApproval[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
@@ -50,9 +52,26 @@ export function BoardApprovalsPage({
   const pendingCreateRef = useRef<Parameters<typeof adminRepository.createBoardApproval>[0] | null>(null);
 
   useEffect(() => {
-    adminRepository.getBoardApprovals(route.tab === "archived").then(setItems);
+    let cancelled = false;
+    setLoading(true);
+    adminRepository
+      .getBoardApprovals(route.tab === "archived")
+      .then((data) => {
+        if (!cancelled) {
+          setItems(data);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
     setPage(1);
+    return () => {
+      cancelled = true;
+    };
   }, [route.tab, refreshKey]);
+
+  usePageContentBusy(loading);
 
   const { run: archiveApprovalRun, error: archiveError } = useAsyncAction(
     useCallback(async () => {

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminPanelTable, AdminTabs, type SortDirection } from "../../admin/components/AdminPanelTable";
 import { ConfirmModal } from "../../shared/ConfirmModal";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useTabChangeWithBusy } from "../../shared/useTabChangeWithBusy";
 import { companyRepository } from "../data/companyRepository";
 import { getBuildingColumns } from "../config/buildingColumns";
 import { AddBuildingModal } from "../modals/AddBuildingModal";
@@ -27,6 +29,7 @@ export function BuildingsPage({
   const [tab, setTab] = useState<BuildingsTab>("current");
   const [buildings, setBuildings] = useState<CompanyBuilding[]>([]);
   const [archivedBuildings, setArchivedBuildings] = useState<CompanyBuilding[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
@@ -56,8 +59,21 @@ export function BuildingsPage({
   }, [loadBuildings, loadArchivedBuildings, onRefreshBuildings]);
 
   useEffect(() => {
-    loadBuildings();
-    loadArchivedBuildings();
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      companyRepository.getBuildings().then((data) => {
+        if (!cancelled) setBuildings(data);
+      }),
+      companyRepository.getArchivedBuildings().then((data) => {
+        if (!cancelled) setArchivedBuildings(data);
+      }),
+    ]).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [loadBuildings, loadArchivedBuildings]);
 
   const openCopyProperty = useCallback((building: CompanyBuilding) => {
@@ -137,17 +153,17 @@ export function BuildingsPage({
     }
   };
 
-  const handleTabChange = (next: string) => {
+  const handleTabChange = useTabChangeWithBusy((next: string) => {
     setTab(next as BuildingsTab);
     setPage(1);
     setSearch("");
-  };
+  });
 
   const tableData = tab === "current" ? buildings : archivedBuildings;
   const tableColumns = tab === "current" ? activeColumns : archivedColumns;
 
   return (
-    <div className="space-y-3">
+    <CrudPanel className="space-y-3" loading={loading}>
       <AdminTabs
         tabs={[
           { id: "current", label: "Current Buildings" },
@@ -221,7 +237,7 @@ export function BuildingsPage({
 
       <AdminPanelTable
         title={tab === "current" ? "Buildings" : "Archived Buildings"}
-        headerColor="purple"
+        headerColor="brand"
         data={tableData}
         search={search}
         onSearchChange={setSearch}
@@ -237,6 +253,6 @@ export function BuildingsPage({
         onSortChange={handleSortChange}
         getRowKey={(b) => b.id}
       />
-    </div>
+    </CrudPanel>
   );
 }

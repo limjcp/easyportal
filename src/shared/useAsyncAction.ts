@@ -1,4 +1,5 @@
 import { useCallback, useContext, useRef, useState } from "react";
+import { useMutationBusy } from "./MutationBusyContext";
 import { ToastContext } from "./Toast";
 
 type AsyncActionOptions<T> = {
@@ -8,6 +9,8 @@ type AsyncActionOptions<T> = {
   onError?: (message: string) => void;
   showSuccessToast?: boolean;
   showErrorToast?: boolean;
+  /** When false, do not show the modal/panel busy overlay. Default true. */
+  trackBusy?: boolean;
 };
 
 function getErrorMessage(err: unknown, fallback: string): string {
@@ -19,6 +22,9 @@ export function useAsyncAction<T>(
   options: AsyncActionOptions<T> = {}
 ) {
   const toastCtx = useContext(ToastContext);
+  const mutationBusy = useMutationBusy();
+  const busyRef = useRef(mutationBusy);
+  busyRef.current = mutationBusy;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const optionsRef = useRef(options);
@@ -34,10 +40,12 @@ export function useAsyncAction<T>(
       onError,
       showSuccessToast = Boolean(successMessage),
       showErrorToast = true,
+      trackBusy = true,
     } = optionsRef.current;
 
     setLoading(true);
     setError(null);
+    if (trackBusy) busyRef.current?.beginBusy();
     try {
       const result = await action();
       if (showSuccessToast && successMessage && toastCtx) {
@@ -54,6 +62,7 @@ export function useAsyncAction<T>(
       onError?.(message);
       return undefined;
     } finally {
+      if (trackBusy) busyRef.current?.endBusy();
       setLoading(false);
     }
   }, [action, toastCtx]);

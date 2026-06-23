@@ -3,6 +3,7 @@ import { FaPrint } from "react-icons/fa";
 import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { usePageContentBusy } from "../../shared/usePageContentBusy";
 import { AdminPanelHeader } from "../components/AdminPanelTable";
 import { CommentSection } from "../components/CommentSection";
 import { adminRepository } from "../data/adminRepository";
@@ -78,8 +79,10 @@ export function SuggestionDetailPage({ route, onNavigate }: SuggestionDetailPage
     void addCommentRun();
   };
 
+  usePageContentBusy(!suggestion);
+
   if (!suggestion) {
-    return <div className="py-8 text-center text-slate-500">Loading...</div>;
+    return null;
   }
 
   const formError = saveError ?? commentError;

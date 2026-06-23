@@ -3,6 +3,7 @@ import { FaExclamationTriangle, FaPrint, FaTimes } from "react-icons/fa";
 import { IncidentReportAttachmentThumb } from "../../shared/IncidentReportAttachmentThumb";
 import { ConfirmModal } from "../../shared/ConfirmModal";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { useBusyWhile } from "../../shared/useBusyWhile";
 import { companyRepository } from "../data/companyRepository";
 import type { IncidentReportDetail } from "../../resident/data/types";
 
@@ -217,22 +218,23 @@ export function IncidentReportViewModal({
     return () => clearTimeout(t);
   }, [open, detail?.id]);
 
+  useBusyWhile(open && !!loading && !detail);
+
   if (!open) return null;
 
   if (!detail) {
+    if (loading) return null;
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
         <div className="rounded-sm bg-white px-8 py-6 text-center text-sm text-slate-600 shadow-2xl">
-          <p>{loading ? "Loading incident report…" : "Incident report not found."}</p>
-          {!loading ? (
-            <button
-              type="button"
-              onClick={onClose}
-              className="mt-4 rounded border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-50"
-            >
-              Close
-            </button>
-          ) : null}
+          <p>Incident report not found.</p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-4 rounded border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-50"
+          >
+            Close
+          </button>
         </div>
       </div>
     );
