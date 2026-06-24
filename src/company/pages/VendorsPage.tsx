@@ -1,9 +1,14 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StatusBadge } from "../../admin/components/AdminBadges";
 import { AdminPanelTable } from "../../admin/components/AdminPanelTable";
 import { CrudPanel } from "../../shared/CrudPanel";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import {
+  complianceStatusBadgeClass,
+  complianceStatusLabel,
+} from "../../shared/vendorComplianceUtils";
+import { vendorComplianceRepository } from "../../data/supabase/vendorComplianceRepository";
 import {
   useCompanyActivePoCountsByVendor,
   useCompanyBuildings,
@@ -12,8 +17,9 @@ import {
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { isQueryInitiallyLoading } from "../../shared/useQueryPageBusy";
 import { companyRepository } from "../data/companyRepository";
+import { VendorComplianceModal } from "../modals/VendorComplianceModal";
 import { VendorFormModal } from "../modals/VendorFormModal";
-import type { CompanyBuilding, Vendor } from "../../resident/data/types";
+import type { CompanyBuilding, Vendor, VendorComplianceStatus } from "../../resident/data/types";
 import type { CompanyRoute } from "../navigation";
 
 type VendorsPageProps = {
@@ -41,6 +47,11 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
   const [page, setPage] = useState(1);
   const [formOpen, setFormOpen] = useState(false);
   const [editVendor, setEditVendor] = useState<Vendor | null>(null);
+  const [complianceVendor, setComplianceVendor] = useState<Vendor | null>(null);
+  const [complianceFilter, setComplianceFilter] = useState("all");
+  const [complianceByVendor, setComplianceByVendor] = useState<
+    Record<string, { insuranceStatus: VendorComplianceStatus; wsibStatus: VendorComplianceStatus }>
+  >({});
   const pendingVendorRef = useRef<{ id: string; email: string } | null>(null);
   const pendingDeactivateIdRef = useRef<string | null>(null);
 
@@ -49,6 +60,34 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
     void refetchVendors();
     void refetchPoCounts();
   }, [invalidateCompany, refetchVendors, refetchPoCounts]);
+
+  useEffect(() => {
+    if (vendors.length === 0) {
+      setComplianceByVendor({});
+      return;
+    }
+    const wsibRequiredByVendor = Object.fromEntries(
+      vendors.map((vendor) => [vendor.id, vendor.wsibRequired ?? true])
+    );
+    void vendorComplianceRepository
+      .getComplianceSummariesForVendors(
+        vendors.map((vendor) => vendor.id),
+        wsibRequiredByVendor
+      )
+      .then((summaries) => {
+        const next: Record<
+          string,
+          { insuranceStatus: VendorComplianceStatus; wsibStatus: VendorComplianceStatus }
+        > = {};
+        for (const [vendorId, summary] of Object.entries(summaries)) {
+          next[vendorId] = {
+            insuranceStatus: summary.insuranceStatus,
+            wsibStatus: summary.wsibStatus,
+          };
+        }
+        setComplianceByVendor(next);
+      });
+  }, [vendors]);
 
   const { run: inviteVendor, loading: inviting, error: inviteError } = useAsyncAction(
     useCallback(async () => {
@@ -101,6 +140,25 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
   const filtered = vendors.filter((vendor) => {
     if (tradeFilter !== "all" && vendor.tradeCategory !== tradeFilter) return false;
     if (statusFilter !== "all" && vendor.status !== statusFilter) return false;
+    if (complianceFilter !== "all") {
+      const compliance = complianceByVendor[vendor.id];
+      const statuses = [
+        compliance?.insuranceStatus,
+        vendor.wsibRequired === false ? undefined : compliance?.wsibStatus,
+      ].filter(Boolean) as VendorComplianceStatus[];
+      if (complianceFilter === "missing" && !statuses.some((status) => status === "missing")) {
+        return false;
+      }
+      if (
+        complianceFilter === "expiring_soon" &&
+        !statuses.some((status) => status === "expiring_soon")
+      ) {
+        return false;
+      }
+      if (complianceFilter === "expired" && !statuses.some((status) => status === "expired")) {
+        return false;
+      }
+    }
     if (activePoFilter !== "all") {
       const hasActivePo = (activePoCounts[vendor.id] ?? 0) > 0;
       if (activePoFilter === "yes" && !hasActivePo) return false;
@@ -125,6 +183,9 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
       ? `Status: ${statusFilter === "pending_invite" ? "Pending Invite" : statusFilter}`
       : null,
     activePoFilter !== "all" ? `Has Active PO: ${activePoFilter === "yes" ? "Yes" : "No"}` : null,
+    complianceFilter !== "all"
+      ? `Compliance: ${complianceFilter === "expiring_soon" ? "Expiring soon" : complianceFilter}`
+      : null,
     ...buildingNameFilters.map((name) => `Building: ${name}`),
   ].filter(Boolean) as string[];
 
@@ -132,6 +193,20 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
     if (s.status === "pending_invite") return "Pending Invite";
     if (s.status === "inactive") return "Inactive";
     return "Active";
+  };
+
+  const renderComplianceBadge = (status: VendorComplianceStatus | undefined, na = false) => {
+    if (na) {
+      return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">N/A</span>;
+    }
+    const resolved = status ?? "missing";
+    return (
+      <span
+        className={`rounded-full px-2 py-0.5 text-xs font-medium ${complianceStatusBadgeClass(resolved)}`}
+      >
+        {complianceStatusLabel(resolved)}
+      </span>
+    );
   };
 
   const handleInvite = (s: Vendor) => {
@@ -178,6 +253,7 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
               setTradeFilter("all");
               setStatusFilter("all");
               setActivePoFilter("all");
+              setComplianceFilter("all");
               setBuildingNameFilters([]);
             }}
             className="text-xs font-medium text-[#3476ef] hover:underline"
@@ -228,6 +304,18 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
             ],
             onChange: setActivePoFilter,
           },
+          {
+            id: "compliance",
+            label: "Compliance",
+            value: complianceFilter,
+            options: [
+              { value: "all", label: "All" },
+              { value: "expired", label: "Expired" },
+              { value: "expiring_soon", label: "Expiring soon" },
+              { value: "missing", label: "Missing" },
+            ],
+            onChange: setComplianceFilter,
+          },
         ]}
         toolbarExtra={
           <label className="flex min-w-0 flex-col gap-1 text-slate-600 sm:flex-row sm:items-center sm:gap-2">
@@ -254,6 +342,20 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
           { key: "company", header: "Company", render: (s) => s.companyName },
           { key: "buildingNames", header: "Buildings", render: (s) => vendorBuildingNames(s) || "—" },
           { key: "trade", header: "Trade", render: (s) => s.tradeCategory },
+          {
+            key: "insurance",
+            header: "Insurance",
+            render: (s) => renderComplianceBadge(complianceByVendor[s.id]?.insuranceStatus),
+          },
+          {
+            key: "wsib",
+            header: "WSIB",
+            render: (s) =>
+              renderComplianceBadge(
+                complianceByVendor[s.id]?.wsibStatus,
+                s.wsibRequired === false
+              ),
+          },
           { key: "activePo", header: "Active POs", render: (s) => activePoCounts[s.id] ?? 0 },
           { key: "contact", header: "Contact", render: (s) => s.contactName },
           { key: "phone", header: "Phone", render: (s) => s.phone },
@@ -276,6 +378,13 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
             header: "",
             render: (s) => (
               <div className="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  className="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50"
+                  onClick={() => setComplianceVendor(s)}
+                >
+                  Compliance
+                </button>
                 <button
                   type="button"
                   className="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50"
@@ -328,6 +437,12 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
         onClose={() => setFormOpen(false)}
         onSaved={load}
         vendor={editVendor}
+      />
+      <VendorComplianceModal
+        open={Boolean(complianceVendor)}
+        vendor={complianceVendor}
+        onClose={() => setComplianceVendor(null)}
+        onSaved={load}
       />
     </CrudPanel>
   );

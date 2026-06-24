@@ -10,6 +10,7 @@ type VendorInviteTemplateInput = {
   portalUrl: string;
   inviteEmail: string;
   vendorName: string;
+  temporaryPassword: string;
 };
 
 type CertificateResendTemplateInput = {
@@ -17,6 +18,14 @@ type CertificateResendTemplateInput = {
   portalUrl: string;
   requestNumber: string;
   buildingName: string;
+};
+
+type VendorComplianceEmailInput = {
+  vendorCompanyName: string;
+  documentLabel: string;
+  expiryDate: string;
+  portalUrl: string;
+  audience: "vendor" | "stakeholder";
 };
 
 function escapeHtml(value: string): string {
@@ -69,8 +78,11 @@ export function vendorInviteEmail(input: VendorInviteTemplateInput) {
     "",
     `${input.companyName} has invited you to join their vendor portal on EasyPortal.`,
     "",
-    `Sign in or create access using: ${input.inviteEmail}`,
     `Portal: ${input.portalUrl}`,
+    `Email: ${input.inviteEmail}`,
+    `Temporary password: ${input.temporaryPassword}`,
+    "",
+    "Sign in and change your password after your first login.",
     "",
     "If you have questions, contact the management company that invited you.",
   ].join("\n");
@@ -80,8 +92,13 @@ export function vendorInviteEmail(input: VendorInviteTemplateInput) {
       <h2 style="color: #3476ef; margin-bottom: 16px;">Vendor portal invitation</h2>
       <p>Hello${input.vendorName ? ` ${escapeHtml(input.vendorName)}` : ""},</p>
       <p><strong>${escapeHtml(input.companyName)}</strong> has invited you to access the vendor portal on EasyPortal.</p>
-      <p>Use this email when signing in: <strong>${escapeHtml(input.inviteEmail)}</strong></p>
-      <p><a href="${escapeHtml(input.portalUrl)}" style="display: inline-block; background: #3476ef; color: #fff; padding: 10px 16px; border-radius: 4px; text-decoration: none;">Open EasyPortal</a></p>
+      <p>Use the login details below to sign in:</p>
+      <table style="margin: 16px 0; border-collapse: collapse;">
+        <tr><td style="padding: 4px 12px 4px 0;"><strong>Portal</strong></td><td><a href="${escapeHtml(input.portalUrl)}">${escapeHtml(input.portalUrl)}</a></td></tr>
+        <tr><td style="padding: 4px 12px 4px 0;"><strong>Email</strong></td><td>${escapeHtml(input.inviteEmail)}</td></tr>
+        <tr><td style="padding: 4px 12px 4px 0;"><strong>Temporary password</strong></td><td>${escapeHtml(input.temporaryPassword)}</td></tr>
+      </table>
+      <p>Please change your password after your first login.</p>
       <p style="color: #64748b; font-size: 13px;">If you have questions, contact the management company that invited you.</p>
     </div>
   `.trim();
@@ -111,6 +128,78 @@ export function certificateResendEmail(input: CertificateResendTemplateInput) {
         <li><strong>Request #:</strong> ${escapeHtml(input.requestNumber || "—")}</li>
       </ul>
       <p><a href="${escapeHtml(input.portalUrl)}" style="display: inline-block; background: #3476ef; color: #fff; padding: 10px 16px; border-radius: 4px; text-decoration: none;">View in resident portal</a></p>
+    </div>
+  `.trim();
+
+  return { subject, html, text };
+}
+
+export function vendorComplianceExpiringSoonEmail(input: VendorComplianceEmailInput) {
+  const subject = `${input.documentLabel} expiring soon — ${input.vendorCompanyName}`;
+  const text =
+    input.audience === "vendor"
+      ? [
+          "Hello,",
+          "",
+          `Your ${input.documentLabel.toLowerCase()} for ${input.vendorCompanyName} expires on ${input.expiryDate}.`,
+          "",
+          `Please upload an updated certificate in the vendor portal: ${input.portalUrl}`,
+        ].join("\n")
+      : [
+          `The ${input.documentLabel.toLowerCase()} for vendor ${input.vendorCompanyName} expires on ${input.expiryDate}.`,
+          "",
+          `Vendor portal: ${input.portalUrl}`,
+        ].join("\n");
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #1e293b; max-width: 560px;">
+      <h2 style="color: #3476ef; margin-bottom: 16px;">${escapeHtml(input.documentLabel)} expiring soon</h2>
+      <p>${
+        input.audience === "vendor"
+          ? `Your <strong>${escapeHtml(input.documentLabel.toLowerCase())}</strong> expires on <strong>${escapeHtml(input.expiryDate)}</strong>.`
+          : `Vendor <strong>${escapeHtml(input.vendorCompanyName)}</strong> has a ${escapeHtml(input.documentLabel.toLowerCase())} expiring on <strong>${escapeHtml(input.expiryDate)}</strong>.`
+      }</p>
+      ${
+        input.audience === "vendor"
+          ? `<p><a href="${escapeHtml(input.portalUrl)}" style="display: inline-block; background: #0d9488; color: #fff; padding: 10px 16px; border-radius: 4px; text-decoration: none;">Upload updated certificate</a></p>`
+          : "<p>Please follow up with the vendor to ensure an updated certificate is on file.</p>"
+      }
+    </div>
+  `.trim();
+
+  return { subject, html, text };
+}
+
+export function vendorComplianceExpiredEmail(input: VendorComplianceEmailInput) {
+  const subject = `${input.documentLabel} expired — ${input.vendorCompanyName}`;
+  const text =
+    input.audience === "vendor"
+      ? [
+          "Hello,",
+          "",
+          `Your ${input.documentLabel.toLowerCase()} for ${input.vendorCompanyName} expired on ${input.expiryDate}.`,
+          "",
+          `Upload a new certificate immediately: ${input.portalUrl}`,
+        ].join("\n")
+      : [
+          `The ${input.documentLabel.toLowerCase()} for vendor ${input.vendorCompanyName} expired on ${input.expiryDate}.`,
+          "",
+          "Please ensure the vendor uploads an updated certificate.",
+        ].join("\n");
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #1e293b; max-width: 560px;">
+      <h2 style="color: #dc2626; margin-bottom: 16px;">${escapeHtml(input.documentLabel)} expired</h2>
+      <p>${
+        input.audience === "vendor"
+          ? `Your <strong>${escapeHtml(input.documentLabel.toLowerCase())}</strong> expired on <strong>${escapeHtml(input.expiryDate)}</strong>.`
+          : `Vendor <strong>${escapeHtml(input.vendorCompanyName)}</strong> has an expired ${escapeHtml(input.documentLabel.toLowerCase())} (expired ${escapeHtml(input.expiryDate)}).`
+      }</p>
+      ${
+        input.audience === "vendor"
+          ? `<p><a href="${escapeHtml(input.portalUrl)}" style="display: inline-block; background: #dc2626; color: #fff; padding: 10px 16px; border-radius: 4px; text-decoration: none;">Upload new certificate</a></p>`
+          : "<p>Please follow up with the vendor and confirm compliance before assigning new work.</p>"
+      }
     </div>
   `.trim();
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { VendorLayout } from "./VendorLayout";
+import { CompliancePage } from "./pages/CompliancePage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { PurchaseOrderDetailPage } from "./pages/PurchaseOrderDetailPage";
@@ -36,6 +37,7 @@ export function VendorPortal({ onLogout }: VendorPortalProps) {
           onRefresh={bumpRefresh}
         />
       )}
+      {route.page === "compliance" && <CompliancePage onRefresh={bumpRefresh} />}
       {route.page === "profile" && <ProfilePage onRefresh={bumpRefresh} />}
     </VendorLayout>
   );

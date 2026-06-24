@@ -3,8 +3,10 @@ import { mapDbError, sb } from "./base";
 
 export const BUILDING_DOCUMENTS_BUCKET = "building-documents";
 export const GALLERY_PHOTOS_BUCKET = "gallery-photos";
+export const VENDOR_DOCUMENTS_BUCKET = "vendor-documents";
 export const MAX_BUILDING_DOCUMENT_BYTES = 52_428_800;
 export const MAX_GALLERY_PHOTO_BYTES = 52_428_800;
+export const MAX_VENDOR_DOCUMENT_BYTES = 52_428_800;
 
 export function formatFileSize(bytes: number): string {
   if (bytes >= 1024 * 1024) {
@@ -108,4 +110,45 @@ export async function removeGalleryPhoto(storagePath: string | null | undefined)
   if (!storagePath) return;
   const { error } = await sb().storage.from(GALLERY_PHOTOS_BUCKET).remove([storagePath]);
   if (error) throw new Error(error.message);
+}
+
+export function validateVendorDocumentFile(file: File): string | null {
+  if (!file.name.trim()) return "A file is required.";
+  if (file.size > MAX_VENDOR_DOCUMENT_BYTES) return "Document must be 50MB or smaller.";
+  const allowed =
+    file.type === "application/pdf" ||
+    file.type.startsWith("image/") ||
+    /\.(pdf|png|jpe?g)$/i.test(file.name);
+  if (!allowed) return "Upload a PDF or image file.";
+  return null;
+}
+
+export function buildVendorDocumentPath(vendorId: string, fileName: string): string {
+  const safeName = sanitizeFileName(fileName);
+  return `${vendorId}/${crypto.randomUUID()}/${safeName}`;
+}
+
+export async function uploadVendorDocument(vendorId: string, file: File): Promise<string> {
+  const validationError = validateVendorDocumentFile(file);
+  if (validationError) throw new Error(validationError);
+
+  const path = buildVendorDocumentPath(vendorId, file.name);
+  const { error } = await sb().storage.from(VENDOR_DOCUMENTS_BUCKET).upload(path, file, {
+    upsert: false,
+    contentType: file.type || undefined,
+  });
+  if (error) throw new Error(error.message);
+  return path;
+}
+
+export async function getVendorDocumentSignedUrl(
+  storagePath: string,
+  expiresInSeconds = 3600
+): Promise<string> {
+  const { data, error } = await sb()
+    .storage.from(VENDOR_DOCUMENTS_BUCKET)
+    .createSignedUrl(storagePath, expiresInSeconds);
+  if (error) throw new Error(error.message);
+  if (!data?.signedUrl) throw new Error("Unable to create download link.");
+  return data.signedUrl;
 }

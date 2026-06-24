@@ -1440,6 +1440,55 @@ export type UpdateBuildingAdminInput = {
 
 export type VendorStatus = "active" | "pending_invite" | "inactive";
 
+export type VendorComplianceDocumentType = "insurance" | "wsib";
+
+export type VendorComplianceStatus = "valid" | "expiring_soon" | "expired" | "missing";
+
+export interface VendorComplianceDocument {
+  id: string;
+  vendorId: string;
+  documentType: VendorComplianceDocumentType;
+  storagePath: string;
+  fileName: string;
+  mimeType: string;
+  expiryDate: string;
+  carrier?: string;
+  policyNumber?: string;
+  coverageAmount?: string;
+  aiSuggestions?: Record<string, unknown>;
+  confirmedAt: string;
+  uploadedByProfileId?: string;
+  supersededAt?: string;
+  createdAt: string;
+}
+
+export interface VendorComplianceSummary {
+  insuranceStatus: VendorComplianceStatus;
+  wsibStatus: VendorComplianceStatus;
+  insuranceDocument?: VendorComplianceDocument;
+  wsibDocument?: VendorComplianceDocument;
+}
+
+export interface VendorComplianceUploadInput {
+  expiryDate: string;
+  carrier?: string;
+  policyNumber?: string;
+  coverageAmount?: string;
+  aiSuggestions?: Record<string, unknown>;
+  storagePath?: string;
+  fileName?: string;
+  mimeType?: string;
+}
+
+export interface VendorComplianceAiSuggestions {
+  available: boolean;
+  expiryDate?: string;
+  carrier?: string;
+  policyNumber?: string;
+  coverageAmount?: string;
+  confidence?: number;
+}
+
 export interface Vendor {
   id: string;
   companyName: string;
@@ -1450,6 +1499,8 @@ export interface Vendor {
   buildingIds?: string[];
   notes?: string;
   status: VendorStatus;
+  wsibRequired?: boolean;
+  compliance?: VendorComplianceSummary;
 }
 
 export interface VendorInvitation {
@@ -1471,14 +1522,18 @@ export type UpdateVendorProfileInput = Partial<
   Pick<Vendor, "contactName" | "phone" | "notes">
 >;
 
-export type VendorNotificationType = "po_received" | "po_reminder";
+export type VendorNotificationType =
+  | "po_received"
+  | "po_reminder"
+  | "compliance_expiring"
+  | "compliance_expired";
 
 export interface VendorNotification {
   id: string;
   vendorId: string;
   type: VendorNotificationType;
   message: string;
-  poId: string;
+  poId?: string;
   read: boolean;
   createdAt: string;
 }

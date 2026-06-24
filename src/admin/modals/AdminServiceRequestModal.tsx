@@ -9,7 +9,14 @@ import {
   mergeServiceCategoryOptions,
   mergeServiceLocationOptions,
   resolveServiceRequestLocation,
+  SERVICE_REQUEST_SEVERITY_OPTIONS,
+  isEmergencyServiceRequestSeverity,
+  EMERGENCY_SEVERITY_SUBMIT_ERROR,
 } from "../../shared/serviceRequestPresets";
+import {
+  EmergencySeverityInlineNotice,
+  EmergencySeverityNoticeModal,
+} from "../../shared/EmergencySeverityNotice";
 import { AdminSectionHeader } from "../components/CommentSection";
 import { adminRepository } from "../data/adminRepository";
 import { validateAttachmentFile } from "../../shared/attachmentUtils";
@@ -43,11 +50,15 @@ export function AdminServiceRequestModal({
   const [uploadSlots, setUploadSlots] = useState([1, 2, 3]);
   const [slotFiles, setSlotFiles] = useState<Record<number, File>>({});
   const [residentOptions, setResidentOptions] = useState<string[]>([""]);
+  const [emergencyNoticeOpen, setEmergencyNoticeOpen] = useState(false);
 
   const derivedUnit = resident.match(/(Unit\s*\d+)/i)?.[1]?.replace(/\s+/g, " ").trim() ?? "";
 
   const { run: handleSubmit, loading: submitting, error } = useAsyncAction(
     useCallback(async () => {
+      if (isEmergencyServiceRequestSeverity(severity)) {
+        throw new Error(EMERGENCY_SEVERITY_SUBMIT_ERROR);
+      }
       const resolvedLocation = resolveServiceRequestLocation(location, customLocation);
       const resolvedCategory = category === "Other" ? customCategory.trim() : category;
       if (!resident || !resolvedLocation || !permissionToEnter || !severity || !category || !description) {
@@ -117,6 +128,7 @@ export function AdminServiceRequestModal({
       setSlotFiles({});
       setDbCategoryNames([]);
       setBuildingCommonAreas([]);
+      setEmergencyNoticeOpen(false);
       return;
     }
     adminRepository.getUnitsUsersCurrent().then((rows) => {
@@ -147,6 +159,12 @@ export function AdminServiceRequestModal({
     }
   }, [location]);
 
+  useEffect(() => {
+    if (severity === "Emergency") {
+      setEmergencyNoticeOpen(true);
+    }
+  }, [severity]);
+
   const categoryOptions = useMemo(
     () => ["", ...mergeServiceCategoryOptions(dbCategoryNames)],
     [dbCategoryNames]
@@ -173,6 +191,7 @@ export function AdminServiceRequestModal({
             label="Submit Request"
             loadingLabel="Submitting…"
             loading={submitting}
+            disabled={isEmergencyServiceRequestSeverity(severity)}
             onClick={() => void handleSubmit()}
           />
         </>
@@ -239,7 +258,7 @@ export function AdminServiceRequestModal({
             label="Severity *"
             value={severity}
             onChange={setSeverity}
-            options={["", "Low", "Medium", "High", "Emergency"]}
+            options={[...SERVICE_REQUEST_SEVERITY_OPTIONS]}
           />
           <SelectField
             label="Request Category *"
@@ -248,6 +267,9 @@ export function AdminServiceRequestModal({
             options={categoryOptions}
           />
         </div>
+        {isEmergencyServiceRequestSeverity(severity) ? (
+          <EmergencySeverityInlineNotice className="mx-3 mb-3" />
+        ) : null}
         {category === "Other" && (
           <InputField
             label="Custom Category *"
@@ -310,6 +332,11 @@ export function AdminServiceRequestModal({
           />
         ))}
       </div>
+
+      <EmergencySeverityNoticeModal
+        open={emergencyNoticeOpen}
+        onClose={() => setEmergencyNoticeOpen(false)}
+      />
     </Modal>
   );
 }

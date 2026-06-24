@@ -2,11 +2,16 @@ import type {
   CompanyBuilding,
   PurchaseOrder,
   Vendor,
+  VendorComplianceDocument,
+  VendorComplianceDocumentType,
+  VendorComplianceSummary,
+  VendorComplianceUploadInput,
   VendorNotification,
   VendorSession,
   UpdateVendorProfileInput,
 } from "../../resident/data/types";
 import { mapDbError, sb } from "./base";
+import { vendorComplianceRepository } from "./vendorComplianceRepository";
 import { supabaseCompanyRepository } from "./companyRepository";
 
 async function requireSession(): Promise<VendorSession & { vendorId: string }> {
@@ -103,7 +108,7 @@ export const supabaseVendorRepository = {
       vendorId: n.vendor_id as string,
       type: n.notification_type as VendorNotification["type"],
       message: n.message as string,
-      poId: n.po_id as string,
+      poId: (n.po_id as string) || undefined,
       read: n.read as boolean,
       createdAt: n.created_at as string,
     }));
@@ -127,5 +132,37 @@ export const supabaseVendorRepository = {
     const vendor = await this.getVendor();
     if (vendor.status !== "pending_invite") return vendor;
     return (await supabaseCompanyRepository.updateVendor(vendor.id, { status: "active" })) ?? vendor;
+  },
+
+  async getComplianceSummary(): Promise<VendorComplianceSummary> {
+    const session = await requireSession();
+    const vendor = await this.getVendor();
+    return vendorComplianceRepository.getComplianceSummary(
+      session.vendorId,
+      vendor.wsibRequired ?? true
+    );
+  },
+
+  async getComplianceDocuments(): Promise<VendorComplianceDocument[]> {
+    const session = await requireSession();
+    return vendorComplianceRepository.getComplianceDocuments(session.vendorId);
+  },
+
+  async uploadComplianceDocument(
+    documentType: VendorComplianceDocumentType,
+    file: File | null,
+    input: VendorComplianceUploadInput
+  ): Promise<VendorComplianceDocument> {
+    const session = await requireSession();
+    return vendorComplianceRepository.uploadComplianceDocument(
+      session.vendorId,
+      documentType,
+      file,
+      input
+    );
+  },
+
+  async getComplianceDocumentUrl(documentId: string): Promise<string> {
+    return vendorComplianceRepository.getDocumentDownloadUrl(documentId);
   },
 };

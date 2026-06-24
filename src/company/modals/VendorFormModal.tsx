@@ -31,6 +31,7 @@ export function VendorFormModal({ open, onClose, onSaved, vendor }: VendorFormMo
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
+  const [wsibRequired, setWsibRequired] = useState(true);
   const [buildings, setBuildings] = useState<CompanyBuilding[]>([]);
   const [buildingIds, setBuildingIds] = useState<string[]>([]);
 
@@ -44,13 +45,14 @@ export function VendorFormModal({ open, onClose, onSaved, vendor }: VendorFormMo
         email,
         buildingIds,
         notes,
+        wsibRequired,
       };
       if (vendor) {
         await companyRepository.updateVendor(vendor.id, payload);
       } else {
         await companyRepository.createVendor(payload);
       }
-    }, [vendor, companyName, tradeCategory, contactName, phone, email, buildingIds, notes]),
+    }, [vendor, companyName, tradeCategory, contactName, phone, email, buildingIds, notes, wsibRequired]),
     {
       successMessage: vendor ? "Vendor updated." : "Vendor created.",
       onSuccess: () => {
@@ -75,6 +77,7 @@ export function VendorFormModal({ open, onClose, onSaved, vendor }: VendorFormMo
       setPhone(vendor.phone);
       setEmail(vendor.email);
       setNotes(vendor.notes ?? "");
+      setWsibRequired(vendor.wsibRequired ?? true);
       setBuildingIds(vendor.buildingIds ?? []);
     } else if (open) {
       setCompanyName("");
@@ -83,6 +86,7 @@ export function VendorFormModal({ open, onClose, onSaved, vendor }: VendorFormMo
       setPhone("");
       setEmail("");
       setNotes("");
+      setWsibRequired(true);
       setBuildingIds([]);
     }
   }, [open, vendor]);
@@ -179,6 +183,14 @@ export function VendorFormModal({ open, onClose, onSaved, vendor }: VendorFormMo
           <p className="mt-1 text-xs text-slate-500">
             Hold Ctrl (Windows) or Cmd (Mac) to select multiple.
           </p>
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={wsibRequired}
+            onChange={(e) => setWsibRequired(e.target.checked)}
+          />
+          <span>WSIB clearance required</span>
         </label>
         <label className="block">
           Notes

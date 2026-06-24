@@ -2,11 +2,13 @@ export type VendorRoute =
   | { page: "dashboard" }
   | { page: "purchase-orders"; tab?: "action" | "history" }
   | { page: "purchase-order-detail"; id: string }
+  | { page: "compliance" }
   | { page: "profile" };
 
 export const vendorNavItems: { id: string; label: string; route: VendorRoute }[] = [
   { id: "dashboard", label: "Dashboard", route: { page: "dashboard" } },
   { id: "purchase-orders", label: "Purchase Orders", route: { page: "purchase-orders", tab: "action" } },
+  { id: "compliance", label: "Compliance", route: { page: "compliance" } },
   { id: "profile", label: "Profile", route: { page: "profile" } },
 ];
 
@@ -16,6 +18,8 @@ export function isVendorNavActive(route: VendorRoute, navId: string): boolean {
       return route.page === "dashboard";
     case "purchase-orders":
       return route.page === "purchase-orders" || route.page === "purchase-order-detail";
+    case "compliance":
+      return route.page === "compliance";
     case "profile":
       return route.page === "profile";
     default:
@@ -39,6 +43,8 @@ export function getVendorBreadcrumbs(
         { label: "Purchase Orders", route: { page: "purchase-orders", tab: "action" } },
         { label: "Details" },
       ];
+    case "compliance":
+      return [{ label: "Compliance" }];
     case "profile":
       return [{ label: "Profile" }];
     default:

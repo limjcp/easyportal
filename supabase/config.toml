@@ -61,3 +61,9 @@ verify_jwt = true
 
 [functions.send-portal-email]
 verify_jwt = true
+
+[functions.extract-vendor-document]
+verify_jwt = true
+
+[functions.vendor-compliance-reminders]
+verify_jwt = false

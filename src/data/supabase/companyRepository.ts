@@ -740,18 +740,26 @@ export const supabaseCompanyRepository = {
 
   async getVendors(): Promise<Vendor[]> {
     const companyId = await ensureCompanyId();
-    const { data, error } = await sb().from("vendors").select("*").eq("company_id", companyId);
+    const { data, error } = await sb()
+      .from("vendors")
+      .select("*, vendor_buildings(building_id)")
+      .eq("company_id", companyId);
     mapDbError(error);
-    return (data ?? []).map((v) => ({
-      id: v.id as string,
-      companyName: v.company_name as string,
-      tradeCategory: v.trade_category as string,
-      contactName: v.contact_name as string,
-      phone: v.phone as string,
-      email: v.email as string,
-      notes: v.notes as string,
-      status: v.status as Vendor["status"],
-    }));
+    return (data ?? []).map((v) => {
+      const buildingLinks = (v.vendor_buildings ?? []) as Array<{ building_id: string }>;
+      return {
+        id: v.id as string,
+        companyName: v.company_name as string,
+        tradeCategory: v.trade_category as string,
+        contactName: v.contact_name as string,
+        phone: v.phone as string,
+        email: v.email as string,
+        notes: v.notes as string,
+        status: v.status as Vendor["status"],
+        wsibRequired: (v.wsib_required as boolean) ?? true,
+        buildingIds: buildingLinks.map((link) => link.building_id),
+      };
+    });
   },
 
   async createVendor(input: CreateVendorInputType): Promise<Vendor> {
@@ -767,6 +775,7 @@ export const supabaseCompanyRepository = {
         email: input.email,
         notes: input.notes ?? "",
         status: input.status ?? "active",
+        wsib_required: input.wsibRequired ?? true,
       })
       .select("*")
       .single();
@@ -788,6 +797,7 @@ export const supabaseCompanyRepository = {
       email: data!.email as string,
       notes: data!.notes as string,
       status: data!.status as Vendor["status"],
+      wsibRequired: (data!.wsib_required as boolean) ?? true,
       buildingIds: input.buildingIds,
     };
   },
@@ -803,12 +813,32 @@ export const supabaseCompanyRepository = {
         email: input.email,
         notes: input.notes,
         status: input.status,
+        wsib_required: input.wsibRequired,
       })
       .eq("id", id)
       .select("*")
       .maybeSingle();
     mapDbError(error);
     if (!data) return undefined;
+
+    if (input.buildingIds) {
+      await sb().from("vendor_buildings").delete().eq("vendor_id", id);
+      if (input.buildingIds.length > 0) {
+        await sb().from("vendor_buildings").insert(
+          input.buildingIds.map((buildingId) => ({
+            vendor_id: id,
+            building_id: buildingId,
+          }))
+        );
+      }
+    }
+
+    const buildingIds =
+      input.buildingIds ??
+      (
+        await sb().from("vendor_buildings").select("building_id").eq("vendor_id", id)
+      ).data?.map((row) => row.building_id as string);
+
     return {
       id: data.id as string,
       companyName: data.company_name as string,
@@ -818,6 +848,8 @@ export const supabaseCompanyRepository = {
       email: data.email as string,
       notes: data.notes as string,
       status: data.status as Vendor["status"],
+      wsibRequired: (data.wsib_required as boolean) ?? true,
+      buildingIds,
     };
   },
 

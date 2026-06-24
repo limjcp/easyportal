@@ -272,6 +272,117 @@ async function handleOccupancyLoginDetails(
   });
 }
 
+async function hasCompanyVendorEditAccess(
+  adminClient: SupabaseClient,
+  userId: string,
+  companyId: string,
+  isSuperAdmin: boolean
+): Promise<boolean> {
+  if (isSuperAdmin) return true;
+  const { data, error } = await adminClient.rpc("has_company_permission", {
+    p_user_id: userId,
+    p_company_id: companyId,
+    p_module_key: "company-vendors",
+    p_action: "edit",
+  });
+  if (error) throw error;
+  return data === true;
+}
+
+function splitContactName(contactName: string): { firstName: string; lastName: string } {
+  const trimmed = contactName.trim();
+  if (!trimmed) return { firstName: "", lastName: "" };
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 1) return { firstName: parts[0]!, lastName: "" };
+  return {
+    firstName: parts[0]!,
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
+async function ensureVendorProfile(
+  adminClient: SupabaseClient,
+  inviteEmail: string,
+  contactName: string,
+  temporaryPassword: string
+): Promise<string> {
+  const { firstName, lastName } = splitContactName(contactName);
+  const displayName = contactName.trim() || firstName || inviteEmail.split("@")[0] || "Vendor";
+
+  const { data: existingProfile } = await adminClient
+    .from("profiles")
+    .select("id")
+    .ilike("email", inviteEmail)
+    .maybeSingle();
+
+  let profileId = existingProfile?.id as string | undefined;
+
+  if (!profileId) {
+    const { data: createdUser, error: createError } = await adminClient.auth.admin.createUser({
+      email: inviteEmail,
+      password: temporaryPassword,
+      email_confirm: true,
+      user_metadata: {
+        first_name: firstName,
+        last_name: lastName,
+        display_name: displayName,
+      },
+    });
+    if (createError) throw new Error(createError.message);
+    profileId = createdUser.user.id;
+  } else {
+    const { error: updateError } = await adminClient.auth.admin.updateUserById(profileId, {
+      password: temporaryPassword,
+      user_metadata: {
+        first_name: firstName,
+        last_name: lastName,
+        display_name: displayName,
+      },
+    });
+    if (updateError) throw new Error(updateError.message);
+  }
+
+  const { error: profileError } = await adminClient
+    .from("profiles")
+    .update({
+      email: inviteEmail,
+      first_name: firstName,
+      last_name: lastName,
+      display_name: displayName,
+      must_change_password: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", profileId);
+  if (profileError) throw new Error(profileError.message);
+
+  return profileId;
+}
+
+async function linkVendorUser(
+  adminClient: SupabaseClient,
+  profileId: string,
+  vendorId: string
+): Promise<void> {
+  const { data: existingLink, error: linkError } = await adminClient
+    .from("vendor_users")
+    .select("vendor_id")
+    .eq("profile_id", profileId)
+    .maybeSingle();
+  if (linkError) throw linkError;
+
+  if (existingLink && existingLink.vendor_id !== vendorId) {
+    throw new Error("This email is already linked to another vendor account.");
+  }
+
+  if (!existingLink) {
+    const { error: insertError } = await adminClient.from("vendor_users").insert({
+      profile_id: profileId,
+      vendor_id: vendorId,
+    });
+    if (insertError) throw new Error(insertError.message);
+  }
+}
+
 async function handleVendorInvite(
   adminClient: SupabaseClient,
   callerId: string,
@@ -291,9 +402,19 @@ async function handleVendorInvite(
   if (!vendor) throw new Error("Vendor not found.");
 
   const companyId = vendor.company_id as string;
-  if (!(await hasCompanyAccess(adminClient, callerId, companyId, isSuperAdmin))) {
+  if (!(await hasCompanyVendorEditAccess(adminClient, callerId, companyId, isSuperAdmin))) {
     throw new Error("Not allowed to invite vendors for this company.");
   }
+
+  const temporaryPassword = generateTempPassword();
+  const contactName = (vendor.contact_name as string)?.trim() || "";
+  const profileId = await ensureVendorProfile(
+    adminClient,
+    inviteEmail,
+    contactName,
+    temporaryPassword
+  );
+  await linkVendorUser(adminClient, profileId, vendorId);
 
   const { data: company } = await adminClient
     .from("management_companies")
@@ -310,7 +431,8 @@ async function handleVendorInvite(
     companyName,
     portalUrl,
     inviteEmail,
-    vendorName: (vendor.contact_name as string)?.trim() || "",
+    vendorName: contactName,
+    temporaryPassword,
   });
 
   await sendEmail({
@@ -320,7 +442,10 @@ async function handleVendorInvite(
     text: template.text,
   });
 
-  return { email: inviteEmail, message: `Invitation sent to ${inviteEmail}.` };
+  return {
+    email: inviteEmail,
+    message: `Invitation and login details sent to ${inviteEmail}.`,
+  };
 }
 
 async function handleCertificateResend(

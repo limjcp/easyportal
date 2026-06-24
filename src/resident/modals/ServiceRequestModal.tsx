@@ -11,7 +11,14 @@ import {
   mergeServiceCategoryOptions,
   mergeServiceLocationOptions,
   resolveServiceRequestLocation,
+  SERVICE_REQUEST_SEVERITY_OPTIONS,
+  isEmergencyServiceRequestSeverity,
+  EMERGENCY_SEVERITY_SUBMIT_ERROR,
 } from "../../shared/serviceRequestPresets";
+import {
+  EmergencySeverityInlineNotice,
+  EmergencySeverityNoticeModal,
+} from "../../shared/EmergencySeverityNotice";
 import type { CreateServiceRequestInput } from "../data/types";
 import { residentRepo } from "../data/mockRepository";
 
@@ -44,6 +51,7 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
   const [dbCategoryNames, setDbCategoryNames] = useState<string[]>([]);
   const [buildingCommonAreas, setBuildingCommonAreas] = useState<string[]>([]);
   const [defaultUnitLocation, setDefaultUnitLocation] = useState("");
+  const [emergencyNoticeOpen, setEmergencyNoticeOpen] = useState(false);
 
   const {
     contact,
@@ -67,6 +75,7 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
       setDbCategoryNames([]);
       setBuildingCommonAreas([]);
       setDefaultUnitLocation("");
+      setEmergencyNoticeOpen(false);
       return;
     }
 
@@ -103,6 +112,12 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
     }
   }, [location]);
 
+  useEffect(() => {
+    if (severity === "Emergency") {
+      setEmergencyNoticeOpen(true);
+    }
+  }, [severity]);
+
   const serviceCategoryOptions = useMemo(
     () => ["", ...mergeServiceCategoryOptions(dbCategoryNames)],
     [dbCategoryNames]
@@ -115,6 +130,9 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
 
   const { run: submitRequest, loading: submitting, error, clearError, setError } = useAsyncAction(
     useCallback(async () => {
+      if (isEmergencyServiceRequestSeverity(severity)) {
+        throw new Error(EMERGENCY_SEVERITY_SUBMIT_ERROR);
+      }
       const resolvedCategory = category === "Other" ? customCategory.trim() : category;
       const resolvedLocation = resolveServiceRequestLocation(location, customLocation);
       const files = Object.values(slotFiles);
@@ -153,6 +171,10 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
 
   const handleSubmit = async () => {
     clearError();
+    if (isEmergencyServiceRequestSeverity(severity)) {
+      setError(EMERGENCY_SEVERITY_SUBMIT_ERROR);
+      return;
+    }
     const resolvedLocation = resolveServiceRequestLocation(location, customLocation);
     const resolvedCategory = category === "Other" ? customCategory.trim() : category;
     if (!contact || !resolvedLocation || !permissionToEnter || !severity || !category || !description) {
@@ -194,6 +216,7 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
             label="Submit Request"
             loadingLabel="Submitting…"
             loading={submitting}
+            disabled={isEmergencyServiceRequestSeverity(severity)}
             onClick={() => void handleSubmit()}
           />
         </>
@@ -229,9 +252,17 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
 
       <SectionHeader title="Request Description" />
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <SelectField label="Severity *" value={severity} onChange={(v) => setForm((c) => ({ ...c, severity: v }))} options={["", "Low", "Medium", "High", "Emergency"]} />
+        <SelectField
+          label="Severity *"
+          value={severity}
+          onChange={(v) => setForm((c) => ({ ...c, severity: v }))}
+          options={[...SERVICE_REQUEST_SEVERITY_OPTIONS]}
+        />
         <SelectField label="Request Category *" value={category} onChange={(v) => setForm((c) => ({ ...c, category: v }))} options={serviceCategoryOptions} />
       </div>
+      {isEmergencyServiceRequestSeverity(severity) ? (
+        <EmergencySeverityInlineNotice className="mt-3" />
+      ) : null}
       {category === "Other" && (
         <div className="mt-3">
           <InputField
@@ -292,6 +323,11 @@ export function ServiceRequestModal({ open, onClose, onSubmit }: ServiceRequestM
           />
         ))}
       </div>
+
+      <EmergencySeverityNoticeModal
+        open={emergencyNoticeOpen}
+        onClose={() => setEmergencyNoticeOpen(false)}
+      />
     </Modal>
   );
 }

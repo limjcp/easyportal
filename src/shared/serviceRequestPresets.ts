@@ -39,3 +39,22 @@ export function resolveServiceRequestLocation(
 ): string {
   return selected === OTHER_OPTION ? customLocation.trim() : selected;
 }
+
+export const SERVICE_REQUEST_SEVERITY_OPTIONS = ["", "Low", "Medium", "High", "Emergency"] as const;
+export const SERVICE_REQUEST_SUBMITTABLE_SEVERITIES = ["Low", "Medium", "High"] as const;
+
+export function isEmergencyServiceRequestSeverity(severity: string): boolean {
+  return severity === "Emergency";
+}
+
+export const EMERGENCY_SEVERITY_NOTICE = {
+  title: "Emergency service requests",
+  paragraphs: [
+    "For Emergencies ONLY (Fire, Flood or Breach of Security) Call the emergency hotline 1-844-25-CONDO (26636) and press #3",
+    "Additional Charges may apply if used for non-emergency calls",
+    "For non emergencies please downgrade your request and continue, or consider emailing your property manager.",
+  ],
+} as const;
+
+export const EMERGENCY_SEVERITY_SUBMIT_ERROR =
+  "Emergency requests cannot be submitted here. Please select Low, Medium, or High, or call the emergency hotline.";

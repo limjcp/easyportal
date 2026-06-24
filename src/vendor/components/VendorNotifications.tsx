@@ -29,7 +29,11 @@ export function VendorNotifications({ refreshKey, onNavigate }: VendorNotificati
       setNotifications(list);
       setUnreadCount(count);
       setOpen(false);
-      onNavigate({ page: "purchase-order-detail", id: n.poId });
+      if (n.type === "compliance_expiring" || n.type === "compliance_expired") {
+        onNavigate({ page: "compliance" });
+      } else if (n.poId) {
+        onNavigate({ page: "purchase-order-detail", id: n.poId });
+      }
     },
     {
       errorMessage: "Unable to mark notification as read.",
