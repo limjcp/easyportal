@@ -921,6 +921,48 @@ export const unitsUsersRepository = {
       occupancyId,
     });
   },
+
+  async sendOccupancyEmail(occupancyId: string, subject: string, body: string) {
+    return invokeSendPortalEmail({
+      type: "occupancy_custom_email",
+      occupancyId,
+      subject,
+      body,
+    });
+  },
+
+  async activateOccupancy(occupancyId: string) {
+    const result = await invokeSendPortalEmail({
+      type: "occupancy_activate",
+      occupancyId,
+    });
+    const buildingId = await bid();
+    await refreshBuildingCounts(buildingId);
+    return result;
+  },
+
+  async activateOccupancies(occupancyIds: string[]) {
+    const successes: string[] = [];
+    const failures: string[] = [];
+    for (const occupancyId of occupancyIds) {
+      try {
+        await invokeSendPortalEmail({
+          type: "occupancy_activate",
+          occupancyId,
+        });
+        successes.push(occupancyId);
+      } catch (err) {
+        failures.push(
+          `${occupancyId}: ${err instanceof Error ? err.message : "Activation failed."}`
+        );
+      }
+    }
+    if (successes.length > 0) {
+      const buildingId = await bid();
+      await refreshBuildingCounts(buildingId);
+    }
+    return { successes, failures };
+  },
 };
 
 async function loadOccupancyPortalModules(

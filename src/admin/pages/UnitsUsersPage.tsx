@@ -28,6 +28,7 @@ import {
 import { guessUnitIdForResidentName } from "../utils/pendingUnitAssignment";
 import type { ResidentDetailSection } from "../../resident/data/types";
 import { ResidentTypePortalModulesModal } from "../modals/ResidentTypePortalModulesModal";
+import { SendOccupancyEmailModal } from "../modals/SendOccupancyEmailModal";
 import { IncidentReportDetailModal } from "../modals/IncidentReportDetailModal";
 import { FaEdit } from "react-icons/fa";
 import { useAdminUnitsUsersData } from "../../shared/queries/adminListQueries";
@@ -106,11 +107,12 @@ function StatusCell({ status, tags }: { status: string; tags: string[] }) {
   );
 }
 
-function emailCell(email: string) {
+function emailCell(email: string, onClick: () => void) {
+  if (!email?.trim()) return "—";
   return (
-    <a href={`mailto:${email}`} className="text-[#3476ef] hover:underline">
+    <button type="button" onClick={onClick} className="text-[#3476ef] hover:underline">
       {email}
-    </a>
+    </button>
   );
 }
 
@@ -306,6 +308,12 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
   const [confirmKind, setConfirmKind] = useState<"deleteUser" | "passwordReset" | null>(null);
   const [savingEmail, setSavingEmail] = useState(false);
   const [savingRestore, setSavingRestore] = useState(false);
+  const [activationSelections, setActivationSelections] = useState<Set<string>>(() => new Set());
+  const [composeEmailTarget, setComposeEmailTarget] = useState<{
+    occupancyId: string;
+    email: string;
+    name?: string;
+  } | null>(null);
   const pendingLoginDetailsRef = useRef<{ occupancyId: string; email: string } | null>(null);
 
   const refetchLists = useCallback(async () => {
@@ -581,19 +589,6 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
     { successMessage: "Occupant added successfully.", onError: setActionError, showErrorToast: false }
   );
 
-  const saving =
-    savingUnit ||
-    savingAssign ||
-    applyingPendingUnits ||
-    savingArchive ||
-    savingDelete ||
-    savingUser ||
-    savingEmail ||
-    savingRestore ||
-    savingCreate ||
-    savingOccupant;
-
-
   const isUserDetailDirty = useMemo(
     () => userDetailDirty(userDetailBaseline, userDraft),
     [userDetailBaseline, userDraft]
@@ -610,6 +605,7 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
     setTypeFilter("");
     setSortDir("asc");
     setPage(1);
+    setActivationSelections(new Set());
     if (activeTab === "current") setSortKey("unit");
     if (activeTab === "pending") setSortKey("name");
     if (activeTab === "unoccupied") setSortKey("unit");
@@ -664,6 +660,68 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
       }),
     [archivedRows, statusFilter, typeFilter]
   );
+
+  const { run: activateUser, loading: activatingUser } = useAsyncAction(
+    useCallback(async () => {
+      if (!selectedUser) return;
+      if (!selectedUser.email?.trim()) {
+        throw new Error("Email is required to activate this user.");
+      }
+      const result = await adminRepository.activateOccupancy(selectedUser.id);
+      window.alert(result.message);
+      await refetchLists();
+      const refreshed = await adminRepository.getUnitsUsersUserDetail(selectedUser.id);
+      if (refreshed) {
+        setSelectedUser(refreshed);
+        setUserDraft(cloneUserDetail(refreshed));
+        setUserDetailBaseline(cloneUserDetail(refreshed));
+      }
+    }, [selectedUser, refetchLists]),
+    { onError: setActionError, showErrorToast: false }
+  );
+
+  const { run: bulkActivateUsers, loading: bulkActivating } = useAsyncAction(
+    useCallback(async () => {
+      const ids = [...activationSelections];
+      if (ids.length === 0) return;
+      const nameById = new Map(currentRows.map((row) => [row.id, row.name]));
+      const { successes, failures } = await adminRepository.activateOccupancies(ids);
+      if (failures.length > 0) {
+        const messages = failures.map((failure) => {
+          const colonIndex = failure.indexOf(": ");
+          const id = colonIndex >= 0 ? failure.slice(0, colonIndex) : failure;
+          const message = colonIndex >= 0 ? failure.slice(colonIndex + 2) : "Activation failed.";
+          const name = nameById.get(id) ?? id;
+          return `${name}: ${message}`;
+        });
+        if (successes.length === 0) {
+          throw new Error(messages.join(" "));
+        }
+        setActionError(`Some activations failed: ${messages.join(" ")}`);
+      }
+      setActivationSelections((prev) => {
+        const next = new Set(prev);
+        for (const id of successes) next.delete(id);
+        return next;
+      });
+      await refetchLists();
+    }, [activationSelections, currentRows, refetchLists]),
+    { successMessage: "Users activated.", onError: setActionError, showErrorToast: false }
+  );
+
+  const saving =
+    savingUnit ||
+    savingAssign ||
+    applyingPendingUnits ||
+    savingArchive ||
+    savingDelete ||
+    savingUser ||
+    savingEmail ||
+    savingRestore ||
+    savingCreate ||
+    savingOccupant ||
+    activatingUser ||
+    bulkActivating;
 
   const unitOptions = useMemo(() => {
     const options = new Map<string, string>();
@@ -855,6 +913,25 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
     void saveUserDetail();
   };
 
+  const handleActivateUser = () => {
+    setActionError(null);
+    void activateUser();
+  };
+
+  const openComposeEmail = (occupancyId: string, email: string, name?: string) => {
+    setActionError(null);
+    setComposeEmailTarget({ occupancyId, email, name });
+  };
+
+  const toggleActivationSelection = (rowId: string, checked: boolean) => {
+    setActivationSelections((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(rowId);
+      else next.delete(rowId);
+      return next;
+    });
+  };
+
   const handleEmailLoginDetails = (occupancyId: string, email: string, status: UnitsUsersAccountStatus) => {
     if (status !== "Activated") {
       setActionError("This user does not have a login account yet.");
@@ -938,24 +1015,34 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
       sortable: true,
       sortValue: (row) => row.email,
       className: "text-center",
-      render: (row) => emailCell(row.email),
+      render: (row) =>
+        emailCell(row.email, () => openComposeEmail(row.id, row.email, row.name)),
     },
     {
       key: "actions",
       header: "",
       className: "text-center",
       render: (row) => (
-        <OptionsDropdown
-          options={[
-            { label: "View Unit Info", onClick: () => openUnitDetail(row.unitId) },
-            { label: "View User Details", onClick: () => openUserDetail(row.id) },
-            { label: "Merge Account", disabled: true, onClick: () => undefined },
-            {
-              label: "Email Login Details",
-              onClick: () => handleEmailLoginDetails(row.id, row.email, row.status),
-            },
-          ]}
-        />
+        <div className="flex items-center justify-center gap-2">
+          <input
+            type="checkbox"
+            checked={activationSelections.has(row.id)}
+            disabled={row.status !== "Awaiting Activation" || !row.email?.trim()}
+            onChange={(event) => toggleActivationSelection(row.id, event.target.checked)}
+            aria-label={`Select ${row.name} for activation`}
+          />
+          <OptionsDropdown
+            options={[
+              { label: "View Unit Info", onClick: () => openUnitDetail(row.unitId) },
+              { label: "View User Details", onClick: () => openUserDetail(row.id) },
+              { label: "Merge Account", disabled: true, onClick: () => undefined },
+              {
+                label: "Email Login Details",
+                onClick: () => handleEmailLoginDetails(row.id, row.email, row.status),
+              },
+            ]}
+          />
+        </div>
       ),
     },
   ];
@@ -991,7 +1078,8 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
       sortable: true,
       sortValue: (row) => row.email,
       className: "text-center",
-      render: (row) => emailCell(row.email),
+      render: (row) =>
+        emailCell(row.email, () => openComposeEmail(row.id, row.email, row.name)),
     },
     {
       key: "unitAssignment",
@@ -1128,7 +1216,8 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
       sortable: true,
       sortValue: (row) => row.email,
       className: "text-center",
-      render: (row) => emailCell(row.email),
+      render: (row) =>
+        emailCell(row.email, () => openComposeEmail(row.id, row.email, row.name)),
     },
     {
       key: "archivedAt",
@@ -1252,6 +1341,15 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
           >
             Add a New Resident
           </button>
+          {activeTab === "current" ? (
+            <ActionButton
+              label="Activate"
+              loading={bulkActivating}
+              loadingLabel="Activating…"
+              disabled={activationSelections.size === 0}
+              onClick={() => void bulkActivateUsers()}
+            />
+          ) : null}
           {activeTab === "pending" ? (
             <ActionButton
               label="Apply Units"
@@ -1455,7 +1553,11 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
                     <tr key={occupant.userId} className="border-b border-slate-100">
                       <td className="px-3 py-2">{occupant.type}</td>
                       <td className="px-3 py-2">{occupant.name}</td>
-                      <td className="px-3 py-2">{occupant.email}</td>
+                      <td className="px-3 py-2">
+                        {emailCell(occupant.email, () =>
+                          openComposeEmail(occupant.userId, occupant.email, occupant.name)
+                        )}
+                      </td>
                       <td className="px-3 py-2">
                         <StatusCell status={occupant.status} tags={occupant.statusTags} />
                       </td>
@@ -1660,8 +1762,22 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
                 <div className="space-y-3 rounded border border-slate-300 bg-white p-3">
                   <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                     <h4 className="font-semibold text-slate-700">User Information</h4>
-                    <StatusCell status={selectedUser.status} tags={selectedUser.statusTags} />
+                    <div className="flex items-center gap-2">
+                      <StatusCell status={selectedUser.status} tags={selectedUser.statusTags} />
+                      {selectedUser.status === "Awaiting Activation" ? (
+                        <ActionButton
+                          label="Activate"
+                          loading={activatingUser}
+                          loadingLabel="Activating…"
+                          disabled={!selectedUser.email?.trim()}
+                          onClick={handleActivateUser}
+                        />
+                      ) : null}
+                    </div>
                   </div>
+                  {selectedUser.status === "Awaiting Activation" && !selectedUser.email?.trim() ? (
+                    <p className="text-xs text-amber-700">An email address is required before this user can be activated.</p>
+                  ) : null}
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="space-y-1">
                       <span className="text-xs uppercase text-slate-500">First Name</span>
@@ -2610,6 +2726,14 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
         reportId={incidentReportModalId}
         onClose={() => setIncidentReportModalId(null)}
         onUpdated={refetchLists}
+      />
+
+      <SendOccupancyEmailModal
+        open={!!composeEmailTarget}
+        onClose={() => setComposeEmailTarget(null)}
+        occupancyId={composeEmailTarget?.occupancyId ?? ""}
+        recipientEmail={composeEmailTarget?.email ?? ""}
+        recipientName={composeEmailTarget?.name}
       />
     </div>
     </CrudPanel>

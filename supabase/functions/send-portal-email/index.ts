@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
   certificateResendEmail,
+  customMessageEmail,
   loginDetailsEmail,
   vendorInviteEmail,
 } from "../_shared/emailTemplates.ts";
@@ -16,6 +17,8 @@ type SendPortalEmailPayload =
   | { type: "employee_login_details"; membershipId: string }
   | { type: "building_admin_login_details"; membershipId: string }
   | { type: "occupancy_login_details"; occupancyId: string }
+  | { type: "occupancy_activate"; occupancyId: string }
+  | { type: "occupancy_custom_email"; occupancyId: string; subject: string; body: string }
   | { type: "vendor_invite"; vendorId: string; email: string }
   | { type: "certificate_resend"; certificateId: string };
 
@@ -117,13 +120,16 @@ async function sendLoginDetailsEmail(input: {
   profileId: string;
   email: string;
   firstName: string;
+  temporaryPassword?: string;
 }) {
-  const temporaryPassword = generateTempPassword();
-  const { error: updateError } = await input.adminClient.auth.admin.updateUserById(input.profileId, {
-    password: temporaryPassword,
-  });
-  if (updateError) {
-    throw new Error(updateError.message);
+  const temporaryPassword = input.temporaryPassword ?? generateTempPassword();
+  if (!input.temporaryPassword) {
+    const { error: updateError } = await input.adminClient.auth.admin.updateUserById(input.profileId, {
+      password: temporaryPassword,
+    });
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
   }
 
   const portalUrl = `${getPortalAppUrl()}/login`;
@@ -270,6 +276,146 @@ async function handleOccupancyLoginDetails(
     email: profile.email.trim(),
     firstName: profile.first_name?.trim() || profile.last_name?.trim() || "",
   });
+}
+
+async function handleOccupancyActivate(
+  adminClient: SupabaseClient,
+  callerId: string,
+  isSuperAdmin: boolean,
+  occupancyId: string
+) {
+  const { data: occupancy, error } = await adminClient
+    .from("unit_occupancies")
+    .select(
+      "building_id, resident_name, email, account_status, profiles(first_name, last_name, email)"
+    )
+    .eq("id", occupancyId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!occupancy) throw new Error("User not found.");
+
+  if (occupancy.account_status !== "Awaiting Activation") {
+    throw new Error("This user is not awaiting activation.");
+  }
+
+  const occupancyEmail = (occupancy.email as string | null)?.trim().toLowerCase();
+  if (!occupancyEmail) {
+    throw new Error("User does not have an email address.");
+  }
+
+  const buildingId = occupancy.building_id as string;
+  if (!(await hasBuildingAccess(adminClient, callerId, buildingId, isSuperAdmin))) {
+    throw new Error("Not allowed to activate this user.");
+  }
+
+  const profile = occupancy.profiles as {
+    first_name: string;
+    last_name: string;
+    email: string;
+  } | null;
+
+  const residentName = (occupancy.resident_name as string)?.trim() ?? "";
+  let firstName = profile?.first_name?.trim() ?? "";
+  let lastName = profile?.last_name?.trim() ?? "";
+  if (!firstName && !lastName) {
+    const split = splitContactName(residentName);
+    firstName = split.firstName;
+    lastName = split.lastName;
+  }
+  const displayName =
+    `${firstName} ${lastName}`.trim() || residentName || occupancyEmail.split("@")[0] || "Resident";
+
+  const temporaryPassword = generateTempPassword();
+  const profileId = await ensureVendorProfile(
+    adminClient,
+    occupancyEmail,
+    displayName,
+    temporaryPassword
+  );
+
+  const { error: occError } = await adminClient
+    .from("unit_occupancies")
+    .update({
+      profile_id: profileId,
+      account_status: "Activated",
+      resident_name: displayName,
+      email: occupancyEmail,
+    })
+    .eq("id", occupancyId)
+    .eq("building_id", buildingId);
+  if (occError) throw new Error(occError.message);
+
+  return sendLoginDetailsEmail({
+    adminClient,
+    profileId,
+    email: occupancyEmail,
+    firstName: firstName || lastName || displayName,
+    temporaryPassword,
+  });
+}
+
+async function handleOccupancyCustomEmail(
+  adminClient: SupabaseClient,
+  callerId: string,
+  isSuperAdmin: boolean,
+  occupancyId: string,
+  subject: string,
+  body: string
+) {
+  const trimmedSubject = subject.trim();
+  const trimmedBody = body.trim();
+  if (!trimmedSubject) {
+    throw new Error("Subject is required.");
+  }
+  if (!trimmedBody) {
+    throw new Error("Message is required.");
+  }
+
+  const { data: occupancy, error } = await adminClient
+    .from("unit_occupancies")
+    .select("building_id, email, resident_name, profile_id")
+    .eq("id", occupancyId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!occupancy) throw new Error("User not found.");
+
+  const recipientEmail = (occupancy.email as string | null)?.trim();
+  if (!recipientEmail) {
+    throw new Error("User does not have an email address.");
+  }
+
+  const buildingId = occupancy.building_id as string;
+  if (!(await hasBuildingAccess(adminClient, callerId, buildingId, isSuperAdmin))) {
+    throw new Error("Not allowed to email this user.");
+  }
+
+  const recipientName = (occupancy.resident_name as string | null)?.trim() || undefined;
+  const template = customMessageEmail({
+    subject: trimmedSubject,
+    body: trimmedBody,
+    recipientName,
+  });
+
+  await sendEmail({
+    to: recipientEmail,
+    subject: template.subject,
+    html: template.html,
+    text: template.text,
+  });
+
+  const profileId = occupancy.profile_id as string | null;
+  const { error: recordError } = await adminClient.from("email_records").insert({
+    building_id: buildingId,
+    profile_id: profileId,
+    subject: trimmedSubject,
+    body: trimmedBody,
+    status: "delivered",
+  });
+  if (recordError) {
+    throw new Error(recordError.message);
+  }
+
+  return { email: recipientEmail, message: `Email sent to ${recipientEmail}.` };
 }
 
 async function hasCompanyVendorEditAccess(
@@ -558,6 +704,33 @@ Deno.serve(async (req) => {
           caller.id,
           isSuperAdmin,
           payload.occupancyId.trim()
+        );
+        break;
+      case "occupancy_activate":
+        if (!payload.occupancyId?.trim()) {
+          return jsonResponse({ error: "occupancyId is required." }, 400);
+        }
+        result = await handleOccupancyActivate(
+          adminClient,
+          caller.id,
+          isSuperAdmin,
+          payload.occupancyId.trim()
+        );
+        break;
+      case "occupancy_custom_email":
+        if (!payload.occupancyId?.trim()) {
+          return jsonResponse({ error: "occupancyId is required." }, 400);
+        }
+        if (!payload.subject?.trim() || !payload.body?.trim()) {
+          return jsonResponse({ error: "subject and body are required." }, 400);
+        }
+        result = await handleOccupancyCustomEmail(
+          adminClient,
+          caller.id,
+          isSuperAdmin,
+          payload.occupancyId.trim(),
+          payload.subject,
+          payload.body
         );
         break;
       case "vendor_invite":

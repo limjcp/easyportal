@@ -4,6 +4,8 @@ export type SendPortalEmailPayload =
   | { type: "employee_login_details"; membershipId: string }
   | { type: "building_admin_login_details"; membershipId: string }
   | { type: "occupancy_login_details"; occupancyId: string }
+  | { type: "occupancy_activate"; occupancyId: string }
+  | { type: "occupancy_custom_email"; occupancyId: string; subject: string; body: string }
   | { type: "vendor_invite"; vendorId: string; email: string }
   | { type: "certificate_resend"; certificateId: string };
 

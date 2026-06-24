@@ -28,6 +28,12 @@ type VendorComplianceEmailInput = {
   audience: "vendor" | "stakeholder";
 };
 
+type CustomMessageTemplateInput = {
+  subject: string;
+  body: string;
+  recipientName?: string;
+};
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -128,6 +134,23 @@ export function certificateResendEmail(input: CertificateResendTemplateInput) {
         <li><strong>Request #:</strong> ${escapeHtml(input.requestNumber || "—")}</li>
       </ul>
       <p><a href="${escapeHtml(input.portalUrl)}" style="display: inline-block; background: #3476ef; color: #fff; padding: 10px 16px; border-radius: 4px; text-decoration: none;">View in resident portal</a></p>
+    </div>
+  `.trim();
+
+  return { subject, html, text };
+}
+
+export function customMessageEmail(input: CustomMessageTemplateInput) {
+  const subject = input.subject.trim();
+  const body = input.body.trim();
+  const name = input.recipientName?.trim();
+  const intro = name ? `Hi ${name},\n\n` : "";
+  const text = `${intro}${body}`;
+  const htmlIntro = name ? `<p>Hi ${escapeHtml(name)},</p>` : "";
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #1e293b; max-width: 560px;">
+      ${htmlIntro}
+      <p style="white-space: pre-wrap;">${escapeHtml(body)}</p>
     </div>
   `.trim();
 

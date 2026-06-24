@@ -35,12 +35,17 @@ export function VendorLayout({
   children,
 }: VendorLayoutProps) {
   const [session, setSession] = useState<VendorSession | null>(null);
+  const [sessionLoaded, setSessionLoaded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    vendorRepository.getSession().then(setSession);
+    setSessionLoaded(false);
+    void vendorRepository.getSession().then((nextSession) => {
+      setSession(nextSession);
+      setSessionLoaded(true);
+    });
   }, [refreshKey]);
 
   useEffect(() => {
@@ -56,10 +61,28 @@ export function VendorLayout({
 
   const breadcrumbs = getVendorBreadcrumbs(route);
 
-  if (!session) {
+  if (!sessionLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#e7edf3] text-slate-600">
         Loading…
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#e7edf3] px-4 text-center text-slate-600">
+        <p className="max-w-md text-sm">
+          Unable to load your vendor account. Contact your property management company if you
+          believe this is an error.
+        </p>
+        <button
+          type="button"
+          onClick={onLogout}
+          className="rounded bg-[#0d9488] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f766e]"
+        >
+          Logout
+        </button>
       </div>
     );
   }

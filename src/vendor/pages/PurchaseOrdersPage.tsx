@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { StatusBadge } from "../../admin/components/AdminBadges";
 import { AdminPanelTable, AdminTabs } from "../../admin/components/AdminPanelTable";
 import { CrudPanel } from "../../shared/CrudPanel";
-import { companyRepository } from "../../company/data/companyRepository";
 import { vendorRepository } from "../data/vendorRepository";
 import type { VendorRoute } from "../navigation";
 import type { CompanyBuilding, PurchaseOrder } from "../../resident/data/types";
@@ -23,7 +22,7 @@ export function PurchaseOrdersPage({ route, onNavigate, refreshKey }: PurchaseOr
 
   useEffect(() => {
     vendorRepository.getPurchaseOrders(tab).then(setOrders);
-    companyRepository.getBuildings().then(setBuildings);
+    vendorRepository.getBuildings().then(setBuildings);
   }, [tab, refreshKey]);
 
   const buildingName = (id: string) => {

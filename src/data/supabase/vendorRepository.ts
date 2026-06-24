@@ -10,14 +10,26 @@ import type {
   VendorSession,
   UpdateVendorProfileInput,
 } from "../../resident/data/types";
-import { mapDbError, sb } from "./base";
-import { vendorComplianceRepository } from "./vendorComplianceRepository";
+import { mapDbError, nowIso, sb } from "./base";
 import { supabaseCompanyRepository } from "./companyRepository";
+import { vendorComplianceRepository } from "./vendorComplianceRepository";
+import { mapVendorBuildingRow, mapVendorRow } from "./vendorMappers";
 
 async function requireSession(): Promise<VendorSession & { vendorId: string }> {
   const session = await supabaseVendorRepository.getSession();
   if (!session) throw new Error("No vendor session");
   return session;
+}
+
+async function fetchVendorById(vendorId: string): Promise<Vendor> {
+  const { data, error } = await sb()
+    .from("vendors")
+    .select("*, vendor_buildings(building_id)")
+    .eq("id", vendorId)
+    .maybeSingle();
+  mapDbError(error);
+  if (!data) throw new Error("Vendor not found");
+  return mapVendorRow(data as Record<string, unknown>);
 }
 
 export const supabaseVendorRepository = {
@@ -45,10 +57,25 @@ export const supabaseVendorRepository = {
 
   async getVendor(): Promise<Vendor> {
     const session = await requireSession();
-    const vendors = await supabaseCompanyRepository.getVendors();
-    const vendor = vendors.find((v) => v.id === session.vendorId);
-    if (!vendor) throw new Error("Vendor not found");
-    return vendor;
+    return fetchVendorById(session.vendorId);
+  },
+
+  async getBuildings(): Promise<CompanyBuilding[]> {
+    const session = await requireSession();
+    const vendor = await fetchVendorById(session.vendorId);
+    let ids = vendor.buildingIds ?? [];
+    if (ids.length === 0) {
+      const orders = await supabaseCompanyRepository.getPurchaseOrdersByVendor(session.vendorId);
+      ids = [...new Set(orders.map((order) => order.buildingId))];
+    }
+    if (ids.length === 0) return [];
+
+    const { data, error } = await sb()
+      .from("buildings")
+      .select("id, code, name, address, status, subscription_package")
+      .in("id", ids);
+    mapDbError(error);
+    return (data ?? []).map((row) => mapVendorBuildingRow(row as Record<string, unknown>));
   },
 
   async getDashboardStats() {
@@ -89,10 +116,18 @@ export const supabaseVendorRepository = {
   ): Promise<PurchaseOrder | undefined> {
     const po = await this.getPurchaseOrder(id);
     if (!po || po.status !== "sent") return undefined;
+
+    const payload: Record<string, unknown> = {
+      status,
+      responded_at: nowIso(),
+    };
     if (status === "declined" && declineReason) {
-      await sb().from("purchase_orders").update({ decline_reason: declineReason }).eq("id", id);
+      payload.decline_reason = declineReason;
     }
-    return supabaseCompanyRepository.updatePurchaseOrderStatus(id, status);
+
+    const { error } = await sb().from("purchase_orders").update(payload).eq("id", id);
+    mapDbError(error);
+    return this.getPurchaseOrder(id);
   },
 
   async getNotifications(): Promise<VendorNotification[]> {
@@ -125,18 +160,33 @@ export const supabaseVendorRepository = {
 
   async updateProfile(input: UpdateVendorProfileInput): Promise<Vendor> {
     const session = await requireSession();
-    return (await supabaseCompanyRepository.updateVendor(session.vendorId, input)) ?? (await this.getVendor());
+    const { error } = await sb()
+      .from("vendors")
+      .update({
+        contact_name: input.contactName,
+        phone: input.phone,
+        notes: input.notes,
+      })
+      .eq("id", session.vendorId);
+    mapDbError(error);
+    return fetchVendorById(session.vendorId);
   },
 
   async completeInvitation(): Promise<Vendor> {
-    const vendor = await this.getVendor();
+    const session = await requireSession();
+    const vendor = await fetchVendorById(session.vendorId);
     if (vendor.status !== "pending_invite") return vendor;
-    return (await supabaseCompanyRepository.updateVendor(vendor.id, { status: "active" })) ?? vendor;
+    const { error } = await sb()
+      .from("vendors")
+      .update({ status: "active" })
+      .eq("id", session.vendorId);
+    mapDbError(error);
+    return fetchVendorById(session.vendorId);
   },
 
   async getComplianceSummary(): Promise<VendorComplianceSummary> {
     const session = await requireSession();
-    const vendor = await this.getVendor();
+    const vendor = await fetchVendorById(session.vendorId);
     return vendorComplianceRepository.getComplianceSummary(
       session.vendorId,
       vendor.wsibRequired ?? true
