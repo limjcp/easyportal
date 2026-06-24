@@ -22,6 +22,7 @@ import {
   saveOccupancyProfileSection,
 } from "./occupancyProfileDetails";
 import { provisionUser } from "./provisionUser";
+import { splitResidentDisplayName } from "../../shared/splitResidentDisplayName";
 import {
   defaultResidentTypeModuleEnabled,
   ensureResidentTypePortalModules,
@@ -1006,14 +1007,20 @@ async function loadOccupancyBuildingAdminModules(
 function mapUserDetail(row: Record<string, unknown>): UnitsUsersUserDetail {
   const unit = row.units as { label: string } | null;
   const profile = row.profiles as Record<string, unknown> | null;
+  const residentName = String(row.resident_name ?? "");
+  const parsed = splitResidentDisplayName(residentName);
+  const profileFirst = String(profile?.first_name ?? "").trim();
+  const profileLast = String(profile?.last_name ?? "").trim();
+  const firstName = profileLast ? profileFirst : parsed.firstName;
+  const lastName = profileLast ? profileLast : parsed.lastName;
   return {
     id: row.id as string,
     unitLabel: unit?.label,
     status: row.account_status as UnitsUsersUserDetail["status"],
     statusTags: (row.status_tags as UnitsUsersUserDetail["statusTags"]) ?? [],
     name: row.resident_name as string,
-    firstName: (profile?.first_name as string) ?? (row.resident_name as string).split(" ")[0] ?? "",
-    lastName: (profile?.last_name as string) ?? "",
+    firstName,
+    lastName,
     type: row.resident_type as UnitsUsersUserDetail["type"],
     email: row.email as string,
     timezone: (profile?.timezone as string) ?? "America/Toronto",
