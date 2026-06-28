@@ -26,17 +26,44 @@ export type CompanyNavItem = {
   label: string;
   icon: IconType;
   route: CompanyRoute;
+  moduleKey?: string;
 };
 
 export const companyNavItems: CompanyNavItem[] = [
-  { id: "buildings", label: "Buildings", icon: FaBuilding, route: { page: "buildings" } },
-  { id: "master-reports", label: "Master Reports", icon: FaChartBar, route: { page: "master-reports" } },
-  { id: "employees", label: "Employees", icon: FaUsers, route: { page: "employees" } },
-  { id: "vendors", label: "Vendors", icon: FaTruck, route: { page: "vendors" } },
-  { id: "purchase-orders", label: "POs", icon: FaFileInvoice, route: { page: "purchase-orders", tab: "current" } },
-  { id: "chat", label: "Chat", icon: FaComments, route: { page: "chat" } },
-  { id: "account", label: "Account", icon: FaCog, route: { page: "account", tab: "building-subscriptions" } },
+  { id: "buildings", label: "Buildings", icon: FaBuilding, route: { page: "buildings" }, moduleKey: "company-condos" },
+  { id: "master-reports", label: "Master Reports", icon: FaChartBar, route: { page: "master-reports" }, moduleKey: "company-master-reports" },
+  { id: "employees", label: "Employees", icon: FaUsers, route: { page: "employees" }, moduleKey: "company-employees" },
+  { id: "vendors", label: "Vendors", icon: FaTruck, route: { page: "vendors" }, moduleKey: "company-vendors" },
+  { id: "purchase-orders", label: "POs", icon: FaFileInvoice, route: { page: "purchase-orders", tab: "current" }, moduleKey: "company-purchase-orders" },
+  { id: "chat", label: "Chat", icon: FaComments, route: { page: "chat" }, moduleKey: "chat" },
+  { id: "account", label: "Account", icon: FaCog, route: { page: "account", tab: "building-subscriptions" }, moduleKey: "company-subscriptions" },
 ];
+
+export function filterCompanyNavItems(
+  items: CompanyNavItem[],
+  access: Map<string, boolean> | null
+): CompanyNavItem[] {
+  if (!access) return items;
+  return items.filter((item) => !item.moduleKey || access.get(item.moduleKey) === true);
+}
+
+export function isCompanyRouteAllowed(
+  route: CompanyRoute,
+  access: Map<string, boolean> | null
+): boolean {
+  if (!access) return true;
+  if (route.page === "master-report-detail") {
+    return access.get("company-master-reports") === true;
+  }
+  const navItem = companyNavItems.find((item) => isCompanyNavActive(route, item.id));
+  if (!navItem?.moduleKey) return true;
+  return access.get(navItem.moduleKey) === true;
+}
+
+export function defaultCompanyRoute(access: Map<string, boolean> | null): CompanyRoute {
+  const allowed = filterCompanyNavItems(companyNavItems, access);
+  return allowed[0]?.route ?? { page: "buildings" };
+}
 
 export function isCompanyNavActive(
   route: CompanyRoute,

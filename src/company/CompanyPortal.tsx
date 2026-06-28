@@ -12,9 +12,10 @@ import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
 import { VendorsPage } from "./pages/VendorsPage";
 import { CompanyChatPage } from "./pages/CompanyChatPage";
 import type { CompanyRoute } from "./navigation";
+import { defaultCompanyRoute, isCompanyRouteAllowed } from "./navigation";
 import type { CompanyBuilding } from "../resident/data/types";
 import { useAuth } from "../auth/AuthProvider";
-import { useCompanyBuildings, useCompanyUser } from "../shared/queries/companyQueries";
+import { useCompanyBuildings, useCompanyNavAccess, useCompanyUser } from "../shared/queries/companyQueries";
 import { useInvalidatePortalQueries } from "../shared/queries/useInvalidatePortalQueries";
 import { companyRepository } from "./data/companyRepository";
 import {
@@ -57,6 +58,7 @@ export function CompanyPortal({
 
   const { data: buildings = [], refetch: refetchBuildings } = useCompanyBuildings();
   const { data: user, isLoading: userLoading } = useCompanyUser();
+  const { data: navAccess = null } = useCompanyNavAccess();
 
   const buildingAdmin = useMemo(
     () => parseCompanyBuildingAdminPath(location.pathname),
@@ -154,6 +156,13 @@ export function CompanyPortal({
     }
   }, [buildingAdmin, buildings, navigate]);
 
+  useEffect(() => {
+    if (buildingAdmin) return;
+    if (!isCompanyRouteAllowed(route, navAccess)) {
+      navigate(companyRouteToPath(defaultCompanyRoute(navAccess)), { replace: true });
+    }
+  }, [route, navAccess, buildingAdmin, navigate]);
+
   const handleOpenResidentPortal = () => {
     if (onOpenResidentPortal) {
       onOpenResidentPortal();
@@ -191,6 +200,7 @@ export function CompanyPortal({
       refreshKey={refreshKey}
       activeBuilding={activeBuilding}
       onCloseBuilding={handleCloseBuilding}
+      navAccess={navAccess}
     >
       {activeBuilding && adminPathPrefix ? (
         <AdminPortal

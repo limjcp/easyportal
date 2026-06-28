@@ -15,6 +15,8 @@ export const queryKeys = {
       ["company", userId, companyId, "purchaseOrders", tab] as const,
     activePoCounts: (userId: string, companyId: string) =>
       ["company", userId, companyId, "activePoCounts"] as const,
+    navAccess: (userId: string, companyId: string) =>
+      ["company", userId, companyId, "navAccess"] as const,
   },
   building: {
     root: (buildingId: string) => ["building", buildingId] as const,

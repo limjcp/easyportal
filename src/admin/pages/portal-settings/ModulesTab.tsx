@@ -29,7 +29,7 @@ export function ModulesTab() {
   );
 
   useEffect(() => {
-    adminRepository.getPortalModules().then(setModules);
+    adminRepository.getPortalModules({ ensureDefaults: true }).then(setModules);
     adminRepository.getPortalTileSettings().then(setTileSettings);
     adminRepository.getCustomPortalTiles().then(setCustomTiles);
     setBgUrl(getResidentBackgroundImage()?.url);
@@ -60,7 +60,7 @@ export function ModulesTab() {
     setResetting(true);
     await adminRepository.resetBuildingPortalLayoutToMaster();
     const [nextModules, nextTileSettings, nextCustomTiles] = await Promise.all([
-      adminRepository.getPortalModules(),
+      adminRepository.getPortalModules({ ensureDefaults: true }),
       adminRepository.getPortalTileSettings(),
       adminRepository.getCustomPortalTiles(),
     ]);

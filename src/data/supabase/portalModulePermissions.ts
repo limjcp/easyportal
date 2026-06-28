@@ -8,7 +8,7 @@ import {
 import type { CompanyRole, PermissionModuleRow } from "../../resident/data/types";
 import { mapDbError, sb } from "./base";
 import { buildingIdOrThrow } from "./base";
-import { ensureDefaultPortalModules } from "./admin/portalRepository";
+import { DEFAULT_PORTAL_MODULES } from "../defaults/portalModules";
 
 export type PermissionDbRow = {
   module_key: string;
@@ -98,14 +98,23 @@ export function mergeEffectivePortalModules(
 export async function loadBuildingPortalModulePermissions(
   buildingId: string
 ): Promise<ResidentPortalModulePermission[]> {
-  await ensureDefaultPortalModules(buildingId);
   const { data, error } = await sb()
     .from("portal_modules")
     .select("module_id, name, tile_label, enabled, locked")
     .eq("building_id", buildingId)
     .order("sort_order", { ascending: true });
   mapDbError(error);
-  return (data ?? [])
+  const rows = data ?? [];
+  if (rows.length === 0) {
+    return DEFAULT_PORTAL_MODULES.filter((m) => !m.locked && m.moduleId !== "home").map((m) => ({
+      moduleId: m.moduleId,
+      name: m.name,
+      tileLabel: m.tileLabel,
+      enabled: m.enabled,
+      buildingEnabled: m.enabled,
+    }));
+  }
+  return rows
     .filter((row) => !(row.locked as boolean) && row.module_id !== "home")
     .map((row) => mapBuildingModule(row as Record<string, unknown>));
 }
@@ -262,6 +271,75 @@ export async function loadBuildingRolePermissionDefaults(roleLabel: string): Pro
   return mapCompanyPermissionDbRows(data, BUILDING_SIDEBAR_MODULES);
 }
 
+function permissionRowsToViewAccessMap(rows: PermissionModuleRow[]): Map<string, boolean> {
+  const access = new Map<string, boolean>();
+  for (const row of rows) {
+    access.set(row.moduleKey, row.view);
+  }
+  return access;
+}
+
+export async function loadEffectiveCompanyMemberPermissions(
+  membershipId: string,
+  companyId: string,
+  role: CompanyRole
+): Promise<PermissionModuleRow[]> {
+  try {
+    await ensureCompanyRolePermissions(companyId, role);
+  } catch {
+    // Seed may fail under RLS; fall back to query or mock defaults below.
+  }
+
+  const { data: roleRows, error: roleError } = await sb()
+    .from("role_permission_defaults")
+    .select("module_key, can_create, can_view, can_edit, can_delete, can_archive")
+    .eq("company_id", companyId)
+    .eq("role", role);
+  mapDbError(roleError);
+
+  const roleDefaults = roleRows?.length
+    ? mapCompanyPermissionDbRows(roleRows)
+    : createDefaultPermissionsForRole(role);
+
+  const { data: overrides, error: overrideError } = await sb()
+    .from("company_membership_permissions")
+    .select("module_key, can_create, can_view, can_edit, can_delete, can_archive")
+    .eq("membership_id", membershipId);
+  mapDbError(overrideError);
+  if (!overrides?.length) return roleDefaults;
+
+  return mergePermissionRows(roleDefaults, mapCompanyPermissionDbRows(overrides));
+}
+
+export async function getEffectiveCompanyMemberModuleAccessForUser(
+  userId: string,
+  companyId: string
+): Promise<Map<string, boolean> | null> {
+  const { data: profile, error: profileError } = await sb()
+    .from("profiles")
+    .select("is_super_admin")
+    .eq("id", userId)
+    .maybeSingle();
+  mapDbError(profileError);
+  if (profile?.is_super_admin) return null;
+
+  const { data: membership, error: membershipError } = await sb()
+    .from("company_memberships")
+    .select("id, role")
+    .eq("profile_id", userId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  mapDbError(membershipError);
+  if (!membership) return null;
+
+  const permissions = await loadEffectiveCompanyMemberPermissions(
+    membership.id as string,
+    companyId,
+    membership.role as CompanyRole
+  );
+  return permissionRowsToViewAccessMap(permissions);
+}
+
 export function mergeEffectiveBuildingAdminModules(
   roleDefaults: PermissionModuleRow[],
   occupancyOverrides: Array<{ module_key: string; enabled: boolean }>
@@ -295,13 +373,37 @@ export async function getEffectiveBuildingAdminModuleAccessForUser(
   mapDbError(profileError);
   if (profile?.is_super_admin) return null;
 
-  const { data: companyMemberships, error: companyError } = await sb()
-    .from("company_memberships")
-    .select("id")
-    .eq("profile_id", userId)
-    .limit(1);
-  mapDbError(companyError);
-  if (companyMemberships?.length) return null;
+  const { data: building, error: buildingError } = await sb()
+    .from("buildings")
+    .select("company_id")
+    .eq("id", buildingId)
+    .maybeSingle();
+  mapDbError(buildingError);
+
+  if (building?.company_id) {
+    const { data: companyMembership, error: companyError } = await sb()
+      .from("company_memberships")
+      .select("id, role")
+      .eq("profile_id", userId)
+      .eq("company_id", building.company_id as string)
+      .maybeSingle();
+    mapDbError(companyError);
+
+    if (companyMembership) {
+      const permissions = await loadEffectiveCompanyMemberPermissions(
+        companyMembership.id as string,
+        building.company_id as string,
+        companyMembership.role as CompanyRole
+      );
+      const access = new Map<string, boolean>();
+      for (const row of permissions) {
+        if (!row.moduleKey.startsWith("company-")) {
+          access.set(row.moduleKey, row.view);
+        }
+      }
+      return access;
+    }
+  }
 
   const { data: occupancy, error: occupancyError } = await sb()
     .from("unit_occupancies")

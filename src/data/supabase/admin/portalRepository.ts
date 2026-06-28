@@ -73,6 +73,10 @@ export async function ensureDefaultPortalModules(buildingId: string) {
   await syncMissingPortalModules(buildingId);
 }
 
+function defaultPortalModulesForRead(): PortalModuleConfig[] {
+  return DEFAULT_PORTAL_MODULES.map((m) => ({ ...m }));
+}
+
 function mapPortalModule(row: Record<string, unknown>): PortalModuleConfig {
   return {
     moduleId: row.module_id as string,
@@ -356,10 +360,13 @@ export const portalRepository = {
     await sb().from("public_portal_documents").delete().eq("id", id);
   },
 
-  async getPortalModules() {
+  async getPortalModules(options?: { ensureDefaults?: boolean }) {
     const buildingId = await bid();
-    await ensureDefaultPortalModules(buildingId);
-    return loadPortalModules(buildingId);
+    if (options?.ensureDefaults) {
+      await ensureDefaultPortalModules(buildingId);
+    }
+    const modules = await loadPortalModules(buildingId);
+    return modules.length > 0 ? modules : defaultPortalModulesForRead();
   },
 
   async updatePortalModules(modules: PortalModuleConfig[]) {

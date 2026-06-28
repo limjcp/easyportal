@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   FaBell,
   FaChevronDown,
@@ -20,6 +20,7 @@ import { CompanyProfileModal } from "./modals/CompanyProfileModal";
 import { ManagementCompanyProfileModal } from "./modals/ManagementCompanyProfileModal";
 import {
   companyNavItems,
+  filterCompanyNavItems,
   getCompanyBreadcrumbs,
   getCompanyPageTitle,
   isCompanyNavActive,
@@ -38,6 +39,7 @@ type CompanyLayoutProps = {
   refreshKey?: number;
   activeBuilding?: CompanyBuilding | null;
   onCloseBuilding?: () => void;
+  navAccess?: Map<string, boolean> | null;
 };
 
 const PRIMARY_MOBILE_NAV_IDS = ["buildings", "master-reports", "purchase-orders", "chat"] as const;
@@ -53,6 +55,7 @@ export function CompanyLayout({
   refreshKey = 0,
   activeBuilding,
   onCloseBuilding,
+  navAccess = null,
 }: CompanyLayoutProps) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [managementProfileOpen, setManagementProfileOpen] = useState(false);
@@ -71,12 +74,17 @@ export function CompanyLayout({
   // Mobile: hide company chrome when embedded admin is open. Desktop: keep top nav visible.
   const showCompanyChrome = !activeBuilding || isLgUp;
 
-  const moreNavItems = companyNavItems.filter(
+  const visibleNavItems = useMemo(
+    () => filterCompanyNavItems(companyNavItems, navAccess),
+    [navAccess]
+  );
+
+  const moreNavItems = visibleNavItems.filter(
     (item) => !PRIMARY_MOBILE_NAV_IDS.includes(item.id as (typeof PRIMARY_MOBILE_NAV_IDS)[number])
   );
 
   const bottomNavItems: MobileBottomNavItem[] = [
-    ...companyNavItems
+    ...visibleNavItems
       .filter((item) =>
         PRIMARY_MOBILE_NAV_IDS.includes(item.id as (typeof PRIMARY_MOBILE_NAV_IDS)[number])
       )
@@ -255,8 +263,13 @@ export function CompanyLayout({
             )}
 
             {showCompanyChrome && (
-              <div className="hidden grid-cols-7 gap-0 bg-[#474747] text-center text-sm text-white lg:grid">
-                {companyNavItems.map(({ id, label, icon: Icon, route: navRoute }) => (
+              <div
+                className="hidden gap-0 bg-[#474747] text-center text-sm text-white lg:grid"
+                style={{
+                  gridTemplateColumns: `repeat(${Math.max(visibleNavItems.length, 1)}, minmax(0, 1fr))`,
+                }}
+              >
+                {visibleNavItems.map(({ id, label, icon: Icon, route: navRoute }) => (
                   <button
                     key={id}
                     type="button"

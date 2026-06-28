@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { companyRepository } from "../../company/data/companyRepository";
+import { getEffectiveCompanyMemberModuleAccessForUser } from "../../data/supabase/portalModulePermissions";
 import { queryKeys } from "../queryKeys";
 import { useTenantContext } from "./useTenantContext";
 
 const COMPANY_BUILDINGS_STALE = 120_000;
 const COMPANY_LIST_STALE = 120_000;
+const COMPANY_NAV_ACCESS_STALE = 5 * 60_000;
 
 export function useCompanyUser() {
   const { userId, companyId, isCompanyReady } = useTenantContext();
@@ -13,6 +15,16 @@ export function useCompanyUser() {
     queryFn: () => companyRepository.getCompanyUser(),
     enabled: isCompanyReady,
     staleTime: COMPANY_LIST_STALE,
+  });
+}
+
+export function useCompanyNavAccess() {
+  const { userId, companyId, isCompanyReady } = useTenantContext();
+  return useQuery({
+    queryKey: queryKeys.company.navAccess(userId!, companyId!),
+    queryFn: () => getEffectiveCompanyMemberModuleAccessForUser(userId!, companyId!),
+    enabled: isCompanyReady,
+    staleTime: COMPANY_NAV_ACCESS_STALE,
   });
 }
 
