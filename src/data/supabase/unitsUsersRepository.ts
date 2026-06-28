@@ -20,6 +20,7 @@ import {
   formatProfileSectionItems,
   loadOccupancyProfileDetails,
   saveOccupancyProfileDetails,
+  saveChangedOccupancyProfileSections,
   saveOccupancyProfileSection,
 } from "./occupancyProfileDetails";
 import { provisionUser } from "./provisionUser";
@@ -449,33 +450,37 @@ export const unitsUsersRepository = {
   async updateUnitsUsersUnitDetail(
     unitId: string,
     updates: {
-      parkingSpots: string[];
-      lockers: string[];
-      bikeSpaces: string[];
+      parkingSpots?: string[];
+      lockers?: string[];
+      bikeSpaces?: string[];
       primaryOccupancyId?: string;
       profileDetails?: ResidentProfileDetails;
+      changedProfileSections?: ResidentDetailSection[];
     }
   ): Promise<void> {
     const buildingId = await bid();
-    const { error: unitError } = await sb()
-      .from("units")
-      .update({
-        parking_spots: updates.parkingSpots,
-        lockers: updates.lockers,
-        bike_spaces: updates.bikeSpaces,
-      })
-      .eq("id", unitId)
-      .eq("building_id", buildingId);
-    mapDbError(unitError);
+    const unitPayload: Record<string, unknown> = {};
+    if (updates.parkingSpots !== undefined) unitPayload.parking_spots = updates.parkingSpots;
+    if (updates.lockers !== undefined) unitPayload.lockers = updates.lockers;
+    if (updates.bikeSpaces !== undefined) unitPayload.bike_spaces = updates.bikeSpaces;
 
-    if (updates.primaryOccupancyId && updates.profileDetails) {
-      const profileDetails: ResidentProfileDetails = {
-        ...updates.profileDetails,
-        parkingSpots: updates.parkingSpots,
-        lockers: updates.lockers,
-        bikeSpaces: updates.bikeSpaces,
-      };
-      await saveOccupancyProfileDetails(updates.primaryOccupancyId, buildingId, profileDetails);
+    if (Object.keys(unitPayload).length > 0) {
+      const { error: unitError } = await sb()
+        .from("units")
+        .update(unitPayload)
+        .eq("id", unitId)
+        .eq("building_id", buildingId);
+      mapDbError(unitError);
+    }
+
+    const occupancyId = updates.primaryOccupancyId;
+    const sections = updates.changedProfileSections ?? [];
+    if (occupancyId && updates.profileDetails && sections.length > 0) {
+      const profileDetails: ResidentProfileDetails = { ...updates.profileDetails };
+      if (updates.parkingSpots !== undefined) profileDetails.parkingSpots = updates.parkingSpots;
+      if (updates.lockers !== undefined) profileDetails.lockers = updates.lockers;
+      if (updates.bikeSpaces !== undefined) profileDetails.bikeSpaces = updates.bikeSpaces;
+      await saveChangedOccupancyProfileSections(occupancyId, buildingId, sections, profileDetails);
     }
   },
 
@@ -679,16 +684,17 @@ export const unitsUsersRepository = {
   async updateUnitsUsersUserDetail(
     occupancyId: string,
     updates: {
-      firstName: string;
-      lastName: string;
-      email: string;
-      timezone: string;
-      type: UnitsUsersResidentType;
-      buzzerCode: string;
-      homePhone: string;
-      mobilePhone: string;
-      businessPhone: string;
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      timezone?: string;
+      type?: UnitsUsersResidentType;
+      buzzerCode?: string;
+      homePhone?: string;
+      mobilePhone?: string;
+      businessPhone?: string;
       profileDetails?: ResidentProfileDetails;
+      changedProfileSections?: ResidentDetailSection[];
       canAccessResidentPortal?: boolean;
       canAccessBuildingAdmin?: boolean;
       buildingAdminRoleLabel?: string;
@@ -697,20 +703,24 @@ export const unitsUsersRepository = {
     const buildingId = await bid();
     const { data: occ, error: fetchError } = await sb()
       .from("unit_occupancies")
-      .select("profile_id")
+      .select("profile_id, can_access_building_admin, building_admin_role_label")
       .eq("id", occupancyId)
       .eq("building_id", buildingId)
       .single();
     mapDbError(fetchError);
 
-    const residentName = `${updates.firstName.trim()} ${updates.lastName.trim()}`.trim();
-    const occPayload: Record<string, unknown> = {
-      resident_name: residentName,
-      email: updates.email.trim(),
-      resident_type: updates.type,
-      buzzer_code: updates.buzzerCode.trim() || null,
-      phone: updates.mobilePhone.trim() || null,
-    };
+    const profileId = occ?.profile_id as string | null;
+    const occPayload: Record<string, unknown> = {};
+
+    if (updates.firstName !== undefined || updates.lastName !== undefined) {
+      const firstName = updates.firstName?.trim() ?? "";
+      const lastName = updates.lastName?.trim() ?? "";
+      occPayload.resident_name = `${firstName} ${lastName}`.trim();
+    }
+    if (updates.email !== undefined) occPayload.email = updates.email.trim();
+    if (updates.type !== undefined) occPayload.resident_type = updates.type;
+    if (updates.buzzerCode !== undefined) occPayload.buzzer_code = updates.buzzerCode.trim() || null;
+    if (updates.mobilePhone !== undefined) occPayload.phone = updates.mobilePhone.trim() || null;
     if (updates.canAccessResidentPortal !== undefined) {
       occPayload.can_access_resident_portal = updates.canAccessResidentPortal;
     }
@@ -721,46 +731,73 @@ export const unitsUsersRepository = {
       occPayload.building_admin_role_label = updates.buildingAdminRoleLabel.trim() || "Resident";
     }
 
-    const { error: occError } = await sb()
-      .from("unit_occupancies")
-      .update(occPayload)
-      .eq("id", occupancyId)
-      .eq("building_id", buildingId);
-    mapDbError(occError);
-
-    const profileId = occ?.profile_id as string | null;
-    if (profileId) {
-      const { error: profileError } = await sb()
-        .from("profiles")
-        .update({
-          first_name: updates.firstName.trim(),
-          last_name: updates.lastName.trim(),
-          display_name: residentName,
-          email: updates.email.trim(),
-          timezone: updates.timezone.trim() || "America/Toronto",
-          tel_home: updates.homePhone.trim() || null,
-          tel_mobile: updates.mobilePhone.trim() || null,
-          tel_business: updates.businessPhone.trim() || null,
-          phone: updates.mobilePhone.trim() || "",
-        })
-        .eq("id", profileId);
-      mapDbError(profileError);
+    if (Object.keys(occPayload).length > 0) {
+      const { error: occError } = await sb()
+        .from("unit_occupancies")
+        .update(occPayload)
+        .eq("id", occupancyId)
+        .eq("building_id", buildingId);
+      mapDbError(occError);
     }
 
-    if (updates.canAccessBuildingAdmin !== undefined) {
+    if (profileId) {
+      const profilePayload: Record<string, unknown> = {};
+      if (updates.firstName !== undefined) profilePayload.first_name = updates.firstName.trim();
+      if (updates.lastName !== undefined) profilePayload.last_name = updates.lastName.trim();
+      if (updates.firstName !== undefined || updates.lastName !== undefined) {
+        const firstName = updates.firstName?.trim() ?? "";
+        const lastName = updates.lastName?.trim() ?? "";
+        profilePayload.display_name = `${firstName} ${lastName}`.trim();
+      }
+      if (updates.email !== undefined) profilePayload.email = updates.email.trim();
+      if (updates.timezone !== undefined) {
+        profilePayload.timezone = updates.timezone.trim() || "America/Toronto";
+      }
+      if (updates.homePhone !== undefined) profilePayload.tel_home = updates.homePhone.trim() || null;
+      if (updates.mobilePhone !== undefined) {
+        profilePayload.tel_mobile = updates.mobilePhone.trim() || null;
+        profilePayload.phone = updates.mobilePhone.trim() || "";
+      }
+      if (updates.businessPhone !== undefined) {
+        profilePayload.tel_business = updates.businessPhone.trim() || null;
+      }
+
+      if (Object.keys(profilePayload).length > 0) {
+        const { error: profileError } = await sb()
+          .from("profiles")
+          .update(profilePayload)
+          .eq("id", profileId);
+        mapDbError(profileError);
+      }
+    }
+
+    if (updates.canAccessBuildingAdmin !== undefined || updates.buildingAdminRoleLabel !== undefined) {
+      const buildingAdminEnabled =
+        updates.canAccessBuildingAdmin ?? occ?.can_access_building_admin === true;
+      const buildingAdminRoleLabel =
+        updates.buildingAdminRoleLabel?.trim() ||
+        (occ?.building_admin_role_label as string | undefined) ||
+        "Resident (Admin)";
       await syncBuildingMembershipForOccupancy(
         profileId,
         buildingId,
-        updates.canAccessBuildingAdmin,
-        updates.buildingAdminRoleLabel?.trim() || "Resident (Admin)"
+        buildingAdminEnabled,
+        buildingAdminRoleLabel
       );
     }
 
-    if (updates.profileDetails) {
-      await saveOccupancyProfileDetails(occupancyId, buildingId, updates.profileDetails);
+    const sections = updates.changedProfileSections ?? [];
+    if (updates.profileDetails && sections.length > 0) {
+      await saveChangedOccupancyProfileSections(occupancyId, buildingId, sections, updates.profileDetails);
     }
 
-    await refreshBuildingCounts(buildingId);
+    const affectsBuildingCounts =
+      updates.type !== undefined ||
+      updates.canAccessBuildingAdmin !== undefined ||
+      updates.canAccessResidentPortal !== undefined;
+    if (affectsBuildingCounts) {
+      await refreshBuildingCounts(buildingId);
+    }
   },
 
   async deleteUnitOccupancy(occupancyId: string): Promise<void> {

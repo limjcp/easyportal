@@ -327,6 +327,17 @@ export async function saveOccupancyProfileSection(
   }
 }
 
+export async function saveChangedOccupancyProfileSections(
+  occupancyId: string,
+  buildingId: string,
+  sections: ResidentDetailSection[],
+  details: ResidentProfileDetails
+): Promise<void> {
+  for (const section of sections) {
+    await saveOccupancyProfileSection(occupancyId, buildingId, section, details[section]);
+  }
+}
+
 export async function saveOccupancyProfileDetails(
   occupancyId: string,
   buildingId: string,

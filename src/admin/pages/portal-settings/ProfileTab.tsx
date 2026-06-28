@@ -6,6 +6,7 @@ import type { ProfileCompletionPolicy, ProfileFieldOption, UnitsUsersResidentTyp
 import { getFieldDef } from "../../../data/supabase/profileCompletionFields";
 import { SaveBar } from "../../../shared/SaveBar";
 import { useAsyncAction } from "../../../shared/useAsyncAction";
+import { changedProfileFieldOptions, profileCompletionPolicyDirty } from "../../../shared/formDirty";
 import { PortalSettingsAlert } from "./PortalSettingsAlert";
 
 const RESIDENT_TYPES: UnitsUsersResidentType[] = [
@@ -18,25 +19,48 @@ const RESIDENT_TYPES: UnitsUsersResidentType[] = [
 
 export function ProfileTab() {
   const [fields, setFields] = useState<ProfileFieldOption[]>([]);
+  const [fieldsBaseline, setFieldsBaseline] = useState<ProfileFieldOption[]>([]);
   const [policy, setPolicy] = useState<ProfileCompletionPolicy | null>(null);
+  const [policyBaseline, setPolicyBaseline] = useState<ProfileCompletionPolicy | null>(null);
   const [saved, setSaved] = useState(false);
 
   const { run: handleSave, loading: saving, error } = useAsyncAction(
     useCallback(async () => {
-      if (!policy) return;
+      if (!policy || !policyBaseline) return;
       if (policy.softLoginCount >= policy.blockLoginCount) {
         throw new Error("Soft reminder login count must be less than hard block login count.");
       }
-      await adminRepository.updateProfileCompletionPolicy(policy);
-      await adminRepository.updateProfileFieldOptions(fields);
+
+      const policyChanged = profileCompletionPolicyDirty(policyBaseline, policy);
+      const changedFields = changedProfileFieldOptions(fieldsBaseline, fields);
+
+      if (!policyChanged && changedFields.length === 0) {
+        setSaved(true);
+        return;
+      }
+
+      if (policyChanged) {
+        await adminRepository.updateProfileCompletionPolicy(policy);
+        setPolicyBaseline({ ...policy });
+      }
+      if (changedFields.length > 0) {
+        await adminRepository.updateProfileFieldOptions(fields, changedFields);
+        setFieldsBaseline(structuredClone(fields));
+      }
       setSaved(true);
-    }, [fields, policy]),
+    }, [fields, fieldsBaseline, policy, policyBaseline]),
     { successMessage: "Profile settings saved." }
   );
 
   useEffect(() => {
-    adminRepository.getProfileFieldOptions().then(setFields);
-    adminRepository.getProfileCompletionPolicy().then(setPolicy);
+    adminRepository.getProfileFieldOptions().then((loaded) => {
+      setFields(loaded);
+      setFieldsBaseline(structuredClone(loaded));
+    });
+    adminRepository.getProfileCompletionPolicy().then((loaded) => {
+      setPolicy(loaded);
+      setPolicyBaseline({ ...loaded });
+    });
   }, []);
 
   const updatePolicy = (patch: Partial<ProfileCompletionPolicy>) => {

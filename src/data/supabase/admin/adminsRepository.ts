@@ -77,27 +77,46 @@ export const adminsRepository = {
     };
   },
 
-  async updateAdminUser(updates: UpdateAdminUserInput) {
+  async updateAdminUser(updates: Partial<UpdateAdminUserInput>) {
     const {
       data: { user },
     } = await sb().auth.getUser();
     if (!user) throw new Error("Not authenticated");
-    const firstName = updates.firstName;
-    const lastName = updates.lastName;
-    await sb()
+
+    const { data: current, error: fetchError } = await sb()
       .from("profiles")
-      .update({
-        first_name: firstName,
-        last_name: lastName,
-        email: updates.email,
-        display_name: `${firstName} ${lastName}`.trim(),
-        timezone: updates.timezone,
-        tel_home: updates.telHome,
-        tel_mobile: updates.telMobile,
-        tel_business: updates.telBusiness,
-        phone: updates.telMobile ?? updates.telHome ?? "",
-      })
-      .eq("id", user.id);
+      .select("first_name, last_name, email, timezone, tel_home, tel_mobile, tel_business")
+      .eq("id", user.id)
+      .single();
+    mapDbError(fetchError);
+
+    const firstName = updates.firstName ?? (current?.first_name as string);
+    const lastName = updates.lastName ?? (current?.last_name as string);
+    const profilePayload: Record<string, unknown> = {};
+
+    if (updates.firstName !== undefined) profilePayload.first_name = updates.firstName;
+    if (updates.lastName !== undefined) profilePayload.last_name = updates.lastName;
+    if (updates.firstName !== undefined || updates.lastName !== undefined) {
+      profilePayload.display_name = `${firstName} ${lastName}`.trim();
+    }
+    if (updates.email !== undefined) profilePayload.email = updates.email;
+    if (updates.timezone !== undefined) profilePayload.timezone = updates.timezone;
+    if (updates.telHome !== undefined) profilePayload.tel_home = updates.telHome;
+    if (updates.telMobile !== undefined) {
+      profilePayload.tel_mobile = updates.telMobile;
+      profilePayload.phone = updates.telMobile ?? updates.telHome ?? "";
+    } else if (updates.telHome !== undefined) {
+      profilePayload.phone = updates.telHome ?? "";
+    }
+    if (updates.telBusiness !== undefined) profilePayload.tel_business = updates.telBusiness;
+    if (updates.avatarUrl !== undefined) profilePayload.avatar_url = updates.avatarUrl;
+
+    if (Object.keys(profilePayload).length === 0) {
+      return this.getAdminUser();
+    }
+
+    const { error } = await sb().from("profiles").update(profilePayload).eq("id", user.id);
+    mapDbError(error);
     return this.getAdminUser();
   },
 

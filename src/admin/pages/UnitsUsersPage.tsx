@@ -27,7 +27,7 @@ import {
   loadVisibleColumnKeys,
   saveVisibleColumnKeys,
 } from "../../shared/tableColumnPrefs";
-import { unitDetailDirty, userDetailDirty } from "../../shared/formDirty";
+import { unitDetailDirty, userDetailDirty, buildUserDetailSavePlan, buildUnitDetailSavePlan, userDetailSavePlanHasChanges, unitDetailSavePlanHasChanges, userDetailListFieldsChanged } from "../../shared/formDirty";
 import { CrudPanel } from "../../shared/CrudPanel";
 import { usePageBusy } from "../../shared/PageBusyProvider";
 import { runWithBusy } from "../../shared/runWithBusy";
@@ -364,13 +364,21 @@ export function UnitsUsersPage({ route, onNavigate, refreshKey }: UnitsUsersPage
 
   const { run: saveUnitDetail, loading: savingUnit } = useAsyncAction(
     useCallback(async () => {
-      if (!unitDraft) return;
+      if (!unitDraft || !unitDetailBaseline) return;
+      const plan = buildUnitDetailSavePlan(unitDetailBaseline, unitDraft);
+      if (!plan || !unitDetailSavePlanHasChanges(plan)) return;
+
       await adminRepository.updateUnitsUsersUnitDetail(unitDraft.id, {
-        parkingSpots: unitDraft.parkingSpots ?? [],
-        lockers: unitDraft.lockers ?? [],
-        bikeSpaces: unitDraft.bikeSpaces ?? [],
+        ...(plan.parkingSpotsChanged ? { parkingSpots: unitDraft.parkingSpots ?? [] } : {}),
+        ...(plan.lockersChanged ? { lockers: unitDraft.lockers ?? [] } : {}),
+        ...(plan.bikeSpacesChanged ? { bikeSpaces: unitDraft.bikeSpaces ?? [] } : {}),
         primaryOccupancyId: unitDraft.primaryOccupancyId,
-        profileDetails: unitDraft.profileDetails,
+        ...(plan.changedProfileSections.length > 0
+          ? {
+              profileDetails: unitDraft.profileDetails,
+              changedProfileSections: plan.changedProfileSections,
+            }
+          : {}),
       });
       const refreshed = await adminRepository.getUnitsUsersUnitDetail(unitDraft.id);
       if (refreshed) {
@@ -378,7 +386,7 @@ export function UnitsUsersPage({ route, onNavigate, refreshKey }: UnitsUsersPage
         setUnitDraft(cloneUnitDetail(refreshed));
         setUnitDetailBaseline(cloneUnitDetail(refreshed));
       }
-    }, [unitDraft]),
+    }, [unitDraft, unitDetailBaseline]),
     { successMessage: "Unit changes saved successfully.", onError: setActionError, showErrorToast: false }
   );
 
@@ -451,39 +459,26 @@ export function UnitsUsersPage({ route, onNavigate, refreshKey }: UnitsUsersPage
 
   const { run: saveUserDetail, loading: savingUser } = useAsyncAction(
     useCallback(async () => {
-      if (!userDraft) return;
-      if (!userDraft.email.trim()) {
+      if (!userDraft || !userDetailBaseline) return;
+      const plan = buildUserDetailSavePlan(userDetailBaseline, userDraft);
+      if (!plan || !userDetailSavePlanHasChanges(plan)) return;
+
+      const email = userDraft.email.trim();
+      if (!email) {
         throw new Error("Email is required.");
       }
-      const includePortalAccess =
-        userDetailTab === "permissions" ||
-        userDraft.canAccessResidentPortal !== undefined ||
-        userDraft.canAccessBuildingAdmin !== undefined;
 
       await adminRepository.updateUnitsUsersUserDetail(userDraft.id, {
-        firstName: userDraft.firstName,
-        lastName: userDraft.lastName,
-        email: userDraft.email,
-        timezone: userDraft.timezone,
-        type: userDraft.type,
-        buzzerCode: userDraft.buzzerCode ?? "",
-        homePhone: userDraft.homePhone ?? "",
-        mobilePhone: userDraft.mobilePhone ?? "",
-        businessPhone: userDraft.businessPhone ?? "",
-        profileDetails: userDraft.profileDetails,
-        ...(includePortalAccess
+        ...plan.scalar,
+        ...(plan.changedProfileSections.length > 0
           ? {
-              canAccessResidentPortal: userDraft.canAccessResidentPortal ?? true,
-              canAccessBuildingAdmin: userDraft.canAccessBuildingAdmin ?? false,
-              buildingAdminRoleLabel: userDraft.buildingAdminRoleLabel ?? "Resident (Admin)",
+              profileDetails: userDraft.profileDetails,
+              changedProfileSections: plan.changedProfileSections,
             }
           : {}),
       });
-      if (
-        includePortalAccess &&
-        userDraft.canAccessResidentPortal !== false &&
-        userDraft.portalModules?.length
-      ) {
+
+      if (plan.portalModulesChanged && userDraft.canAccessResidentPortal !== false && userDraft.portalModules?.length) {
         await adminRepository.saveOccupancyPortalModules(
           userDraft.id,
           userDraft.type,
@@ -491,7 +486,7 @@ export function UnitsUsersPage({ route, onNavigate, refreshKey }: UnitsUsersPage
         );
       }
       if (
-        includePortalAccess &&
+        plan.buildingAdminModulesChanged &&
         userDraft.canAccessBuildingAdmin === true &&
         userDraft.buildingAdminModules?.length
       ) {
@@ -500,6 +495,14 @@ export function UnitsUsersPage({ route, onNavigate, refreshKey }: UnitsUsersPage
           userDraft.buildingAdminModules
         );
       }
+
+      const listFieldsChanged = userDetailListFieldsChanged(userDetailBaseline, userDraft);
+      const scalarAffectsList =
+        plan.scalar.firstName !== undefined ||
+        plan.scalar.lastName !== undefined ||
+        plan.scalar.email !== undefined ||
+        plan.scalar.type !== undefined;
+
       const refreshed = await adminRepository.getUnitsUsersUserDetail(userDraft.id);
       if (refreshed) {
         setSelectedUser(refreshed);
@@ -507,8 +510,10 @@ export function UnitsUsersPage({ route, onNavigate, refreshKey }: UnitsUsersPage
         setUserDraft(cloned);
         setUserDetailBaseline(cloneUserDetail(refreshed));
       }
-      refetchLists();
-    }, [userDraft, userDetailTab, refetchLists]),
+      if (scalarAffectsList || listFieldsChanged) {
+        refetchLists();
+      }
+    }, [userDraft, userDetailBaseline, refetchLists]),
     { successMessage: "Changes saved successfully.", onError: setActionError, showErrorToast: false }
   );
 

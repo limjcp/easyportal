@@ -494,9 +494,10 @@ export const portalRepository = {
     return resolveProfileFieldOptions(data ?? []);
   },
 
-  async updateProfileFieldOptions(fields: ProfileFieldOption[]) {
+  async updateProfileFieldOptions(fields: ProfileFieldOption[], onlyFields?: ProfileFieldOption[]) {
     const buildingId = await bid();
-    for (const f of fields) {
+    const toSave = onlyFields ?? fields;
+    for (const f of toSave) {
       await sb().from("profile_field_options").upsert({
         building_id: buildingId,
         field_key: f.fieldKey,

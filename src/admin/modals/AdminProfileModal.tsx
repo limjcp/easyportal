@@ -14,6 +14,7 @@ import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { StatusBadge } from "../../shared/StatusBadge";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { buildAdminUserUpdates } from "../../shared/formDirty";
 import { useBusyWhile } from "../../shared/useBusyWhile";
 import { adminRepository } from "../data/adminRepository";
 import type {
@@ -74,11 +75,11 @@ export function AdminProfileModal({ open, onClose, onProfileSaved }: AdminProfil
 
   const { run: saveProfile, loading: saving, error } = useAsyncAction(
     useCallback(async () => {
-      if (!draft) return;
+      if (!draft || !savedUser) return;
       if (!draft.firstName.trim() || !draft.lastName.trim() || !draft.email.trim()) {
         throw new Error("First name, last name, and email are required.");
       }
-      const updated = await adminRepository.updateAdminUser({
+      const updates = buildAdminUserUpdates(savedUser, {
         firstName: draft.firstName.trim(),
         lastName: draft.lastName.trim(),
         email: draft.email.trim(),
@@ -88,11 +89,16 @@ export function AdminProfileModal({ open, onClose, onProfileSaved }: AdminProfil
         telBusiness: draft.telBusiness?.trim() ?? "",
         avatarUrl: draft.avatarUrl,
       });
+      if (Object.keys(updates).length === 0) {
+        onClose();
+        return;
+      }
+      const updated = await adminRepository.updateAdminUser(updates);
       setSavedUser(updated);
       setDraft(userToDraft(updated));
       onProfileSaved?.(updated);
       onClose();
-    }, [draft, onProfileSaved, onClose]),
+    }, [draft, savedUser, onProfileSaved, onClose]),
     { successMessage: "Profile saved." }
   );
 

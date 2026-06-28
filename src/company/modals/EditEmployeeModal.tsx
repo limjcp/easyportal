@@ -4,6 +4,7 @@ import { ConfirmModal } from "../../shared/ConfirmModal";
 import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { employeePermissionsDirty } from "../../shared/formDirty";
 import { useAuth } from "../../auth/AuthProvider";
 import { companyRepository, requiresExplicitBuildingAssignments } from "../data/companyRepository";
 import type {
@@ -104,6 +105,14 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
   const [isResident, setIsResident] = useState(false);
   const [role, setRole] = useState<CompanyRole>("Property Administrator");
   const [permissions, setPermissions] = useState<PermissionModuleRow[]>([]);
+  const [permissionsBaseline, setPermissionsBaseline] = useState<PermissionModuleRow[]>([]);
+  const [profileBaseline, setProfileBaseline] = useState<{
+    firstName: string;
+    lastName: string;
+    email: string;
+    role: CompanyRole;
+    buildingIds: string[];
+  } | null>(null);
   const [notifications, setNotifications] = useState<EmployeeNotificationRow[]>(defaultNotificationRows());
   const [buildingIds, setBuildingIds] = useState<string[]>([]);
   const [buildings, setBuildings] = useState<CompanyBuilding[]>([]);
@@ -134,23 +143,50 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
 
   const { run, loading, error, setError, clearError } = useAsyncAction(
     useCallback(async () => {
-      if (!employee) return;
+      if (!employee || !profileBaseline) return;
       if (requiresExplicitBuildingAssignments(role) && buildingIds.length === 0) {
         throw new Error("Select at least one building assignment for this role.");
       }
-      await companyRepository.updateEmployee(employee.id, {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        email: email.trim(),
-        role,
-        assignedBuildingIds: buildingIds,
-      });
-      await companyRepository.saveEmployeePermissions(employee.membershipId ?? employee.id, permissions);
+
+      const profileChanged =
+        profileBaseline.firstName !== firstName.trim() ||
+        profileBaseline.lastName !== lastName.trim() ||
+        profileBaseline.email !== email.trim() ||
+        profileBaseline.role !== role ||
+        JSON.stringify(profileBaseline.buildingIds) !== JSON.stringify(buildingIds);
+      const permissionsChanged = employeePermissionsDirty(permissionsBaseline, permissions);
+
+      if (profileChanged) {
+        await companyRepository.updateEmployee(employee.id, {
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: email.trim(),
+          role,
+          assignedBuildingIds: buildingIds,
+        });
+      }
+      if (permissionsChanged) {
+        await companyRepository.saveEmployeePermissions(employee.membershipId ?? employee.id, permissions);
+      }
       if (sendEmailLogin) {
         await companyRepository.emailEmployeeLoginDetails(employee.membershipId ?? employee.id);
       }
-      await auth.refreshAuth();
-    }, [employee, firstName, lastName, email, role, buildingIds, permissions, sendEmailLogin, auth]),
+      if (profileChanged || permissionsChanged) {
+        await auth.refreshAuth();
+      }
+    }, [
+      employee,
+      profileBaseline,
+      firstName,
+      lastName,
+      email,
+      role,
+      buildingIds,
+      permissions,
+      permissionsBaseline,
+      sendEmailLogin,
+      auth,
+    ]),
     {
       successMessage: "Employee updated.",
       onSuccess: () => {
@@ -176,10 +212,20 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
       setIsResident(false);
       setRole(employee.role);
       setBuildingIds([...employee.assignedBuildingIds]);
+      setProfileBaseline({
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        email: employee.email,
+        role: employee.role,
+        buildingIds: [...employee.assignedBuildingIds],
+      });
       setNotifications(defaultNotificationRows());
       clearError();
       companyRepository.getBuildings().then(setBuildings);
-      companyRepository.getEmployeePermissions(employee.membershipId ?? employee.id).then(setPermissions);
+      companyRepository.getEmployeePermissions(employee.membershipId ?? employee.id).then((loaded) => {
+        setPermissions(loaded);
+        setPermissionsBaseline(structuredClone(loaded));
+      });
     }
   }, [open, employee, clearError]);
 
