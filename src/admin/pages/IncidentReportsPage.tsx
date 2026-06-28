@@ -9,6 +9,7 @@ import { queryKeys } from "../../shared/queryKeys";
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { useTenantContext } from "../../shared/queries/useTenantContext";
 import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
+import { useSyncFromRefreshKey } from "../../shared/useSyncFromRefreshKey";
 import {
   OptionsDropdown,
   SeverityBadge,
@@ -16,6 +17,7 @@ import {
   UnreadBadge,
 } from "../components/AdminBadges";
 import { AdminPanelTable, AdminTabs } from "../components/AdminPanelTable";
+import { AdminMobileCard } from "../components/AdminMobileCard";
 import { adminRepository } from "../data/adminRepository";
 import { AddIncidentReportModal } from "../modals/AddIncidentReportModal";
 import { IncidentCategoryModal } from "../modals/IncidentCategoryModal";
@@ -105,9 +107,7 @@ export function IncidentReportsPage({
   const pendingContactRef = useRef<{ email: string; status: "active" | "inactive"; id?: string; isNew: boolean } | null>(null);
   const pendingCategorySubmitRef = useRef<{ name: string; status: "active" | "inactive"; id?: string; isNew: boolean } | null>(null);
 
-  const syncFromRefreshKey = useCallback(() => {
-    void refreshList();
-  }, [refreshList]);
+  useSyncFromRefreshKey(refreshKey, () => void refreshList());
 
   const handleRefresh = useCallback(async () => {
     await refreshList();
@@ -120,11 +120,6 @@ export function IncidentReportsPage({
     },
     [refreshList]
   );
-
-  useEffect(() => {
-    if (refreshKey === 0) return;
-    syncFromRefreshKey();
-  }, [refreshKey, syncFromRefreshKey]);
 
   useEffect(() => {
     setPage(1);
@@ -462,6 +457,59 @@ export function IncidentReportsPage({
               ),
             },
           ]}
+          mobileCard={(row) => (
+            <AdminMobileCard
+              title={
+                <span className={row.unread ? "font-semibold" : undefined}>
+                  Report #{row.id}
+                  {row.unread ? (
+                    <span className="ml-2 inline-block align-middle">
+                      <UnreadBadge />
+                    </span>
+                  ) : null}
+                </span>
+              }
+              subtitle={row.incidentDate}
+              badges={
+                <>
+                  <SeverityBadge severity={row.severity} />
+                  <StatusBadge status={row.status as IncidentReportStatus} />
+                </>
+              }
+              fields={[
+                { label: "User", value: row.createdBy },
+                { label: "Unit", value: row.unit ?? "—" },
+                { label: "Type", value: row.reportType },
+                { label: "Location", value: row.location || "—" },
+                { label: "Assigned", value: row.assignedToAdmin ?? "—" },
+                { label: "Pending", value: row.pendingReply ?? "N/A" },
+              ]}
+              actions={
+                <>
+                  <button
+                    type="button"
+                    onClick={() => openDetail(row)}
+                    className="flex-1 rounded bg-[#3476ef] px-3 py-2 text-sm font-medium text-white hover:bg-[#2d68cf]"
+                  >
+                    View report
+                  </button>
+                  {route.tab === "current" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        pendingIdRef.current = row.id;
+                        void archiveReportRun();
+                      }}
+                      className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      Archive
+                    </button>
+                  )}
+                </>
+              }
+              highlight={row.unread}
+            />
+          )}
         />
       )}
 

@@ -154,11 +154,12 @@ Deno.serve(async (req) => {
     }
 
     const cronSecret = Deno.env.get("CRON_SECRET")?.trim();
-    if (cronSecret) {
-      const provided = req.headers.get("x-cron-secret");
-      if (provided !== cronSecret) {
-        return jsonResponse({ error: "Unauthorized." }, 401);
-      }
+    if (!cronSecret) {
+      return jsonResponse({ error: "CRON_SECRET is not configured." }, 500);
+    }
+    const provided = req.headers.get("x-cron-secret");
+    if (provided !== cronSecret) {
+      return jsonResponse({ error: "Unauthorized." }, 401);
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {

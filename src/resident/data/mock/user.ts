@@ -9,6 +9,8 @@ export const seedUser: ResidentUser = {
   unit: "102",
   email: "claudio.owner@example.com",
   phone: "(519) 555-0102",
+  homePhone: "(519) 555-0101",
+  cellPhone: "(519) 555-0102",
   role: "Owner - Board Member",
   birthMonth: 5,
   birthDay: 31,

@@ -24,6 +24,8 @@ export const BUILDING_PERMISSION_MODULES: { moduleKey: string; label: string }[]
   { moduleKey: "company-employees", label: "Company: Employees" },
   { moduleKey: "company-subscriptions", label: "Company: Subscriptions" },
   { moduleKey: "company-master-reports", label: "Company: Master Reports" },
+  { moduleKey: "company-vendors", label: "Company: Vendors" },
+  { moduleKey: "company-purchase-orders", label: "Company: Purchase Orders" },
   { moduleKey: "consultation-leads", label: "Consultation Leads" },
   { moduleKey: "admins", label: "Admins" },
   { moduleKey: "board-approvals", label: "Board Approvals" },

@@ -54,6 +54,7 @@ export const buildingRepository = {
         property_email: updates.propertyEmail,
         accounting_email: updates.accountingEmail,
         billing_email: updates.billingEmail,
+        sparc_email: updates.sparcEmail,
         visitor_parking_overnight_email: updates.visitorParkingOvernightEmail,
         building_types: updates.buildingTypes,
         building_features: updates.buildingFeatures,
@@ -444,7 +445,7 @@ export const buildingRepository = {
 
     const { count: customerCount, error: countError } = await sb()
       .from("quickbooks_customers")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("building_id", buildingId);
     mapDbError(countError);
 

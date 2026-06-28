@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { ChatInbox } from "../../chat/components/ChatInbox";
 import { buildCompanyChatActor } from "../../chat/hooks/useChatActor";
 import { setActiveBuildingId } from "../../data/supabase/buildingContext";
@@ -11,6 +11,10 @@ type CompanyChatPageProps = {
 
 export function CompanyChatPage({ user, buildings }: CompanyChatPageProps) {
   const defaultBuildingId = buildings[0]?.id;
+  const actor = useMemo(
+    () => (defaultBuildingId ? buildCompanyChatActor(user, defaultBuildingId) : null),
+    [user, defaultBuildingId]
+  );
 
   useEffect(() => {
     if (defaultBuildingId) setActiveBuildingId(defaultBuildingId);
@@ -33,7 +37,7 @@ export function CompanyChatPage({ user, buildings }: CompanyChatPageProps) {
       <p className="mb-4 text-sm text-slate-600">
         Message residents and staff across any building in your portfolio.
       </p>
-      <ChatInbox actor={buildCompanyChatActor(user, defaultBuildingId)} showBuildingFilter />
+      {actor ? <ChatInbox actor={actor} showBuildingFilter /> : null}
     </div>
   );
 }

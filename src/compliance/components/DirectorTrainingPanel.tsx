@@ -1,4 +1,5 @@
 import type { DirectorTrainingRecord } from "../types";
+import { AdminMobileCard } from "../../admin/components/AdminMobileCard";
 
 type DirectorTrainingPanelProps = {
   records: DirectorTrainingRecord[];
@@ -26,7 +27,7 @@ export function DirectorTrainingPanel({
 
   return (
     <div className={wrapClass}>
-      <div className="border-b border-border px-6 py-4">
+      <div className="border-b border-border px-4 py-4 sm:px-6">
         <h3 className="text-lg font-semibold">Director training</h3>
         <p className="text-sm text-muted-foreground">
           {completed}/{total} directors completed ({pct}%)
@@ -35,7 +36,7 @@ export function DirectorTrainingPanel({
           <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
         </div>
       </div>
-      <div className="overflow-x-auto">
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-muted-foreground">
@@ -95,6 +96,64 @@ export function DirectorTrainingPanel({
             )}
           </tbody>
         </table>
+      </div>
+      <div className="space-y-3 p-3 md:hidden">
+        {records.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            No director training records yet.
+          </p>
+        ) : (
+          records.map((record) => (
+            <AdminMobileCard
+              key={record.id}
+              title={record.directorName}
+              badges={
+                <span
+                  className={
+                    record.status === "completed"
+                      ? "rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800"
+                      : "rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+                  }
+                >
+                  {record.status}
+                </span>
+              }
+              fields={[
+                { label: "Completed", value: record.completedAt ?? "—" },
+                { label: "Certificate", value: record.certificateId ?? "—" },
+                { label: "Hours", value: record.hours ?? "—" },
+              ]}
+              actions={
+                editable ? (
+                  <div className="flex w-full flex-col gap-2">
+                    {onToggleComplete && (
+                      <button
+                        type="button"
+                        onClick={() => onToggleComplete(record.id, record.status !== "completed")}
+                        className="w-full rounded bg-[#3476ef] px-3 py-2 text-sm font-medium text-white hover:bg-[#2d68cf]"
+                      >
+                        {record.status === "completed" ? "Mark pending" : "Mark complete"}
+                      </button>
+                    )}
+                    {onUpdateCertificate && (
+                      <label className="block w-full text-left text-xs text-slate-500">
+                        Certificate ID
+                        <input
+                          type="text"
+                          defaultValue={record.certificateId ?? ""}
+                          placeholder="Certificate ID"
+                          className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-800"
+                          onBlur={(e) => onUpdateCertificate(record.id, e.target.value)}
+                        />
+                      </label>
+                    )}
+                  </div>
+                ) : undefined
+              }
+              highlight={record.status !== "completed"}
+            />
+          ))
+        )}
       </div>
     </div>
   );

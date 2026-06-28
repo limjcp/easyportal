@@ -20,13 +20,25 @@ import {
   type PortalAccess,
   updateLastLogin,
 } from "./supabaseAuth";
-import { ensureActiveBuildingForUser, setActiveBuildingId, setActiveCompanyId } from "../data/supabase/buildingContext";
+import {
+  ensureActiveBuildingForUser,
+  getActiveBuildingId,
+  setActiveBuildingId,
+  setActiveCompanyId,
+} from "../data/supabase/buildingContext";
+import { maybeIncrementProfileCompletionLogin } from "../data/supabase/profileCompletion";
 import { clearAllQueries, invalidateAuthQueries, invalidateCompanyQueries } from "../shared/queryInvalidation";
 
 type Profile = Awaited<ReturnType<typeof fetchProfile>>;
 
 type RefreshAuthOptions = {
   showLoading?: boolean;
+  /** Skip React Query invalidation (background token refresh / duplicate session events). */
+  skipQueryInvalidation?: boolean;
+  /** Re-resolve auth after any in-flight refresh completes (e.g. after required password change). */
+  force?: boolean;
+  /** Count profile-completion login on explicit sign-in (SIGNED_IN), not session restore. */
+  incrementProfileCompletionLogin?: boolean;
 };
 
 type AuthContextValue = {
@@ -64,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [activePortal, setActivePortal] = useState<LoginPortalRole | null>(null);
   const refreshInFlight = useRef<Promise<void> | null>(null);
   const hasInitialized = useRef(false);
+  const lastInvalidatedCompany = useRef<{ userId: string; companyId: string } | null>(null);
 
   const refreshAuth = useCallback(async (options?: RefreshAuthOptions) => {
     if (!supabase) {
@@ -74,10 +87,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (refreshInFlight.current) {
       await refreshInFlight.current;
-      return;
+      if (!options?.force) return;
     }
 
     const showLoading = options?.showLoading ?? false;
+    const skipQueryInvalidation = options?.skipQueryInvalidation ?? false;
 
     const run = async () => {
       if (showLoading) setLoading(true);
@@ -89,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setActivePortal(null);
         setActiveBuildingId(null);
         setActiveCompanyId(null);
+        lastInvalidatedCompany.current = null;
         if (showLoading) setLoading(false);
         setInitializing(false);
         hasInitialized.current = true;
@@ -96,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const p = await fetchProfile(currentSession.user.id);
       setProfile(p);
-      const access = await resolvePortalAccess(currentSession.user.id);
+      const access = await resolvePortalAccess(currentSession.user.id, p);
       setPortalAccess(access);
       let companyId = access.companyId;
       if (access.isSuperAdmin && !companyId) {
@@ -104,7 +119,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         companyId = companies?.[0]?.id ?? null;
       }
       setActiveCompanyId(companyId);
-      if (access.buildingIds[0]) {
+      const preservedBuildingId = getActiveBuildingId();
+      if (
+        preservedBuildingId &&
+        (access.isSuperAdmin || access.buildingIds.includes(preservedBuildingId))
+      ) {
+        setActiveBuildingId(preservedBuildingId);
+      } else if (access.buildingIds[0]) {
         setActiveBuildingId(access.buildingIds[0]);
       } else {
         setActiveBuildingId(null);
@@ -118,9 +139,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setActivePortal((prev) => prev ?? access.defaultPortal);
       void updateLastLogin(currentSession.user.id);
-      invalidateAuthQueries();
-      if (access.companyId) {
-        invalidateCompanyQueries(currentSession.user.id, access.companyId);
+      if (options?.incrementProfileCompletionLogin && access.portals.includes("resident")) {
+        try {
+          await maybeIncrementProfileCompletionLogin(currentSession.user.id);
+        } catch {
+          // Profile completion tracking is best-effort; do not block sign-in.
+        }
+      }
+      if (!skipQueryInvalidation) {
+        invalidateAuthQueries();
+        if (access.companyId) {
+          const userId = currentSession.user.id;
+          const prev = lastInvalidatedCompany.current;
+          if (!prev || prev.userId !== userId || prev.companyId !== access.companyId) {
+            invalidateCompanyQueries(userId, access.companyId);
+            lastInvalidatedCompany.current = { userId, companyId: access.companyId };
+          }
+        }
       }
       if (showLoading) setLoading(false);
       setInitializing(false);
@@ -141,9 +176,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     void refreshAuth({ showLoading: true });
-    const { data: sub } = onAuthStateChange((event) => {
+    const { data: sub } = onAuthStateChange((event, session) => {
+      if (event === "TOKEN_REFRESHED" && hasInitialized.current) {
+        setSession(session);
+        return;
+      }
       const background = isBackgroundAuthEvent(event, hasInitialized.current);
-      void refreshAuth({ showLoading: !background });
+      void refreshAuth({
+        showLoading: !background,
+        skipQueryInvalidation: background,
+        incrementProfileCompletionLogin: event === "SIGNED_IN",
+      });
     });
     return () => sub.subscription.unsubscribe();
   }, [refreshAuth]);
@@ -151,6 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
     clearAllQueries();
+    lastInvalidatedCompany.current = null;
     setSession(null);
     setProfile(null);
     setPortalAccess(null);

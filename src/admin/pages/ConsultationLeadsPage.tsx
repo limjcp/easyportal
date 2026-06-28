@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { AdminPanelTable } from "../components/AdminPanelTable";
+import { AdminMobileCard } from "../components/AdminMobileCard";
+import { UnreadBadge } from "../components/AdminBadges";
 import { AdminPageActions } from "../components/AdminPageActions";
 import { adminRepository } from "../data/adminRepository";
 import type { AdminRoute } from "../navigation";
@@ -112,6 +114,39 @@ export function ConsultationLeadsPage({
             render: (row) => formatSurveyValue(row.survey.consideringManagementChange),
           },
         ]}
+        mobileCard={(row) => (
+          <AdminMobileCard
+            title={
+              <span className="flex items-center gap-2">
+                {row.name}
+                {row.unread ? <UnreadBadge /> : null}
+              </span>
+            }
+            subtitle={new Date(row.submittedAt).toLocaleString()}
+            fields={[
+              { label: "Email", value: row.email },
+              { label: "Phone", value: row.phone || "—" },
+              { label: "Condo type", value: formatSurveyValue(row.survey.condoType) },
+              { label: "Units", value: formatSurveyValue(row.survey.unitCount) },
+              { label: "Role", value: formatSurveyValue(row.survey.yourRole) },
+              { label: "Region", value: formatSurveyValue(row.survey.region) },
+              { label: "Health", value: formatSurveyValue(row.survey.condoHealth) },
+              {
+                label: "Management",
+                value: formatSurveyValue(row.survey.managementExperience),
+              },
+              {
+                label: "Top concern",
+                value: formatSurveyValue(row.survey.topConcern ?? row.survey.currentPainPoint),
+              },
+              {
+                label: "Change intent",
+                value: formatSurveyValue(row.survey.consideringManagementChange),
+              },
+            ]}
+            highlight={row.unread}
+          />
+        )}
       />
     </>
   );

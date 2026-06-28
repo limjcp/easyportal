@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "re
 import { useAuth } from "../auth/AuthProvider";
 import { LoginPage } from "../auth/LoginPage";
 import { ChangePasswordPage } from "../auth/ChangePasswordPage";
+import { CompleteProfilePage } from "../auth/CompleteProfilePage";
 import { QboConnectedPage } from "../auth/QboConnectedPage";
 import { profileMustChangePassword } from "../auth/supabaseAuth";
 import { resolvePortalForUser } from "../auth/portalNavigation";
@@ -12,7 +13,6 @@ import { CompanyPortal } from "../company/CompanyPortal";
 import { VendorPortal } from "../vendor/VendorPortal";
 import { MarketingPortal } from "../marketing/MarketingPortal";
 import { ThemePreviewPage } from "../prototype/ThemePreviewPage";
-import { SupportBubble } from "../shared/SupportBubble";
 import { MvpCondosChatbot } from "../shared/MvpCondosChatbot";
 import type { LoginPortalRole } from "../resident/data/types";
 import type { CompanyBuilding } from "../resident/data/types";
@@ -27,7 +27,12 @@ import {
 } from "./adminRoutePaths";
 import { isCompanyPortalPath } from "./companyRoutePaths";
 import { setActiveBuildingId, setActiveCompanyId, getActiveBuildingId } from "../data/supabase/buildingContext";
+import {
+  profileCompletionBlocksPortal,
+  type ProfileCompletionStatus,
+} from "../data/supabase/profileCompletion";
 import { companyRepository } from "../company/data/companyRepository";
+import { residentRepo } from "../resident/data/mockRepository";
 import { useAccessibleBuildings } from "../shared/queries/companyQueries";
 import { removeBuildingQueries } from "../shared/queryInvalidation";
 
@@ -53,6 +58,37 @@ function RequirePasswordChanged({ children }: { children: React.ReactNode }) {
   return children;
 }
 
+function RequireProfileComplete({ children }: { children: React.ReactNode }) {
+  const [status, setStatus] = useState<ProfileCompletionStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchFailed, setFetchFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    residentRepo
+      .getProfileCompletionStatus()
+      .then((nextStatus) => {
+        if (!cancelled) setStatus(nextStatus);
+      })
+      .catch(() => {
+        if (!cancelled) setFetchFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) return <LoadingScreen />;
+  if (fetchFailed) return <Navigate to="/complete-profile" replace />;
+  if (status && profileCompletionBlocksPortal(status)) {
+    return <Navigate to="/complete-profile" replace />;
+  }
+  return children;
+}
+
 function GuestOnly({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
   const mustChange = profileMustChangePassword(auth.profile);
@@ -74,15 +110,10 @@ function resolvePostLoginPath(auth: ReturnType<typeof useAuth>): string {
 }
 
 function PortalChrome({ children }: { children: React.ReactNode }) {
-  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
   return (
     <>
       {children}
-      <MvpCondosChatbot open={isChatbotOpen} onClose={() => setIsChatbotOpen(false)} />
-      <SupportBubble
-        open={isChatbotOpen}
-        onToggle={() => setIsChatbotOpen((isOpen) => !isOpen)}
-      />
+      <MvpCondosChatbot />
     </>
   );
 }
@@ -138,6 +169,86 @@ function ChangePasswordRoute() {
 
   return (
     <ChangePasswordPage
+      pendingPortal={pendingPortal}
+      onComplete={(portal) => {
+        auth.setActivePortal(portal);
+        const buildingId = getActiveBuildingId() ?? auth.portalAccess?.buildingIds[0] ?? null;
+        navigate(portalDefaultPath(portal, buildingId));
+      }}
+      onSignOut={() => void handleLogout()}
+    />
+  );
+}
+
+function ProfileVerificationErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-4 text-center">
+      <p className="text-sm text-red-600">{message}</p>
+      <button
+        type="button"
+        className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white"
+        onClick={onRetry}
+      >
+        Retry
+      </button>
+    </div>
+  );
+}
+
+function CompleteProfileRoute() {
+  const auth = useAuth();
+  const navigate = useNavigate();
+  const [status, setStatus] = useState<ProfileCompletionStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const pendingPortal =
+    auth.activePortal ?? auth.portalAccess?.defaultPortal ?? ("resident" as LoginPortalRole);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFetchError(null);
+    setLoading(true);
+    residentRepo
+      .getProfileCompletionStatus()
+      .then((nextStatus) => {
+        if (!cancelled) setStatus(nextStatus);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFetchError("Unable to verify profile status.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  if (!auth.session) return <Navigate to="/login" replace />;
+  if (profileMustChangePassword(auth.profile)) return <Navigate to="/change-password" replace />;
+  if (loading) return <LoadingScreen />;
+  if (fetchError) {
+    return (
+      <ProfileVerificationErrorScreen
+        message={fetchError}
+        onRetry={() => setReloadKey((key) => key + 1)}
+      />
+    );
+  }
+  if (status?.phase === "none") return <Navigate to={resolvePostLoginPath(auth)} replace />;
+
+  const handleLogout = async () => {
+    setActiveBuildingId(null);
+    setActiveCompanyId(null);
+    await auth.signOut();
+    navigate("/login");
+  };
+
+  return (
+    <CompleteProfilePage
       pendingPortal={pendingPortal}
       onComplete={(portal) => {
         auth.setActivePortal(portal);
@@ -456,6 +567,7 @@ export function PortalRoutes() {
       <Routes>
         <Route path="/login" element={<GuestOnly><LoginRoute /></GuestOnly>} />
         <Route path="/change-password" element={<ChangePasswordRoute />} />
+        <Route path="/complete-profile" element={<CompleteProfileRoute />} />
         <Route
           path="/company"
           element={
@@ -501,7 +613,9 @@ export function PortalRoutes() {
           element={
             <RequireSession>
               <RequirePasswordChanged>
-                <ResidentRoute />
+                <RequireProfileComplete>
+                  <ResidentRoute />
+                </RequireProfileComplete>
               </RequirePasswordChanged>
             </RequireSession>
           }

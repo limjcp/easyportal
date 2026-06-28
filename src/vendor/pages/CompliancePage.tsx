@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { VendorComplianceUploadCard } from "../../shared/components/VendorComplianceUploadCard";
 import { vendorRepository } from "../data/vendorRepository";
 import type { Vendor, VendorComplianceSummary } from "../../resident/data/types";
@@ -10,10 +11,21 @@ type CompliancePageProps = {
 export function CompliancePage({ onRefresh }: CompliancePageProps) {
   const [vendor, setVendor] = useState<Vendor | null>(null);
   const [summary, setSummary] = useState<VendorComplianceSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    vendorRepository.getVendor().then(setVendor);
-    vendorRepository.getComplianceSummary().then(setSummary);
+    setLoadError(null);
+    setLoading(true);
+    Promise.all([vendorRepository.getVendor(), vendorRepository.getComplianceSummary()])
+      .then(([nextVendor, nextSummary]) => {
+        setVendor(nextVendor);
+        setSummary(nextSummary);
+      })
+      .catch((err: unknown) => {
+        setLoadError(err instanceof Error ? err.message : "Unable to load compliance.");
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -25,13 +37,14 @@ export function CompliancePage({ onRefresh }: CompliancePageProps) {
     onRefresh();
   };
 
-  if (!vendor || !summary) {
-    return <p className="text-sm text-slate-600">Loading compliance…</p>;
+  if (loadError) {
+    return <p className="text-sm text-red-600">{loadError}</p>;
   }
 
-  const wsibRequired = vendor.wsibRequired ?? true;
+  const wsibRequired = vendor?.wsibRequired ?? true;
 
   return (
+    <CrudPanel loading={loading}>
     <div>
       <div className="mb-4 rounded bg-[#0d9488] px-4 py-2 text-sm font-semibold text-white">
         Insurance &amp; WSIB Compliance
@@ -45,9 +58,9 @@ export function CompliancePage({ onRefresh }: CompliancePageProps) {
         <VendorComplianceUploadCard
           title="Insurance certificate"
           documentType="insurance"
-          vendorId={vendor.id}
-          status={summary.insuranceStatus}
-          currentDocument={summary.insuranceDocument}
+          vendorId={vendor!.id}
+          status={summary!.insuranceStatus}
+          currentDocument={summary!.insuranceDocument}
           showInsuranceFields
           onUpload={(type, file, input) => vendorRepository.uploadComplianceDocument(type, file, input)}
           onDownload={(id) => vendorRepository.getComplianceDocumentUrl(id)}
@@ -58,9 +71,9 @@ export function CompliancePage({ onRefresh }: CompliancePageProps) {
           <VendorComplianceUploadCard
             title="WSIB clearance"
             documentType="wsib"
-            vendorId={vendor.id}
-            status={summary.wsibStatus}
-            currentDocument={summary.wsibDocument}
+            vendorId={vendor!.id}
+            status={summary!.wsibStatus}
+            currentDocument={summary!.wsibDocument}
             onUpload={(type, file, input) =>
               vendorRepository.uploadComplianceDocument(type, file, input)
             }
@@ -75,5 +88,6 @@ export function CompliancePage({ onRefresh }: CompliancePageProps) {
         )}
       </div>
     </div>
+    </CrudPanel>
   );
 }

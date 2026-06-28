@@ -7,11 +7,16 @@ import { SectionHeader } from "../../shared/SectionHeader";
 import { FileUploadZone } from "../../shared/FileUploadZone";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { validateAttachmentFile } from "../../shared/attachmentUtils";
+import {
+  DEFAULT_RESIDENT_INCIDENT_VISIBILITY,
+  INCIDENT_SEVERITY_OPTIONS,
+  mergeIncidentCategoryOptions,
+  mergeIncidentLocationOptions,
+  OTHER_OPTION,
+  resolveIncidentReportLocation,
+} from "../../shared/incidentReportPresets";
 import type { CreateIncidentReportInput } from "../data/types";
 import { residentRepo } from "../data/mockRepository";
-
-const DEFAULT_VISIBILITY = "All users in this unit can see this report";
-const LOCATION_OPTIONS = ["Common Area", "Parking"];
 
 type IncidentReportModalProps = {
   open: boolean;
@@ -25,8 +30,9 @@ const initialFormState = () => ({
   severity: "",
   reportType: "",
   customReportType: "",
-  visibility: DEFAULT_VISIBILITY,
+  visibility: DEFAULT_RESIDENT_INCIDENT_VISIBILITY,
   location: "",
+  customLocation: "",
   description: "",
   uploadSlots: [1, 2, 3] as number[],
 });
@@ -34,7 +40,9 @@ const initialFormState = () => ({
 export function IncidentReportModal({ open, onClose, onSubmit }: IncidentReportModalProps) {
   const [form, setForm] = useState(initialFormState);
   const [slotFiles, setSlotFiles] = useState<Record<number, File>>({});
-  const [reportTypeOptions, setReportTypeOptions] = useState<string[]>([]);
+  const [dbCategoryNames, setDbCategoryNames] = useState<string[]>([]);
+  const [buildingCommonAreas, setBuildingCommonAreas] = useState<string[]>([]);
+  const [defaultUnitLocation, setDefaultUnitLocation] = useState("");
 
   const {
     incidentDate,
@@ -44,6 +52,7 @@ export function IncidentReportModal({ open, onClose, onSubmit }: IncidentReportM
     customReportType,
     visibility,
     location,
+    customLocation,
     description,
     uploadSlots,
   } = form;
@@ -52,42 +61,56 @@ export function IncidentReportModal({ open, onClose, onSubmit }: IncidentReportM
     if (!open) {
       setForm(initialFormState());
       setSlotFiles({});
+      setDbCategoryNames([]);
+      setBuildingCommonAreas([]);
+      setDefaultUnitLocation("");
       return;
     }
 
     residentRepo.getUser().then((user) => {
       const defaultLocation =
         user.unit && user.name ? `${user.name} - ${user.unit}` : user.unit || user.name || "";
-      setForm((current) => ({
+      setDefaultUnitLocation(defaultLocation);
+      setForm({
         ...initialFormState(),
         location: defaultLocation,
-        visibility: DEFAULT_VISIBILITY,
-      }));
+        visibility: DEFAULT_RESIDENT_INCIDENT_VISIBILITY,
+      });
     });
 
     residentRepo.getIncidentCategories().then((categories) => {
-      const names = categories.map((category) => category.name);
-      const withOther = names.some((name) => name === "Other") ? names : [...names, "Other"];
-      setReportTypeOptions(withOther);
+      setDbCategoryNames(categories.map((category) => category.name));
     });
+
+    residentRepo.getBuildingCommonAreas().then(setBuildingCommonAreas);
   }, [open]);
 
   useEffect(() => {
-    if (reportType !== "Other") {
+    if (reportType !== OTHER_OPTION) {
       setForm((current) => ({ ...current, customReportType: "" }));
     }
   }, [reportType]);
 
-  const incidentTypeOptions = useMemo(() => ["", ...reportTypeOptions], [reportTypeOptions]);
-
-  const locationOptions = useMemo(() => {
-    const options = location ? [location, ...LOCATION_OPTIONS] : LOCATION_OPTIONS;
-    return Array.from(new Set(options));
+  useEffect(() => {
+    if (location !== OTHER_OPTION) {
+      setForm((current) => ({ ...current, customLocation: "" }));
+    }
   }, [location]);
+
+  const incidentTypeOptions = useMemo(
+    () => ["", ...mergeIncidentCategoryOptions(dbCategoryNames)],
+    [dbCategoryNames]
+  );
+
+  const locationOptions = useMemo(
+    () => ["", ...mergeIncidentLocationOptions(buildingCommonAreas, defaultUnitLocation || undefined)],
+    [buildingCommonAreas, defaultUnitLocation]
+  );
 
   const { run: submitReport, loading: submitting, error, clearError, setError } = useAsyncAction(
     useCallback(async () => {
-      const resolvedType = reportType === "Other" ? customReportType.trim() : reportType;
+      const resolvedType = reportType === OTHER_OPTION ? customReportType.trim() : reportType;
+      const resolvedLocation = resolveIncidentReportLocation(location, customLocation);
       const files = Object.values(slotFiles);
       await onSubmit({
         incidentDate,
@@ -95,12 +118,13 @@ export function IncidentReportModal({ open, onClose, onSubmit }: IncidentReportM
         severity,
         reportType: resolvedType,
         visibility,
-        location,
+        location: resolvedLocation,
         description,
         files: files.length ? files : undefined,
       });
       onClose();
     }, [
+      customLocation,
       customReportType,
       description,
       incidentDate,
@@ -121,11 +145,12 @@ export function IncidentReportModal({ open, onClose, onSubmit }: IncidentReportM
 
   const handleSubmit = async () => {
     clearError();
-    if (!incidentDate || !incidentTime || !severity || !reportType || !description) {
+    const resolvedLocation = resolveIncidentReportLocation(location, customLocation);
+    const resolvedType = reportType === OTHER_OPTION ? customReportType.trim() : reportType;
+    if (!incidentDate || !incidentTime || !severity || !reportType || !resolvedLocation || !description) {
       setError("Please fill in all required fields.");
       return;
     }
-    const resolvedType = reportType === "Other" ? customReportType.trim() : reportType;
     if (!resolvedType) {
       setError("Please enter a custom incident type.");
       return;
@@ -166,13 +191,23 @@ export function IncidentReportModal({ open, onClose, onSubmit }: IncidentReportM
       <SectionHeader title="Incident Report Details" />
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <Field label="Incident Date *" type="date" value={incidentDate} onChange={(value) => setForm((current) => ({ ...current, incidentDate: value }))} />
-        <Field label="Incident Time *" type="time" value={incidentTime} onChange={(value) => setForm((current) => ({ ...current, incidentTime: value }))} />
-        <Select label="Severity *" value={severity} onChange={(value) => setForm((current) => ({ ...current, severity: value }))} options={["", "Low", "Medium", "High"]} />
+        <TimeField label="Incident Time *" value={incidentTime} onChange={(value) => setForm((current) => ({ ...current, incidentTime: value }))} />
+        <Select label="Severity *" value={severity} onChange={(value) => setForm((current) => ({ ...current, severity: value }))} options={[...INCIDENT_SEVERITY_OPTIONS]} />
         <Select label="Incident Report Type *" value={reportType} onChange={(value) => setForm((current) => ({ ...current, reportType: value }))} options={incidentTypeOptions} />
-        <Select label="Who can view this report? *" value={visibility} onChange={(value) => setForm((current) => ({ ...current, visibility: value }))} options={[DEFAULT_VISIBILITY]} />
+        <Select label="Who can view this report? *" value={visibility} onChange={(value) => setForm((current) => ({ ...current, visibility: value }))} options={[DEFAULT_RESIDENT_INCIDENT_VISIBILITY]} />
         <Select label="Location *" value={location} onChange={(value) => setForm((current) => ({ ...current, location: value }))} options={locationOptions} />
       </div>
-      {reportType === "Other" && (
+      {location === OTHER_OPTION && (
+        <div className="mt-3">
+          <Field
+            label="Custom Location *"
+            type="text"
+            value={customLocation}
+            onChange={(value) => setForm((current) => ({ ...current, customLocation: value }))}
+          />
+        </div>
+      )}
+      {reportType === OTHER_OPTION && (
         <div className="mt-3">
           <Field
             label="Custom Incident Type *"
@@ -249,6 +284,21 @@ function Field({ label, type, value, onChange }: { label: string; type: string; 
     <div>
       <label className="text-sm font-medium text-slate-700">{label}</label>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm text-black" />
+    </div>
+  );
+}
+
+function TimeField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="text-sm font-medium text-slate-700">{label}</label>
+      <input
+        type="time"
+        step={60}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm text-black"
+      />
     </div>
   );
 }

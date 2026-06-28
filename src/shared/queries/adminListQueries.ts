@@ -3,7 +3,7 @@ import { adminRepository } from "../../admin/data/adminRepository";
 import { queryKeys } from "../queryKeys";
 import { useTenantContext } from "./useTenantContext";
 
-const LIST_STALE = 60_000;
+const LIST_STALE = 120_000;
 
 export function useAdminServiceRequests(tab: string, archived = false) {
   const { userId, buildingId, isBuildingReady } = useTenantContext();

@@ -4,6 +4,7 @@ import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
 import { StatusBadge } from "../../shared/StatusBadge";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { usePortalConfig } from "../context/PortalConfigContext";
 import { residentRepo } from "../data/mockRepository";
 import type { EmailRecord, NotificationPreference, ResidentUser } from "../data/types";
 
@@ -15,6 +16,7 @@ type ProfileModalProps = {
 };
 
 export function ProfileModal({ open, onClose }: ProfileModalProps) {
+  const { profileFieldOptions } = usePortalConfig();
   const [tab, setTab] = useState<Tab>("profile");
   const [user, setUser] = useState<ResidentUser | null>(null);
   const [prefs, setPrefs] = useState<NotificationPreference[]>([]);
@@ -88,7 +90,15 @@ export function ProfileModal({ open, onClose }: ProfileModalProps) {
               {user.buildingAddress ? <Field label="Address" value={user.buildingAddress} /> : null}
               <Field label="Unit" value={user.unit || "Pending assignment"} />
               <Field label="Email" value={user.email} />
-              <Field label="Phone" value={user.phone} />
+              {isProfileFieldShown(profileFieldOptions, "cellPhone") ? (
+                <Field label="Mobile Phone" value={formatProfileValue(user.cellPhone ?? user.phone)} />
+              ) : null}
+              {isProfileFieldShown(profileFieldOptions, "homePhone") ? (
+                <Field label="Home Phone" value={formatProfileValue(user.homePhone)} />
+              ) : null}
+              {isProfileFieldShown(profileFieldOptions, "workPhone") ? (
+                <Field label="Business Phone" value={formatProfileValue(user.workPhone)} />
+              ) : null}
               <Field label="Role" value={user.role} />
               <Field
                 label="Birthday"
@@ -186,8 +196,20 @@ export function ProfileModal({ open, onClose }: ProfileModalProps) {
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-4">
-      <span className="w-24 font-medium text-slate-500">{label}</span>
+      <span className="w-28 shrink-0 font-medium text-slate-500">{label}</span>
       <span className="text-slate-800">{value}</span>
     </div>
   );
+}
+
+function formatProfileValue(value?: string) {
+  return value?.trim() ? value.trim() : "Not provided";
+}
+
+function isProfileFieldShown(
+  options: { fieldKey: string; show: boolean }[],
+  fieldKey: string
+) {
+  const option = options.find((f) => f.fieldKey === fieldKey);
+  return option?.show ?? true;
 }

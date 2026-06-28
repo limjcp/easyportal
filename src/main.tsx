@@ -7,14 +7,16 @@ import App from "./App";
 import { AuthProvider } from "./auth/AuthProvider";
 import { queryClient } from "./shared/queryClient";
 
+const app = (
+  <BrowserRouter>
+    <AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </AuthProvider>
+  </BrowserRouter>
+);
+
 createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-        <QueryClientProvider client={queryClient}>
-          <App />
-        </QueryClientProvider>
-      </AuthProvider>
-    </BrowserRouter>
-  </StrictMode>
+  import.meta.env.DEV ? <StrictMode>{app}</StrictMode> : app
 );

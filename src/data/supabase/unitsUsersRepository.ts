@@ -11,6 +11,7 @@ import type {
 } from "../../resident/data/types";
 import { mapDbError, nowIso, sb, todayIsoDate } from "./base";
 import { buildingIdOrThrow } from "./base";
+import { OCCUPANCY_LIST_WITH_UNIT } from "./queryColumns";
 import { invokeSendPortalEmail } from "./sendPortalEmail";
 import {
   aggregateOccupancyProfiles,
@@ -180,13 +181,13 @@ async function syncBuildingMembershipForOccupancy(
 export async function refreshBuildingCounts(buildingId: string): Promise<void> {
   const { count: unitsCount, error: unitsError } = await sb()
     .from("units")
-    .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
     .eq("building_id", buildingId);
   mapDbError(unitsError);
 
   const { count: usersCount, error: usersError } = await sb()
     .from("unit_occupancies")
-    .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
     .eq("building_id", buildingId)
     .is("archived_at", null)
     .not("account_status", "in", '("Archived","Deleted")');
@@ -194,7 +195,7 @@ export async function refreshBuildingCounts(buildingId: string): Promise<void> {
 
   const { count: adminsCount, error: adminsError } = await sb()
     .from("building_memberships")
-    .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
     .eq("building_id", buildingId)
     .eq("status", "active");
   mapDbError(adminsError);
@@ -274,7 +275,7 @@ export const unitsUsersRepository = {
     const buildingId = await bid();
     const { data, error } = await sb()
       .from("unit_occupancies")
-      .select("*, units(label)")
+      .select(OCCUPANCY_LIST_WITH_UNIT)
       .eq("building_id", buildingId)
       .is("archived_at", null);
     mapDbError(error);
@@ -291,7 +292,7 @@ export const unitsUsersRepository = {
     const buildingId = await bid();
     const { data, error } = await sb()
       .from("unit_occupancies")
-      .select("*, units(label)")
+      .select(OCCUPANCY_LIST_WITH_UNIT)
       .eq("building_id", buildingId)
       .is("archived_at", null)
       .in("account_status", ["Awaiting Activation", "Pending Unit Assignment"]);
@@ -328,7 +329,7 @@ export const unitsUsersRepository = {
     const buildingId = await bid();
     const { data, error } = await sb()
       .from("unit_occupancies")
-      .select("*, units(label)")
+      .select(OCCUPANCY_LIST_WITH_UNIT)
       .eq("building_id", buildingId)
       .in("account_status", ["Archived", "Deleted"]);
     mapDbError(error);
@@ -383,7 +384,7 @@ export const unitsUsersRepository = {
 
     const { count: srCount } = await sb()
       .from("service_requests")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("building_id", buildingId)
       .eq("unit", unit.label);
 
@@ -510,13 +511,11 @@ export const unitsUsersRepository = {
     email: string;
     type: UnitsUsersResidentType;
     unitId?: string;
-    password: string;
   }): Promise<{ id: string }> {
     const buildingId = await bid();
     const result = await provisionUser({
       kind: "resident",
       email: input.email.trim(),
-      password: input.password,
       firstName: input.firstName.trim(),
       lastName: input.lastName.trim(),
       buildingId,
@@ -527,6 +526,10 @@ export const unitsUsersRepository = {
     if (!result.membershipId) {
       throw new Error("Failed to create resident record.");
     }
+    await invokeSendPortalEmail({
+      type: "occupancy_login_details",
+      occupancyId: result.membershipId,
+    });
     return { id: result.membershipId };
   },
 
@@ -588,7 +591,7 @@ export const unitsUsersRepository = {
     if (occ?.unit_id) {
       const { count } = await sb()
         .from("unit_occupancies")
-        .select("*", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true })
         .eq("unit_id", occ.unit_id)
         .is("archived_at", null);
       if ((count ?? 0) === 0) {
@@ -777,7 +780,7 @@ export const unitsUsersRepository = {
     if (occ?.unit_id) {
       const { count } = await sb()
         .from("unit_occupancies")
-        .select("*", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true })
         .eq("unit_id", occ.unit_id)
         .is("archived_at", null);
       if ((count ?? 0) === 0) {

@@ -21,22 +21,19 @@ export function AddBuildingAdminModal({ open, onClose, onCreated }: AddBuildingA
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [passwordConfirm, setPasswordConfirm] = useState("");
 
-  const { run: submitAdmin, loading: saving, error, setError, clearError } = useAsyncAction(
+  const { run: submitAdmin, loading: saving, error, clearError } = useAsyncAction(
     useCallback(async () => {
       const created = await adminRepository.createBuildingAdmin({
         role,
         firstName,
         lastName,
         email,
-        password,
       });
       onCreated(created);
       onClose();
-    }, [role, firstName, lastName, email, password, onCreated, onClose]),
-    { successMessage: "Building admin created.", showErrorToast: false }
+    }, [role, firstName, lastName, email, onCreated, onClose]),
+    { successMessage: "Building admin created. Login details emailed.", showErrorToast: false }
   );
 
   useEffect(() => {
@@ -45,21 +42,11 @@ export function AddBuildingAdminModal({ open, onClose, onCreated }: AddBuildingA
     setFirstName("");
     setLastName("");
     setEmail("");
-    setPassword("");
-    setPasswordConfirm("");
     clearError();
   }, [open, clearError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
-    if (password !== passwordConfirm) {
-      setError("Passwords do not match.");
-      return;
-    }
     clearError();
     await submitAdmin();
   };
@@ -153,34 +140,10 @@ export function AddBuildingAdminModal({ open, onClose, onCreated }: AddBuildingA
             className={inputClass}
           />
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className="text-sm font-medium text-slate-700">
-              Password <span className="text-red-600">*</span>
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="new-password"
-              className={inputClass}
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700">
-              Confirm Password <span className="text-red-600">*</span>
-            </label>
-            <input
-              type="password"
-              value={passwordConfirm}
-              onChange={(e) => setPasswordConfirm(e.target.value)}
-              required
-              autoComplete="new-password"
-              className={inputClass}
-            />
-          </div>
-        </div>
+        <p className="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+          A temporary password will be emailed to this address. They must choose a new password on
+          first sign-in.
+        </p>
       </form>
     </Modal>
   );

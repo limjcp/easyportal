@@ -3,7 +3,7 @@ import { residentRepo } from "../../resident/data/mockRepository";
 import { queryKeys } from "../queryKeys";
 import { useTenantContext } from "./useTenantContext";
 
-const LIST_STALE = 60_000;
+const LIST_STALE = 120_000;
 
 export function useResidentServiceRequests() {
   const { userId, buildingId, isBuildingReady } = useTenantContext();

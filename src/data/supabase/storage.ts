@@ -112,8 +112,8 @@ export async function removeGalleryPhoto(storagePath: string | null | undefined)
   if (error) throw new Error(error.message);
 }
 
-export function validateVendorDocumentFile(file: File): string | null {
-  if (!file.name.trim()) return "A file is required.";
+export function validateVendorDocumentFile(file: File | null | undefined): string | null {
+  if (!file?.name?.trim()) return "A file is required.";
   if (file.size > MAX_VENDOR_DOCUMENT_BYTES) return "Document must be 50MB or smaller.";
   const allowed =
     file.type === "application/pdf" ||

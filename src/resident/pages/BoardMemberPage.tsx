@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { FaUserCircle } from "react-icons/fa";
 import { ActionButton } from "../../shared/ActionButton";
+import { AdminMobileCard } from "../../admin/components/AdminMobileCard";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
@@ -84,7 +85,7 @@ export function BoardMemberPage() {
 
       <div className="rounded-sm bg-white/95 p-4 shadow-lg sm:p-6">
         <h2 className="mb-4 text-lg font-semibold text-slate-800">Current Board Members</h2>
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full min-w-[520px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-slate-600">
@@ -124,6 +125,35 @@ export function BoardMemberPage() {
               })}
             </tbody>
           </table>
+        </div>
+        <div className="space-y-3 md:hidden">
+          {members.map((member) => {
+            const expiringSoon = isTermExpiringSoon(member.termEndDate);
+            return (
+              <AdminMobileCard
+                key={member.id}
+                title={member.name}
+                subtitle={member.role}
+                fields={[
+                  { label: "Unit", value: member.unit },
+                  {
+                    label: "Term expires",
+                    value: (
+                      <span
+                        className={
+                          expiringSoon ? "font-medium text-amber-800" : undefined
+                        }
+                      >
+                        {formatDisplayDate(member.termEndDate)}
+                        {expiringSoon ? " (soon)" : ""}
+                      </span>
+                    ),
+                  },
+                ]}
+                highlight={expiringSoon}
+              />
+            );
+          })}
         </div>
       </div>
 

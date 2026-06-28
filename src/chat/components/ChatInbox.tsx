@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaPlus } from "react-icons/fa";
 import { EmptyState } from "../../shared/EmptyState";
 import type { ChatActor, ChatContact, ChatConversation } from "../../resident/data/types";
@@ -19,23 +19,31 @@ export function ChatInbox({ actor, showBuildingFilter = false }: ChatInboxProps)
   const [newOpen, setNewOpen] = useState(false);
   const [buildingFilter, setBuildingFilter] = useState("all");
   const [loading, setLoading] = useState(true);
+  const actorRef = useRef(actor);
+  actorRef.current = actor;
 
   const refresh = useCallback(() => {
-    chatRepository.getConversations(actor).then(async (convs) => {
-      const participantIds = [...new Set(convs.flatMap((c) => c.participantIds))];
-      const [cts, participants] = await Promise.all([
-        chatRepository.getContacts(actor),
-        chatRepository.getContactsByIds(participantIds),
-      ]);
-      const merged = new Map<string, ChatContact>();
-      [...participants, ...cts].forEach((c) => merged.set(c.id, c));
-      setConversations(convs);
-      setContacts(Array.from(merged.values()));
-      setLoading(false);
-    });
-  }, [actor]);
+    const currentActor = actorRef.current;
+    void chatRepository
+      .getConversations(currentActor)
+      .then(async (convs) => {
+        const participantIds = [...new Set(convs.flatMap((c) => c.participantIds))];
+        const [cts, participants] = await Promise.all([
+          chatRepository.getContacts(currentActor),
+          chatRepository.getContactsByIds(participantIds),
+        ]);
+        const merged = new Map<string, ChatContact>();
+        [...participants, ...cts].forEach((c) => merged.set(c.id, c));
+        setConversations(convs);
+        setContacts(Array.from(merged.values()));
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [actor.contactId, actor.buildingId, actor.canMessageAnyBuilding]);
 
   useEffect(() => {
+    setLoading(true);
     refresh();
   }, [refresh]);
 

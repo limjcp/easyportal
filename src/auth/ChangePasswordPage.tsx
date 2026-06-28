@@ -39,7 +39,7 @@ export function ChangePasswordPage({ pendingPortal, onComplete, onSignOut }: Cha
     setSubmitting(true);
     try {
       await completeRequiredPasswordChange(password);
-      await auth.refreshAuth();
+      await auth.refreshAuth({ force: true });
       onComplete(pendingPortal);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update password.");

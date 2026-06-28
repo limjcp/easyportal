@@ -9,6 +9,7 @@ import {
   UnreadBadge,
 } from "../components/AdminBadges";
 import { AdminPanelTable, AdminTabs } from "../components/AdminPanelTable";
+import { AdminMobileCard } from "../components/AdminMobileCard";
 import { adminRepository } from "../data/adminRepository";
 import { AdminPageActions } from "../components/AdminPageActions";
 import { BoardApprovalDetailModal } from "../modals/BoardApprovalDetailModal";
@@ -302,6 +303,66 @@ export function BoardApprovalsPage({
             ),
           },
         ]}
+        mobileCard={(row) => (
+          <AdminMobileCard
+            title={
+              <span className={row.unread ? "font-semibold" : undefined}>
+                {row.title}
+                {row.unread ? (
+                  <span className="ml-2 inline-block align-middle">
+                    <UnreadBadge />
+                  </span>
+                ) : null}
+              </span>
+            }
+            subtitle={row.created}
+            badges={<StatusBadge status={row.status} />}
+            fields={[
+              {
+                label: "Votes",
+                value: (
+                  <span className="inline-flex items-center gap-3 text-sm">
+                    <span className="inline-flex items-center gap-1 text-green-600">
+                      <FaCheck />
+                      {row.approvedVotes}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-red-600">
+                      <FaTimes />
+                      {row.disapprovedVotes}
+                    </span>
+                  </span>
+                ),
+              },
+              { label: "Summary", value: row.votes },
+              ...(row.amount ? [{ label: "Amount", value: row.amount }] : []),
+              ...(row.vendor ? [{ label: "Vendor", value: row.vendor }] : []),
+            ]}
+            actions={
+              <>
+                <button
+                  type="button"
+                  onClick={() => openDetail(row)}
+                  className="flex-1 rounded bg-[#3476ef] px-3 py-2 text-sm font-medium text-white hover:bg-[#2d68cf]"
+                >
+                  View approval
+                </button>
+                {route.tab === "current" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      pendingIdRef.current = row.id;
+                      void archiveApprovalRun();
+                    }}
+                    className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    Archive
+                  </button>
+                )}
+              </>
+            }
+            highlight={row.unread}
+          />
+        )}
       />
 
       <BoardApprovalTopicModal

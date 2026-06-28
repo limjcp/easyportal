@@ -6,6 +6,7 @@ import { operationsRepository } from "./admin/operationsRepository";
 import { portalRepository } from "./admin/portalRepository";
 import { unitsUsersRepository } from "./unitsUsersRepository";
 import { complianceRepository } from "./admin/complianceRepository";
+import { dashboardNotificationsRepository } from "./admin/dashboardNotificationsRepository";
 
 export const supabaseAdminRepository = {
   ...contentRepository,
@@ -16,6 +17,7 @@ export const supabaseAdminRepository = {
   ...adminsRepository,
   ...unitsUsersRepository,
   ...complianceRepository,
+  ...dashboardNotificationsRepository,
 };
 
 export type SupabaseAdminRepository = typeof supabaseAdminRepository;

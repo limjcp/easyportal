@@ -1,19 +1,29 @@
 import type {
   CompanyBuilding,
+  CreateVendorInvoiceInput,
   PurchaseOrder,
+  PurchaseOrderNegotiation,
+  SubmitPoProposalInput,
+  UpdateVendorPaymentSettingsInput,
   Vendor,
   VendorComplianceDocument,
   VendorComplianceDocumentType,
   VendorComplianceSummary,
   VendorComplianceUploadInput,
+  VendorInvoice,
   VendorNotification,
+  VendorPaymentSettings,
   VendorSession,
   UpdateVendorProfileInput,
 } from "../../resident/data/types";
 import { mapDbError, nowIso, sb } from "./base";
 import { supabaseCompanyRepository } from "./companyRepository";
+import { purchaseOrderNegotiationRepository } from "./purchaseOrderNegotiationRepository";
 import { vendorComplianceRepository } from "./vendorComplianceRepository";
+import { vendorInvoiceRepository } from "./vendorInvoiceRepository";
+import { vendorPaymentSettingsRepository } from "./vendorPaymentSettingsRepository";
 import { mapVendorBuildingRow, mapVendorRow } from "./vendorMappers";
+import { invokeSendPortalEmail } from "./sendPortalEmail";
 
 async function requireSession(): Promise<VendorSession & { vendorId: string }> {
   const session = await supabaseVendorRepository.getSession();
@@ -82,7 +92,7 @@ export const supabaseVendorRepository = {
     const session = await requireSession();
     const orders = await supabaseCompanyRepository.getPurchaseOrdersByVendor(session.vendorId);
     return {
-      pendingCount: orders.filter((po) => po.status === "sent").length,
+      pendingCount: orders.filter((po) => ["sent", "quoted", "negotiating"].includes(po.status)).length,
       acceptedCount: orders.filter((po) => po.status === "accepted").length,
       declinedCount: orders.filter((po) => po.status === "declined").length,
     };
@@ -93,7 +103,7 @@ export const supabaseVendorRepository = {
     const orders = await supabaseCompanyRepository.getPurchaseOrdersByVendor(session.vendorId);
     return orders.filter((po) => {
       if (po.status === "draft") return false;
-      if (tab === "action") return po.status === "sent";
+      if (tab === "action") return ["sent", "quoted", "negotiating"].includes(po.status);
       return po.status === "accepted" || po.status === "declined";
     });
   },
@@ -115,11 +125,20 @@ export const supabaseVendorRepository = {
     declineReason?: string
   ): Promise<PurchaseOrder | undefined> {
     const po = await this.getPurchaseOrder(id);
-    if (!po || po.status !== "sent") return undefined;
+    if (!po) return undefined;
+
+    if (status === "accepted") {
+      if (po.status !== "sent" || po.isQuoteRequest) return undefined;
+    } else if (po.isQuoteRequest) {
+      if (!["sent", "quoted", "negotiating"].includes(po.status)) return undefined;
+    } else if (po.status !== "sent") {
+      return undefined;
+    }
 
     const payload: Record<string, unknown> = {
       status,
       responded_at: nowIso(),
+      awaiting_response_from: null,
     };
     if (status === "declined" && declineReason) {
       payload.decline_reason = declineReason;
@@ -128,6 +147,42 @@ export const supabaseVendorRepository = {
     const { error } = await sb().from("purchase_orders").update(payload).eq("id", id);
     mapDbError(error);
     return this.getPurchaseOrder(id);
+  },
+
+  async getPurchaseOrderNegotiations(purchaseOrderId: string): Promise<PurchaseOrderNegotiation[]> {
+    const po = await this.getPurchaseOrder(purchaseOrderId);
+    if (!po) return [];
+    return purchaseOrderNegotiationRepository.getNegotiations(purchaseOrderId);
+  },
+
+  async submitVendorQuote(
+    purchaseOrderId: string,
+    input: SubmitPoProposalInput
+  ): Promise<PurchaseOrder | undefined> {
+    const session = await requireSession();
+    const po = await this.getPurchaseOrder(purchaseOrderId);
+    if (!po) return undefined;
+    await purchaseOrderNegotiationRepository.submitVendorQuote(po, session.displayName, input);
+    return this.getPurchaseOrder(purchaseOrderId);
+  },
+
+  async submitVendorCounterOffer(
+    purchaseOrderId: string,
+    input: SubmitPoProposalInput
+  ): Promise<PurchaseOrder | undefined> {
+    const session = await requireSession();
+    const po = await this.getPurchaseOrder(purchaseOrderId);
+    if (!po) return undefined;
+    await purchaseOrderNegotiationRepository.submitVendorCounterOffer(po, session.displayName, input);
+    return this.getPurchaseOrder(purchaseOrderId);
+  },
+
+  async acceptCompanyOffer(purchaseOrderId: string): Promise<PurchaseOrder | undefined> {
+    const session = await requireSession();
+    const po = await this.getPurchaseOrder(purchaseOrderId);
+    if (!po) return undefined;
+    await purchaseOrderNegotiationRepository.acceptOffer(po, "vendor", session.displayName);
+    return this.getPurchaseOrder(purchaseOrderId);
   },
 
   async getNotifications(): Promise<VendorNotification[]> {
@@ -214,5 +269,75 @@ export const supabaseVendorRepository = {
 
   async getComplianceDocumentUrl(documentId: string): Promise<string> {
     return vendorComplianceRepository.getDocumentDownloadUrl(documentId);
+  },
+
+  async getPaymentSettings(): Promise<VendorPaymentSettings> {
+    const session = await requireSession();
+    return vendorPaymentSettingsRepository.getPaymentSettings(session.vendorId);
+  },
+
+  async updatePaymentSettings(
+    input: UpdateVendorPaymentSettingsInput,
+    logoFile?: File | null
+  ): Promise<VendorPaymentSettings> {
+    const session = await requireSession();
+    return vendorPaymentSettingsRepository.updatePaymentSettings(session.vendorId, {
+      ...input,
+      logoFile,
+    });
+  },
+
+  async getInvoiceByPurchaseOrderId(purchaseOrderId: string): Promise<VendorInvoice | undefined> {
+    const po = await this.getPurchaseOrder(purchaseOrderId);
+    if (!po) return undefined;
+    return vendorInvoiceRepository.getInvoiceByPurchaseOrderId(purchaseOrderId);
+  },
+
+  async createInvoiceFromPurchaseOrder(
+    purchaseOrderId: string,
+    input: CreateVendorInvoiceInput
+  ): Promise<VendorInvoice> {
+    const session = await requireSession();
+    const po = await this.getPurchaseOrder(purchaseOrderId);
+    if (!po) throw new Error("Purchase order not found.");
+    if (po.status !== "accepted") {
+      throw new Error("Only accepted purchase orders can be converted to invoices.");
+    }
+
+    const { data: vendorRow, error: vendorError } = await sb()
+      .from("vendors")
+      .select("company_id")
+      .eq("id", session.vendorId)
+      .single();
+    mapDbError(vendorError);
+    if (!vendorRow?.company_id) throw new Error("Vendor company not found.");
+
+    return vendorInvoiceRepository.createInvoiceFromPurchaseOrder(
+      po,
+      session.vendorId,
+      vendorRow.company_id as string,
+      input
+    );
+  },
+
+  async submitInvoiceForPayment(invoiceId: string): Promise<VendorInvoice> {
+    const session = await requireSession();
+    const { data: invoiceRow, error } = await sb()
+      .from("vendor_invoices")
+      .select("id, vendor_id, status")
+      .eq("id", invoiceId)
+      .eq("vendor_id", session.vendorId)
+      .maybeSingle();
+    mapDbError(error);
+    if (!invoiceRow) throw new Error("Invoice not found.");
+    if (invoiceRow.status !== "draft") {
+      throw new Error("This invoice has already been submitted.");
+    }
+
+    await invokeSendPortalEmail({ type: "vendor_invoice_submit", invoiceId });
+
+    const updated = await vendorInvoiceRepository.getInvoiceById(invoiceId);
+    if (!updated) throw new Error("Invoice not found after submission.");
+    return updated;
   },
 };

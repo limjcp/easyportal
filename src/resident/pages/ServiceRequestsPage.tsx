@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { CrudPanel } from "../../shared/CrudPanel";
 
@@ -15,6 +15,7 @@ import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePo
 import { useTenantContext } from "../../shared/queries/useTenantContext";
 
 import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
+import { useSyncFromRefreshKey } from "../../shared/useSyncFromRefreshKey";
 
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 
@@ -93,14 +94,7 @@ export function ServiceRequestsPage({ onAddNew, refreshKey = 0 }: ServiceRequest
   );
 
 
-
-  useEffect(() => {
-
-    if (refreshKey === 0) return;
-
-    void reload();
-
-  }, [refreshKey, reload]);
+  useSyncFromRefreshKey(refreshKey, () => void reload());
 
 
 

@@ -7,7 +7,9 @@ export type SendPortalEmailPayload =
   | { type: "occupancy_activate"; occupancyId: string }
   | { type: "occupancy_custom_email"; occupancyId: string; subject: string; body: string }
   | { type: "vendor_invite"; vendorId: string; email: string }
-  | { type: "certificate_resend"; certificateId: string };
+  | { type: "certificate_resend"; certificateId: string }
+  | { type: "news_notice_blast"; newsItemId: string }
+  | { type: "vendor_invoice_submit"; invoiceId: string };
 
 export type SendPortalEmailResult = {
   ok: boolean;

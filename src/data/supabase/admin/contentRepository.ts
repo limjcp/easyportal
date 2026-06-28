@@ -6,6 +6,7 @@ import type {
   CreateDocumentInput,
   CreatePollInput,
   DocumentStorageStats,
+  EmailNoticeRecipientRow,
   FaqItem,
   GalleryAlbum,
   GalleryPhoto,
@@ -32,6 +33,7 @@ import {
 } from "./mappers";
 import { ensureDefaultDocumentFolders } from "./documentFolders";
 import { bid } from "./shared";
+import { invokeSendPortalEmail } from "../sendPortalEmail";
 import {
   formatFileSize,
   getBuildingDocumentSignedUrl,
@@ -77,6 +79,92 @@ export const contentRepository = {
     return data ? mapAdminNews(data as Record<string, unknown>) : null;
   },
 
+  async getNewsNoticeEmailRecipients(newsItemId: string): Promise<EmailNoticeRecipientRow[]> {
+    const buildingId = await bid();
+    const { data: newsItem, error: newsError } = await sb()
+      .from("news_items")
+      .select("title, body")
+      .eq("id", newsItemId)
+      .eq("building_id", buildingId)
+      .maybeSingle();
+    mapDbError(newsError);
+    if (!newsItem) return [];
+
+    let query = sb()
+      .from("email_records")
+      .select("id, status, profile_id, recipient_email, profiles(display_name, email)")
+      .eq("building_id", buildingId)
+      .eq("news_item_id", newsItemId)
+      .order("sent_date", { ascending: false });
+
+    let { data: records, error } = await query;
+    mapDbError(error);
+
+    if (!records?.length) {
+      const fallback = await sb()
+        .from("email_records")
+        .select("id, status, profile_id, recipient_email, profiles(display_name, email)")
+        .eq("building_id", buildingId)
+        .eq("subject", newsItem.title as string)
+        .eq("body", (newsItem.body as string) || "")
+        .order("sent_date", { ascending: false });
+      mapDbError(fallback.error);
+      records = fallback.data ?? [];
+    }
+
+    const profileIds = Array.from(
+      new Set((records ?? []).map((row) => row.profile_id as string | null).filter(Boolean))
+    ) as string[];
+
+    const occupancyByProfile = new Map<
+      string,
+      { residentName: string; email: string; unitLabel: string }
+    >();
+
+    if (profileIds.length > 0) {
+      const { data: occupancies, error: occError } = await sb()
+        .from("unit_occupancies")
+        .select("profile_id, resident_name, email, unit:units(label)")
+        .eq("building_id", buildingId)
+        .in("profile_id", profileIds);
+      mapDbError(occError);
+
+      for (const row of occupancies ?? []) {
+        const profileId = row.profile_id as string;
+        occupancyByProfile.set(profileId, {
+          residentName: (row.resident_name as string)?.trim() || "",
+          email: (row.email as string)?.trim().toLowerCase() || "",
+          unitLabel: (row.unit as { label?: string } | null)?.label?.trim() || "—",
+        });
+      }
+    }
+
+    return (records ?? []).map((row) => {
+      const profile = row.profiles as { display_name?: string; email?: string } | null;
+      const profileId = row.profile_id as string | null;
+      const occupancy = profileId ? occupancyByProfile.get(profileId) : undefined;
+      const email =
+        (row.recipient_email as string | null)?.trim().toLowerCase() ||
+        profile?.email?.trim().toLowerCase() ||
+        occupancy?.email ||
+        "—";
+      const name =
+        profile?.display_name?.trim() ||
+        occupancy?.residentName ||
+        email;
+      const statusRaw = (row.status as string) || "pending";
+      const status = statusRaw.charAt(0).toUpperCase() + statusRaw.slice(1);
+
+      return {
+        unit: occupancy?.unitLabel ?? "—",
+        name,
+        email,
+        status,
+        opened: "—",
+      };
+    });
+  },
+
   async archiveNews(id: string) {
     await sb().from("news_items").update({ archived: true, status: "archived" }).eq("id", id);
   },
@@ -105,7 +193,11 @@ export const contentRepository = {
     return mapAdminNews(data as Record<string, unknown>);
   },
 
-  async updateNews(id: string, updates: Partial<AdminNewsItem>) {
+  async updateNews(
+    id: string,
+    updates: Partial<AdminNewsItem>,
+    options?: { sendNotifications?: boolean }
+  ) {
     const payload: Record<string, unknown> = { updated_at: nowIso() };
     if (updates.title !== undefined) payload.title = updates.title;
     if (updates.body !== undefined) payload.body = updates.body;
@@ -123,6 +215,15 @@ export const contentRepository = {
     if (updates.attachmentUrl !== undefined) payload.attachment_url = updates.attachmentUrl || null;
     const { data, error } = await sb().from("news_items").update(payload).eq("id", id).select("*").maybeSingle();
     mapDbError(error);
+
+    const shouldSend =
+      options?.sendNotifications === true &&
+      updates.status === "active" &&
+      updates.noNotifications !== true;
+    if (shouldSend) {
+      await invokeSendPortalEmail({ type: "news_notice_blast", newsItemId: id });
+    }
+
     return data ? mapAdminNews(data as Record<string, unknown>) : null;
   },
 

@@ -5,7 +5,7 @@ export type ProvisionUserKind = "resident" | "company_employee" | "building_admi
 export type ProvisionUserPayload = {
   kind: ProvisionUserKind;
   email: string;
-  password: string;
+  password?: string;
   firstName: string;
   lastName: string;
   buildingId?: string;

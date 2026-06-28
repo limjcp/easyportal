@@ -68,12 +68,12 @@ export function CaoCalendarPanel({ obligations, variant = "admin" }: CaoCalendar
 
   return (
     <div className={wrapClass}>
-      <div className="flex items-center justify-between border-b border-border px-6 py-4">
+      <div className="flex flex-col gap-4 border-b border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div>
           <h3 className="text-lg font-semibold">CAO calendar</h3>
           <p className="text-sm text-muted-foreground">Due dates from synced obligations</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2 sm:justify-end">
           <button
             type="button"
             className="px-2 py-1 text-sm border border-border"
@@ -93,14 +93,16 @@ export function CaoCalendarPanel({ obligations, variant = "admin" }: CaoCalendar
           </button>
         </div>
       </div>
-      <div className="grid grid-cols-7 border-b border-border text-center text-xs font-medium text-muted-foreground">
+      <div className="overflow-x-auto">
+        <div className="min-w-[280px]">
+          <div className="grid grid-cols-7 border-b border-border text-center text-xs font-medium text-muted-foreground">
         {WEEKDAYS.map((d) => (
           <div key={d} className="py-2 border-r border-border last:border-r-0">
             {d}
           </div>
         ))}
-      </div>
-      <div className="grid grid-cols-7">
+          </div>
+          <div className="grid grid-cols-7">
         {cells.map((cell) => {
           const events = dueDates.get(cell.dateStr) ?? [];
           const isToday = cell.dateStr === today;
@@ -108,7 +110,7 @@ export function CaoCalendarPanel({ obligations, variant = "admin" }: CaoCalendar
             <div
               key={cell.dateStr + cell.day}
               className={cn(
-                "min-h-[72px] border-b border-r border-border p-1 text-left last:border-r-0",
+                "min-h-[56px] border-b border-r border-border p-1 text-left last:border-r-0 sm:min-h-[72px]",
                 !cell.current && "bg-muted/30 text-muted-foreground/50",
                 isToday && "bg-amber-50"
               )}
@@ -129,6 +131,8 @@ export function CaoCalendarPanel({ obligations, variant = "admin" }: CaoCalendar
             </div>
           );
         })}
+          </div>
+        </div>
       </div>
     </div>
   );

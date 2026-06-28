@@ -1,7 +1,20 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FaBuilding, FaCheck, FaUser } from "react-icons/fa";
+import {
+  FaArchive,
+  FaBuilding,
+  FaCheck,
+  FaDownload,
+  FaEdit,
+  FaEye,
+  FaHome,
+  FaPlus,
+  FaUser,
+  FaUsers,
+  FaUserSlash,
+} from "react-icons/fa";
 import { OptionsDropdown } from "../components/AdminBadges";
-import { AdminPanelTable, AdminTabs, type AdminTableColumn } from "../components/AdminPanelTable";
+import { AdminModuleTabs, AdminPanelTable, type AdminTableColumn } from "../components/AdminPanelTable";
+import { AdminPageActions } from "../components/AdminPageActions";
 import { adminRepository } from "../data/adminRepository";
 import { BUILDING_ADMIN_ROLES } from "../data/mock/buildingPermissions";
 import { Modal } from "../../shared/Modal";
@@ -30,10 +43,11 @@ import type { ResidentDetailSection } from "../../resident/data/types";
 import { ResidentTypePortalModulesModal } from "../modals/ResidentTypePortalModulesModal";
 import { SendOccupancyEmailModal } from "../modals/SendOccupancyEmailModal";
 import { IncidentReportDetailModal } from "../modals/IncidentReportDetailModal";
-import { FaEdit } from "react-icons/fa";
 import { useAdminUnitsUsersData } from "../../shared/queries/adminListQueries";
 import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
+import { useSyncFromRefreshKey } from "../../shared/useSyncFromRefreshKey";
 import { useTabChangeWithBusy } from "../../shared/useTabChangeWithBusy";
+import type { AdminRoute } from "../navigation";
 import type {
   UnitsUsersAccountStatus,
   UnitsUsersArchivedRow,
@@ -47,15 +61,17 @@ import type {
 } from "../../resident/data/types";
 
 type UnitsUsersPageProps = {
+  route: AdminRoute & { page: "units-users"; tab: UnitsUsersTab };
+  onNavigate: (route: AdminRoute) => void;
   refreshKey: number;
   onRefresh: () => void;
 };
 
-const TABS: { id: UnitsUsersTab; label: string }[] = [
-  { id: "current", label: "Current Users" },
-  { id: "pending", label: "Users Pending Assignment" },
-  { id: "unoccupied", label: "Unoccupied Units" },
-  { id: "archived", label: "Archived Users" },
+const TABS: { id: UnitsUsersTab; label: string; icon: ReactNode }[] = [
+  { id: "current", label: "Current Users", icon: <FaUsers aria-hidden /> },
+  { id: "pending", label: "Users Pending Assignment", icon: <FaUserSlash aria-hidden /> },
+  { id: "unoccupied", label: "Unoccupied Units", icon: <FaHome aria-hidden /> },
+  { id: "archived", label: "Archived Users", icon: <FaArchive aria-hidden /> },
 ];
 
 const USER_TYPE_OPTIONS: { value: string; label: string }[] = [
@@ -244,11 +260,14 @@ function LegacyToggleRow({ label, enabled }: { label: string; enabled?: boolean 
   );
 }
 
-export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
+export function UnitsUsersPage({ route, onNavigate, refreshKey }: UnitsUsersPageProps) {
+  const activeTab = route.tab;
   const pageBusy = usePageBusy();
   const unitsUsersQuery = useAdminUnitsUsersData();
   const { data: unitsUsersData, refetch } = unitsUsersQuery;
-  const handleTabChange = useTabChangeWithBusy((tab: UnitsUsersTab) => setActiveTab(tab));
+  const handleTabChange = useTabChangeWithBusy((tab: UnitsUsersTab) =>
+    onNavigate({ page: "units-users", tab })
+  );
   const currentRows = unitsUsersData?.current ?? [];
   const pendingRows = unitsUsersData?.pending ?? [];
   const unoccupiedRows = unitsUsersData?.unoccupied ?? [];
@@ -261,7 +280,6 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
   const [typeFilter, setTypeFilter] = useState("");
   const [sortKey, setSortKey] = useState("unit");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [activeTab, setActiveTab] = useState<UnitsUsersTab>("current");
 
   const [selectedUnit, setSelectedUnit] = useState<UnitsUsersUnitDetail | null>(null);
   const [unitDraft, setUnitDraft] = useState<UnitsUsersUnitDetail | null>(null);
@@ -288,16 +306,12 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
   const [newOccupantFirstName, setNewOccupantFirstName] = useState("");
   const [newOccupantLastName, setNewOccupantLastName] = useState("");
   const [newOccupantEmail, setNewOccupantEmail] = useState("");
-  const [newOccupantPassword, setNewOccupantPassword] = useState("");
-  const [newOccupantPasswordConfirm, setNewOccupantPasswordConfirm] = useState("");
 
   const [newResidentUnit, setNewResidentUnit] = useState("");
   const [newResidentType, setNewResidentType] = useState<UnitsUsersResidentType>("Owner");
   const [newResidentFirstName, setNewResidentFirstName] = useState("");
   const [newResidentLastName, setNewResidentLastName] = useState("");
   const [newResidentEmail, setNewResidentEmail] = useState("");
-  const [newResidentPassword, setNewResidentPassword] = useState("");
-  const [newResidentPasswordConfirm, setNewResidentPasswordConfirm] = useState("");
   const [assignUnitOpen, setAssignUnitOpen] = useState(false);
   const [assignOccupancyId, setAssignOccupancyId] = useState("");
   const [assignUnitId, setAssignUnitId] = useState("");
@@ -320,14 +334,7 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
     await refetch();
   }, [refetch]);
 
-  const syncFromRefreshKey = useCallback(() => {
-    void refetchLists();
-  }, [refetchLists]);
-
-  useEffect(() => {
-    if (refreshKey === 0) return;
-    syncFromRefreshKey();
-  }, [refreshKey, syncFromRefreshKey]);
+  useSyncFromRefreshKey(refreshKey, () => void refetchLists());
 
   useEffect(() => {
     if (activeTab !== "pending") return;
@@ -508,12 +515,6 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
   const { run: createResident, loading: savingCreate } = useAsyncAction(
     useCallback(async () => {
       if (!newResidentFirstName.trim() || !newResidentLastName.trim() || !newResidentEmail.trim()) return;
-      if (newResidentPassword.length < 8) {
-        throw new Error("Password must be at least 8 characters.");
-      }
-      if (newResidentPassword !== newResidentPasswordConfirm) {
-        throw new Error("Passwords do not match.");
-      }
       const assignedUnit = newResidentUnit || undefined;
       await adminRepository.createUnitOccupancy({
         firstName: newResidentFirstName.trim(),
@@ -521,15 +522,12 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
         email: newResidentEmail.trim(),
         type: newResidentType,
         unitId: assignedUnit,
-        password: newResidentPassword,
       });
       setNewResidentUnit("");
       setNewResidentType("Owner");
       setNewResidentFirstName("");
       setNewResidentLastName("");
       setNewResidentEmail("");
-      setNewResidentPassword("");
-      setNewResidentPasswordConfirm("");
       setAddResidentOpen(false);
       setActiveTab("current");
       refetchLists();
@@ -537,38 +535,27 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
       newResidentFirstName,
       newResidentLastName,
       newResidentEmail,
-      newResidentPassword,
-      newResidentPasswordConfirm,
       newResidentType,
       newResidentUnit,
       refetchLists,
     ]),
-    { successMessage: "Resident created successfully.", onError: setActionError, showErrorToast: false }
+    { successMessage: "Resident created. Login details emailed.", onError: setActionError, showErrorToast: false }
   );
 
   const { run: createOccupant, loading: savingOccupant } = useAsyncAction(
     useCallback(async () => {
       if (!selectedUnit) return;
       if (!newOccupantFirstName.trim() || !newOccupantLastName.trim() || !newOccupantEmail.trim()) return;
-      if (newOccupantPassword.length < 8) {
-        throw new Error("Password must be at least 8 characters.");
-      }
-      if (newOccupantPassword !== newOccupantPasswordConfirm) {
-        throw new Error("Passwords do not match.");
-      }
       await adminRepository.createUnitOccupancy({
         firstName: newOccupantFirstName.trim(),
         lastName: newOccupantLastName.trim(),
         email: newOccupantEmail.trim(),
         type: "Occupant",
         unitId: selectedUnit.id,
-        password: newOccupantPassword,
       });
       setNewOccupantFirstName("");
       setNewOccupantLastName("");
       setNewOccupantEmail("");
-      setNewOccupantPassword("");
-      setNewOccupantPasswordConfirm("");
       setAddOccupantOpen(false);
       const refreshed = await adminRepository.getUnitsUsersUnitDetail(selectedUnit.id);
       if (refreshed) {
@@ -582,11 +569,9 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
       newOccupantFirstName,
       newOccupantLastName,
       newOccupantEmail,
-      newOccupantPassword,
-      newOccupantPasswordConfirm,
       refetchLists,
     ]),
-    { successMessage: "Occupant added successfully.", onError: setActionError, showErrorToast: false }
+    { successMessage: "Occupant added. Login details emailed.", onError: setActionError, showErrorToast: false }
   );
 
   const isUserDetailDirty = useMemo(
@@ -1311,44 +1296,80 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
   return (
     <CrudPanel loading={isQueryPageLoading(unitsUsersQuery)}>
     <div>
-      <div className="mb-4 rounded bg-[#3476ef] px-4 py-2 text-sm font-semibold text-white">Units & Users</div>
+      <AdminPageActions
+        route={route}
+        onNavigate={onNavigate}
+        primaryAction={
+          route.tab === "current" ? (
+            <ActionButton
+              label="Add a New Resident"
+              onClick={() => setAddResidentOpen(true)}
+              className="!bg-[#7D5DA7] hover:!bg-[#6d4d97]"
+            />
+          ) : null
+        }
+      />
 
-      <AdminTabs tabs={TABS} activeTab={activeTab} onChange={(tab) => handleTabChange(tab as UnitsUsersTab)} />
+      <AdminModuleTabs
+        tabs={TABS}
+        activeTab={activeTab}
+        onChange={(tab) => handleTabChange(tab as UnitsUsersTab)}
+      />
 
       {actionError ? <FormAlert message={actionError} className="mb-3" /> : null}
 
-      <div className="mb-3 flex flex-wrap justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <button
           type="button"
-          className="rounded bg-[#79d0df] px-3 py-1 text-sm text-white"
+          className="inline-flex items-center gap-2 rounded bg-[#3476ef] px-3 py-1.5 text-sm text-white hover:bg-[#2d68cf]"
           onClick={() => setColumnPrefsOpen(true)}
         >
+          <FaCheck aria-hidden />
           Change Column Preferences:
         </button>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded bg-[#7D5DA7] px-3 py-1 text-sm text-white hover:bg-[#6d4d97]"
-            onClick={() => setTypePortalModulesOpen(true)}
+            className="inline-flex items-center gap-2 rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            onClick={() => window.alert("Export — coming soon.")}
           >
-            <FaEdit />
-            Edit Resident Type Module Defaults
+            <FaDownload aria-hidden />
+            Tools
           </button>
           <button
             type="button"
-            className="rounded bg-[#7D5DA7] px-3 py-1 text-sm text-white hover:bg-[#6d4d97]"
-            onClick={() => setAddResidentOpen(true)}
+            className="inline-flex items-center gap-2 rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            onClick={() => setColumnPrefsOpen(true)}
           >
-            Add a New Resident
+            <FaEye aria-hidden />
+            Toggle Columns
           </button>
           {activeTab === "current" ? (
-            <ActionButton
-              label="Activate"
-              loading={bulkActivating}
-              loadingLabel="Activating…"
-              disabled={activationSelections.size === 0}
-              onClick={() => void bulkActivateUsers()}
-            />
+            <>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded bg-[#7D5DA7] px-3 py-1.5 text-sm text-white hover:bg-[#6d4d97] sm:hidden"
+                onClick={() => setAddResidentOpen(true)}
+              >
+                <FaPlus aria-hidden />
+                Add a New Resident
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded bg-[#7D5DA7] px-3 py-1.5 text-sm text-white hover:bg-[#6d4d97]"
+                onClick={() => setTypePortalModulesOpen(true)}
+              >
+                <FaEdit aria-hidden />
+                Edit Resident Type Module Defaults
+              </button>
+              <ActionButton
+                label="Activate"
+                loading={bulkActivating}
+                loadingLabel="Activating…"
+                disabled={activationSelections.size === 0}
+                onClick={() => void bulkActivateUsers()}
+              />
+            </>
           ) : null}
           {activeTab === "pending" ? (
             <ActionButton
@@ -1365,6 +1386,7 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
       {activeTab === "current" && (
         <AdminPanelTable
           title={`${formatCount(counts.owners, "Owner", "Owners")} - ${formatCount(counts.tenants, "Tenant", "Tenants")} - ${formatCount(counts.occupants, "Occupant", "Occupants")}`}
+          titleIcon={<FaUsers aria-hidden />}
           headerColor="purple"
           data={filteredCurrentRows}
           search={search}
@@ -1372,6 +1394,7 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
           searchPlaceholder="Search"
           pageSize={pageSize}
           onPageSizeChange={setPageSize}
+          pageSizeLabel="Records/page"
           page={page}
           onPageChange={setPage}
           pageSizeChoices={[10, 25, 50, -1]}
@@ -1386,6 +1409,7 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
       {activeTab === "pending" && (
         <AdminPanelTable
           title="Users Pending Unit Assignment"
+          titleIcon={<FaUserSlash aria-hidden />}
           headerColor="red"
           data={filteredPendingRows}
           search={search}
@@ -1393,6 +1417,7 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
           searchPlaceholder="Search"
           pageSize={pageSize}
           onPageSizeChange={setPageSize}
+          pageSizeLabel="Records/page"
           page={page}
           onPageChange={setPage}
           pageSizeChoices={[10, 25, 50, -1]}
@@ -1407,6 +1432,7 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
       {activeTab === "unoccupied" && (
         <AdminPanelTable
           title="Unoccupied Units"
+          titleIcon={<FaHome aria-hidden />}
           headerColor="orange"
           data={unoccupiedRows}
           search={search}
@@ -1414,6 +1440,7 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
           searchPlaceholder="Search"
           pageSize={pageSize}
           onPageSizeChange={setPageSize}
+          pageSizeLabel="Records/page"
           page={page}
           onPageChange={setPage}
           pageSizeChoices={[10, 25, 50, -1]}
@@ -1427,6 +1454,7 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
       {activeTab === "archived" && (
         <AdminPanelTable
           title={`${archivedRows.length} Archived User(s)`}
+          titleIcon={<FaArchive aria-hidden />}
           headerColor="purple"
           data={filteredArchivedRows}
           search={search}
@@ -1434,6 +1462,7 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
           searchPlaceholder="Search"
           pageSize={pageSize}
           onPageSizeChange={setPageSize}
+          pageSizeLabel="Records/page"
           page={page}
           onPageChange={setPage}
           pageSizeChoices={[5, 10, 25, 50, -1]}
@@ -2494,27 +2523,10 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
             />
           </label>
 
-          <label className="space-y-1 text-sm text-slate-700">
-            <span>Password</span>
-            <input
-              value={newResidentPassword}
-              onChange={(event) => setNewResidentPassword(event.target.value)}
-              className="w-full rounded border border-slate-300 px-2 py-2"
-              type="password"
-              autoComplete="new-password"
-            />
-          </label>
-
-          <label className="space-y-1 text-sm text-slate-700">
-            <span>Confirm Password</span>
-            <input
-              value={newResidentPasswordConfirm}
-              onChange={(event) => setNewResidentPasswordConfirm(event.target.value)}
-              className="w-full rounded border border-slate-300 px-2 py-2"
-              type="password"
-              autoComplete="new-password"
-            />
-          </label>
+          <p className="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 sm:col-span-2">
+            A temporary password will be emailed to this address. They must choose a new password on
+            first sign-in.
+          </p>
         </div>
       </Modal>
 
@@ -2674,26 +2686,10 @@ export function UnitsUsersPage({ refreshKey }: UnitsUsersPageProps) {
               type="email"
             />
           </label>
-          <label className="space-y-1 text-sm text-slate-700">
-            <span>Password</span>
-            <input
-              value={newOccupantPassword}
-              onChange={(event) => setNewOccupantPassword(event.target.value)}
-              className="w-full rounded border border-slate-300 px-2 py-2"
-              type="password"
-              autoComplete="new-password"
-            />
-          </label>
-          <label className="space-y-1 text-sm text-slate-700">
-            <span>Confirm Password</span>
-            <input
-              value={newOccupantPasswordConfirm}
-              onChange={(event) => setNewOccupantPasswordConfirm(event.target.value)}
-              className="w-full rounded border border-slate-300 px-2 py-2"
-              type="password"
-              autoComplete="new-password"
-            />
-          </label>
+          <p className="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 sm:col-span-2">
+            A temporary password will be emailed to this address. They must choose a new password on
+            first sign-in.
+          </p>
         </div>
       </Modal>
 

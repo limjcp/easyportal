@@ -15,7 +15,24 @@ import type {
   ElectionCandidate,
   ElectionPosition,
   ElectionResults,
+  UnitsUsersCurrentRow,
 } from "../../resident/data/types";
+
+function unitDisplayFromLabel(unitLabel: string): string {
+  const match = unitLabel.match(/Unit\s+(.+)$/i);
+  return match ? match[1].trim() : unitLabel;
+}
+
+function formatBuildingUserOption(user: UnitsUsersCurrentRow): string {
+  return `${user.name} — ${user.unitLabel} (${user.type})`;
+}
+
+function isUserAlreadyCandidate(user: UnitsUsersCurrentRow, candidates: ElectionCandidate[]): boolean {
+  const unit = unitDisplayFromLabel(user.unitLabel);
+  return candidates.some(
+    (c) => c.name.toLowerCase() === user.name.toLowerCase() && c.unit.toLowerCase() === unit.toLowerCase()
+  );
+}
 
 const RESIDENT_TYPES = [
   "Board Members",
@@ -36,27 +53,29 @@ export function ElectionEditPage({ route, onNavigate }: ElectionEditPageProps) {
   const [positions, setPositions] = useState<ElectionPosition[]>([]);
   const [candidatesByPosition, setCandidatesByPosition] = useState<Record<string, ElectionCandidate[]>>({});
   const [applications, setApplications] = useState<BoardMemberApplication[]>([]);
+  const [buildingUsers, setBuildingUsers] = useState<UnitsUsersCurrentRow[]>([]);
   const [results, setResults] = useState<ElectionResults | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [confirmKind, setConfirmKind] = useState<"position" | "candidate" | null>(null);
   const [newPositionTitle, setNewPositionTitle] = useState("");
   const [newCandidate, setNewCandidate] = useState<{
     positionId: string;
-    name: string;
-    unit: string;
+    userId: string;
     bio: string;
-  }>({ positionId: "", name: "", unit: "", bio: "" });
+  }>({ positionId: "", userId: "", bio: "" });
 
   const load = useCallback(async () => {
-    const [e, pos, apps, res] = await Promise.all([
+    const [e, pos, apps, res, users] = await Promise.all([
       adminRepository.getBoardElectionById(route.id),
       adminRepository.getElectionPositions(route.id),
       adminRepository.getBoardMemberApplications(),
       adminRepository.getElectionResults(route.id),
+      adminRepository.getUnitsUsersCurrent(),
     ]);
     setElection(e);
     setPositions(pos);
     setApplications(apps);
+    setBuildingUsers(users);
     setResults(res);
     const candMap: Record<string, ElectionCandidate[]> = {};
     await Promise.all(
@@ -113,18 +132,19 @@ export function ElectionEditPage({ route, onNavigate }: ElectionEditPageProps) {
       const positionId = pendingPositionIdRef.current;
       if (!positionId) return;
       const draft = newCandidate.positionId === positionId ? newCandidate : newCandidate;
-      if (!draft.name.trim() || !draft.unit.trim()) {
-        alert("Candidate name and unit are required.");
+      const user = buildingUsers.find((u) => u.id === draft.userId);
+      if (!user) {
+        alert("Please select a building user.");
         return;
       }
       await adminRepository.addElectionCandidate(positionId, {
-        name: draft.name.trim(),
-        unit: draft.unit.trim(),
+        name: user.name,
+        unit: unitDisplayFromLabel(user.unitLabel),
         bio: draft.bio.trim() || undefined,
       });
-      setNewCandidate({ positionId: "", name: "", unit: "", bio: "" });
+      setNewCandidate({ positionId: "", userId: "", bio: "" });
       await load();
-    }, [newCandidate, load]),
+    }, [buildingUsers, newCandidate, load]),
     { successMessage: "Candidate added.", showErrorToast: false }
   );
 
@@ -392,34 +412,49 @@ export function ElectionEditPage({ route, onNavigate }: ElectionEditPageProps) {
                     ))}
                   </ul>
 
-                  <div className="mb-2 flex flex-wrap gap-2">
+                  <div className="mb-2 flex flex-wrap items-end gap-2">
+                    <label className="text-sm">
+                      <span className="sr-only">Select candidate</span>
+                      <select
+                        value={newCandidate.positionId === pos.id ? newCandidate.userId : ""}
+                        onChange={(e) =>
+                          setNewCandidate({
+                            positionId: pos.id,
+                            userId: e.target.value,
+                            bio: newCandidate.positionId === pos.id ? newCandidate.bio : "",
+                          })
+                        }
+                        className="min-w-[16rem] rounded border border-slate-300 px-2 py-1 text-sm"
+                      >
+                        <option value="">Select building user…</option>
+                        {buildingUsers
+                          .filter(
+                            (user) =>
+                              !isUserAlreadyCandidate(user, candidatesByPosition[pos.id] ?? [])
+                          )
+                          .sort(
+                            (a, b) =>
+                              a.unitLabel.localeCompare(b.unitLabel) || a.name.localeCompare(b.name)
+                          )
+                          .map((user) => (
+                            <option key={user.id} value={user.id}>
+                              {formatBuildingUserOption(user)}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
                     <input
                       type="text"
-                      placeholder="Candidate name"
-                      value={newCandidate.positionId === pos.id ? newCandidate.name : ""}
+                      placeholder="Bio (optional)"
+                      value={newCandidate.positionId === pos.id ? newCandidate.bio : ""}
                       onChange={(e) =>
                         setNewCandidate({
                           positionId: pos.id,
-                          name: e.target.value,
-                          unit: newCandidate.positionId === pos.id ? newCandidate.unit : "",
-                          bio: newCandidate.positionId === pos.id ? newCandidate.bio : "",
+                          userId: newCandidate.positionId === pos.id ? newCandidate.userId : "",
+                          bio: e.target.value,
                         })
                       }
-                      className="rounded border border-slate-300 px-2 py-1 text-sm"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Unit"
-                      value={newCandidate.positionId === pos.id ? newCandidate.unit : ""}
-                      onChange={(e) =>
-                        setNewCandidate({
-                          positionId: pos.id,
-                          name: newCandidate.positionId === pos.id ? newCandidate.name : "",
-                          unit: e.target.value,
-                          bio: newCandidate.positionId === pos.id ? newCandidate.bio : "",
-                        })
-                      }
-                      className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
+                      className="min-w-[12rem] flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
                     />
                     <ActionButton
                       label="Add Candidate"

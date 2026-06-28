@@ -5,27 +5,26 @@ import { getEffectiveBuildingAdminModuleAccessForUser } from "../../data/supabas
 import { queryKeys } from "../queryKeys";
 import { useTenantContext } from "./useTenantContext";
 
-const BADGE_STALE = 30_000;
-const NAV_ACCESS_STALE = 0;
-const PORTAL_CONFIG_STALE = 5 * 60_000;
+const BADGE_STALE = 3 * 60_000;
+const NAV_ACCESS_STALE = 5 * 60_000;
+const PORTAL_CONFIG_STALE = 10 * 60_000;
 
 export function useBuildingBadgeCounts() {
   const { userId, buildingId, isBuildingReady } = useTenantContext();
   return useQuery({
     queryKey: queryKeys.building.badgeCounts(userId!, buildingId!),
-    queryFn: async () => {
-      const [unreadSuggestions, pendingApprovals, unreadBoardApplications, unreadConsultationLeads] =
-        await Promise.all([
-          adminRepository.getUnreadSuggestionCount(),
-          adminRepository.getPendingBoardApprovalCount(),
-          adminRepository.getUnreadBoardApplicationCount(),
-          adminRepository.getUnreadConsultationLeadCount(),
-        ]);
-      return { unreadSuggestions, pendingApprovals, unreadBoardApplications, unreadConsultationLeads };
-    },
+    queryFn: () => adminRepository.getDashboardMessages(),
     enabled: isBuildingReady,
     staleTime: BADGE_STALE,
   });
+}
+
+export function useAdminDashboardMessages(navAccess?: Map<string, boolean> | null) {
+  const { data: messages = [], ...query } = useBuildingBadgeCounts();
+  const visibleMessages = messages.filter(
+    (message) => !navAccess || navAccess.get(message.moduleKey) !== false
+  );
+  return { messages: visibleMessages, ...query };
 }
 
 export function useBuildingNavAccess() {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { CrudPanel } from "../../shared/CrudPanel";
 import { EmptyState } from "../../shared/EmptyState";
 import { useResidentIncidentReports } from "../../shared/queries/residentListQueries";
@@ -7,6 +7,7 @@ import { queryKeys } from "../../shared/queryKeys";
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { useTenantContext } from "../../shared/queries/useTenantContext";
 import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
+import { useSyncFromRefreshKey } from "../../shared/useSyncFromRefreshKey";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { IncidentReportDetailModal } from "../modals/IncidentReportDetailModal";
 import type { IncidentReport } from "../data/types";
@@ -42,10 +43,7 @@ export function IncidentReportsPage({ onAddNew, refreshKey = 0 }: IncidentReport
     await refreshList();
   }, [refreshList]);
 
-  useEffect(() => {
-    if (refreshKey === 0) return;
-    void reload();
-  }, [refreshKey, reload]);
+  useSyncFromRefreshKey(refreshKey, () => void reload());
 
   const loadError = error instanceof Error ? error.message : error ? "Failed to load incident reports." : null;
 

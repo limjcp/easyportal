@@ -534,6 +534,7 @@ export function mapBuildingDefinition(row: Record<string, unknown>, linkedIds: s
     propertyEmail: row.property_email as string,
     accountingEmail: row.accounting_email as string,
     billingEmail: row.billing_email as string,
+    sparcEmail: (row.sparc_email as string) ?? "",
     visitorParkingOvernightEmail: row.visitor_parking_overnight_email as string | undefined,
     buildingTypes: (row.building_types as string[]) ?? [],
     buildingFeatures: (row.building_features as string[]) ?? [],

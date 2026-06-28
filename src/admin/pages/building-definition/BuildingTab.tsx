@@ -168,6 +168,7 @@ export function BuildingTab({ refreshKey, onRefresh }: BuildingTabProps) {
               <Field label="Property Email" value={form.propertyEmail} onChange={(v) => update("propertyEmail", v)} type="email" />
               <Field label="Accounting Email (PO's will be CC'ed to this address)" value={form.accountingEmail} onChange={(v) => update("accountingEmail", v)} type="email" />
               <Field label="Billing Email (Subscription Issues will be sent to this address)" value={form.billingEmail} onChange={(v) => update("billingEmail", v)} type="email" />
+              <Field label="SPARC Bill Email (Vendor invoices are submitted to this address for payment)" value={form.sparcEmail} onChange={(v) => update("sparcEmail", v)} type="email" />
             </div>
           </AdminFormPanel>
 

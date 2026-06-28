@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ActionButton } from "../../shared/ActionButton";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { vendorRepository } from "../data/vendorRepository";
@@ -11,18 +12,23 @@ type ProfilePageProps = {
 
 export function ProfilePage({ onRefresh }: ProfilePageProps) {
   const [vendor, setVendor] = useState<Vendor | null>(null);
+  const [loading, setLoading] = useState(true);
   const [contactName, setContactName] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
   const [saved, setSaved] = useState(false);
 
   const load = useCallback(() => {
-    vendorRepository.getVendor().then((s) => {
-      setVendor(s);
-      setContactName(s.contactName);
-      setPhone(s.phone);
-      setNotes(s.notes ?? "");
-    });
+    setLoading(true);
+    vendorRepository
+      .getVendor()
+      .then((s) => {
+        setVendor(s);
+        setContactName(s.contactName);
+        setPhone(s.phone);
+        setNotes(s.notes ?? "");
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -62,11 +68,10 @@ export function ProfilePage({ onRefresh }: ProfilePageProps) {
     void saveProfile();
   };
 
-  if (!vendor) return <p className="text-sm text-slate-600">Loading profile…</p>;
-
   const displayError = saveError ?? inviteError;
 
   return (
+    <CrudPanel loading={loading}>
     <div>
       <div className="mb-4 rounded bg-[#0d9488] px-4 py-2 text-sm font-semibold text-white">
         Company Profile
@@ -74,7 +79,7 @@ export function ProfilePage({ onRefresh }: ProfilePageProps) {
 
       {displayError ? <FormAlert message={displayError} className="mb-4" /> : null}
 
-      {vendor.status === "pending_invite" && (
+      {vendor?.status === "pending_invite" && (
         <div className="mb-4 rounded border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <p className="font-medium">Complete your registration</p>
           <p className="mt-1">You were invited to join the vendor registry. Confirm to activate your account.</p>
@@ -90,17 +95,17 @@ export function ProfilePage({ onRefresh }: ProfilePageProps) {
 
       <div className="mb-6 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
         <p>
-          <strong>Company:</strong> {vendor.companyName}
+          <strong>Company:</strong> {vendor?.companyName}
         </p>
         <p>
-          <strong>Trade:</strong> {vendor.tradeCategory}
+          <strong>Trade:</strong> {vendor?.tradeCategory}
         </p>
         <p>
-          <strong>Email:</strong> {vendor.email}
+          <strong>Email:</strong> {vendor?.email}
         </p>
         <p>
           <strong>Status:</strong>{" "}
-          <span className="capitalize">{vendor.status.replace("_", " ")}</span>
+          <span className="capitalize">{vendor?.status.replace("_", " ")}</span>
         </p>
       </div>
 
@@ -143,5 +148,6 @@ export function ProfilePage({ onRefresh }: ProfilePageProps) {
         </div>
       </form>
     </div>
+    </CrudPanel>
   );
 }

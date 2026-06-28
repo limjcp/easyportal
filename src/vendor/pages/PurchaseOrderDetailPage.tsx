@@ -1,11 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionButton } from "../../shared/ActionButton";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { FormAlert } from "../../shared/FormAlert";
+import {
+  PurchaseOrderNegotiationPanel,
+  purchaseOrderStatusLabel,
+} from "../../shared/PurchaseOrderNegotiationPanel";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { VendorInvoicePanel } from "../components/VendorInvoicePanel";
 import { vendorRepository } from "../data/vendorRepository";
+import { ConvertToInvoiceModal } from "../modals/ConvertToInvoiceModal";
 import { DeclinePurchaseOrderModal } from "../modals/DeclinePurchaseOrderModal";
 import type { VendorRoute } from "../navigation";
-import type { CompanyBuilding, PurchaseOrder } from "../../resident/data/types";
+import type {
+  CompanyBuilding,
+  CreateVendorInvoiceInput,
+  PurchaseOrder,
+  PurchaseOrderNegotiation,
+  Vendor,
+  VendorInvoice,
+  VendorPaymentSettings,
+} from "../../resident/data/types";
 
 type PurchaseOrderDetailPageProps = {
   poId: string;
@@ -19,23 +34,51 @@ export function PurchaseOrderDetailPage({
   onRefresh,
 }: PurchaseOrderDetailPageProps) {
   const [po, setPo] = useState<PurchaseOrder | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [negotiations, setNegotiations] = useState<PurchaseOrderNegotiation[]>([]);
   const [building, setBuilding] = useState<CompanyBuilding | undefined>();
+  const [vendor, setVendor] = useState<Vendor | undefined>();
+  const [invoice, setInvoice] = useState<VendorInvoice | undefined>();
+  const [paymentSettings, setPaymentSettings] = useState<VendorPaymentSettings | undefined>();
   const [declineOpen, setDeclineOpen] = useState(false);
+  const [convertOpen, setConvertOpen] = useState(false);
   const declineReasonRef = useRef("");
+  const convertInputRef = useRef<
+    (CreateVendorInvoiceInput & { logoFile: File | null; logoStoragePath?: string }) | null
+  >(null);
 
   const load = useCallback(() => {
-    vendorRepository.getPurchaseOrder(poId).then(async (p) => {
-      setPo(p ?? null);
-      if (p) {
-        const b = await vendorRepository.getBuilding(p.buildingId);
-        setBuilding(b);
-      }
-    });
+    setLoading(true);
+    vendorRepository
+      .getPurchaseOrder(poId)
+      .then(async (p) => {
+        setPo(p ?? null);
+        if (p) {
+          const [b, negs, inv, v, payment] = await Promise.all([
+            vendorRepository.getBuilding(p.buildingId),
+            vendorRepository.getPurchaseOrderNegotiations(poId),
+            vendorRepository.getInvoiceByPurchaseOrderId(poId),
+            vendorRepository.getVendor(),
+            vendorRepository.getPaymentSettings(),
+          ]);
+          setBuilding(b);
+          setNegotiations(negs);
+          setInvoice(inv);
+          setVendor(v);
+          setPaymentSettings(payment);
+        }
+      })
+      .finally(() => setLoading(false));
   }, [poId]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const handleRefresh = useCallback(() => {
+    load();
+    onRefresh();
+  }, [load, onRefresh]);
 
   const navigateToActionList = useCallback(() => {
     onRefresh();
@@ -79,11 +122,50 @@ export function PurchaseOrderDetailPage({
     void declineOrder();
   };
 
-  if (!po) {
+  const {
+    run: createInvoice,
+    loading: creatingInvoice,
+    error: createInvoiceError,
+  } = useAsyncAction(
+    useCallback(async () => {
+      const input = convertInputRef.current;
+      if (!input) return;
+      const created = await vendorRepository.createInvoiceFromPurchaseOrder(poId, input);
+      setInvoice(created);
+      setConvertOpen(false);
+      convertInputRef.current = null;
+    }, [poId]),
+    {
+      successMessage: "Invoice created.",
+      errorMessage: "Unable to create invoice.",
+    }
+  );
+
+  const {
+    run: submitInvoice,
+    loading: submittingInvoice,
+    error: submitInvoiceError,
+  } = useAsyncAction(
+    useCallback(async () => {
+      if (!invoice) return;
+      const updated = await vendorRepository.submitInvoiceForPayment(invoice.id);
+      setInvoice(updated);
+    }, [invoice]),
+    {
+      successMessage: "Invoice submitted for payment.",
+      errorMessage: "Unable to submit invoice for payment.",
+    }
+  );
+
+  if (!loading && !po) {
     return <p className="text-sm text-slate-600">Purchase order not found.</p>;
   }
 
+  const showStandardActions = po?.status === "sent" && !po?.isQuoteRequest;
+
   return (
+    <CrudPanel loading={loading}>
+    {po ? (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="rounded bg-[#0d9488] px-4 py-2 text-sm font-semibold text-white">
@@ -99,12 +181,23 @@ export function PurchaseOrderDetailPage({
       </div>
 
       {displayError ? <FormAlert message={displayError} className="mb-4" /> : null}
+      {submitInvoiceError ? <FormAlert message={submitInvoiceError} className="mb-4" /> : null}
 
       <div className="space-y-3 rounded border border-slate-200 bg-white p-4 text-sm text-slate-700">
         <p>
           <strong>Status:</strong>{" "}
-          <span className="capitalize">{po.status === "sent" ? "Pending your response" : po.status}</span>
+          <span className="capitalize">
+            {po.status === "sent" && !po.isQuoteRequest
+              ? "Pending your response"
+              : purchaseOrderStatusLabel(po.status, po.isQuoteRequest)}
+          </span>
         </p>
+        {po.isQuoteRequest && (
+          <p className="text-xs text-slate-500">
+            This purchase order is a quote request. Submit your pricing below; the company may
+            counter-offer until you both agree.
+          </p>
+        )}
         <p>
           <strong>Building:</strong>{" "}
           {building ? `${building.name} — ${building.address}` : po.buildingId}
@@ -156,7 +249,35 @@ export function PurchaseOrderDetailPage({
         )}
       </div>
 
-      {po.status === "sent" && (
+      <PurchaseOrderNegotiationPanel
+        po={po}
+        actor="vendor"
+        negotiations={negotiations}
+        onRefresh={handleRefresh}
+        onSubmitQuote={async (input) => {
+          await vendorRepository.submitVendorQuote(po.id, input);
+        }}
+        onSubmitCounter={async (input) => {
+          await vendorRepository.submitVendorCounterOffer(po.id, input);
+        }}
+        onAccept={async () => {
+          await vendorRepository.acceptCompanyOffer(po.id);
+        }}
+      />
+
+      <VendorInvoicePanel
+        po={po}
+        invoice={invoice}
+        vendor={vendor}
+        building={building}
+        paymentSettings={paymentSettings}
+        onNavigate={onNavigate}
+        onConvert={() => setConvertOpen(true)}
+        onSubmitForPayment={() => void submitInvoice()}
+        submitting={submittingInvoice}
+      />
+
+      {showStandardActions && (
         <div className="mt-4 flex flex-wrap gap-2">
           <ActionButton
             label="Decline"
@@ -176,12 +297,40 @@ export function PurchaseOrderDetailPage({
         </div>
       )}
 
+      {po.isQuoteRequest && ["sent", "quoted", "negotiating"].includes(po.status) && (
+        <div className="mt-4">
+          <ActionButton
+            label="Decline quote request"
+            variant="danger"
+            loading={declining}
+            disabled={responding}
+            onClick={() => setDeclineOpen(true)}
+          />
+        </div>
+      )}
+
       <DeclinePurchaseOrderModal
         open={declineOpen}
         poNumber={po.poNumber}
         onClose={() => setDeclineOpen(false)}
         onConfirm={handleDecline}
       />
+
+      <ConvertToInvoiceModal
+        open={convertOpen}
+        poNumber={po.poNumber}
+        loading={creatingInvoice}
+        error={createInvoiceError}
+        paymentSettings={paymentSettings}
+        onNavigate={onNavigate}
+        onClose={() => setConvertOpen(false)}
+        onConfirm={(input) => {
+          convertInputRef.current = input;
+          void createInvoice();
+        }}
+      />
     </div>
+    ) : null}
+    </CrudPanel>
   );
 }

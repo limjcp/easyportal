@@ -4,6 +4,10 @@ import { queryKeys } from "../queryKeys";
 
 type Identifiable = { id: string };
 
+function stableQueryKeyHash(key: QueryKey | null): string | null {
+  return key ? JSON.stringify(key) : null;
+}
+
 export function patchBuildingQueryListItem<T extends Identifiable>(
   queryClient: QueryClient,
   queryKey: QueryKey,
@@ -59,6 +63,8 @@ export function useBuildingListRefresh<T extends Identifiable>(
   listQueryKey: QueryKey | null,
   refetch: () => Promise<unknown>
 ) {
+  const listQueryKeyHash = stableQueryKeyHash(listQueryKey);
+
   const refreshList = useCallback(
     async (updatedItem?: T) => {
       if (updatedItem && listQueryKey) {
@@ -67,7 +73,7 @@ export function useBuildingListRefresh<T extends Identifiable>(
       }
       await refetch();
     },
-    [listQueryKey, queryClient, refetch]
+    [listQueryKey, listQueryKeyHash, queryClient, refetch]
   );
 
   return { refreshList, patchItem: patchBuildingQueryListItem, prependItem: prependBuildingQueryListItem };

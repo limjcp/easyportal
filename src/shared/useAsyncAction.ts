@@ -17,8 +17,8 @@ function getErrorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
 
-export function useAsyncAction<T>(
-  action: () => Promise<T>,
+export function useAsyncAction<T, A extends unknown[] = []>(
+  action: (...args: A) => Promise<T>,
   options: AsyncActionOptions<T> = {}
 ) {
   const toastCtx = useContext(ToastContext);
@@ -32,7 +32,7 @@ export function useAsyncAction<T>(
 
   const clearError = useCallback(() => setError(null), []);
 
-  const run = useCallback(async (): Promise<T | undefined> => {
+  const run = useCallback(async (...args: A): Promise<T | undefined> => {
     const {
       successMessage,
       errorMessage = "Something went wrong. Please try again.",
@@ -47,7 +47,7 @@ export function useAsyncAction<T>(
     setError(null);
     if (trackBusy) busyRef.current?.beginBusy();
     try {
-      const result = await action();
+      const result = await action(...args);
       if (showSuccessToast && successMessage && toastCtx) {
         toastCtx.showToast({ message: successMessage, variant: "success" });
       }

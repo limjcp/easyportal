@@ -3,6 +3,7 @@ import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
 import { useAsyncAction } from "../../shared/useAsyncAction";
+import { getActiveBuildingId } from "../../data/supabase/buildingContext";
 import { companyRepository } from "../data/companyRepository";
 import type { CompanyBuilding, PurchaseOrderPrefill, Vendor } from "../../resident/data/types";
 
@@ -13,6 +14,8 @@ type PurchaseOrderFormModalProps = {
   onClose: () => void;
   onSaved: () => void;
   prefill?: PurchaseOrderPrefill;
+  /** When true, building can be chosen freely (purchase order management page). */
+  allowBuildingSelection?: boolean;
 };
 
 export function PurchaseOrderFormModal({
@@ -20,11 +23,13 @@ export function PurchaseOrderFormModal({
   onClose,
   onSaved,
   prefill,
+  allowBuildingSelection = false,
 }: PurchaseOrderFormModalProps) {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [buildings, setBuildings] = useState<CompanyBuilding[]>([]);
   const [vendorId, setVendorId] = useState("");
   const [buildingId, setBuildingId] = useState("");
+  const [lockBuilding, setLockBuilding] = useState(false);
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([{ description: "", quantity: 1, unitPrice: 0 }]);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -84,9 +89,14 @@ export function PurchaseOrderFormModal({
       });
       companyRepository.getBuildings().then((b) => {
         setBuildings(b);
-        const prefilledBuildingId = prefill?.buildingId;
-        if (prefilledBuildingId && b.some((item) => item.id === prefilledBuildingId)) {
-          setBuildingId(prefilledBuildingId);
+        const activeBuildingId = getActiveBuildingId();
+        const resolvedBuildingId =
+          prefill?.buildingId ?? (!allowBuildingSelection ? activeBuildingId : null);
+        const shouldLockBuilding =
+          prefill?.lockBuilding ?? (!allowBuildingSelection && !!resolvedBuildingId);
+        setLockBuilding(shouldLockBuilding);
+        if (resolvedBuildingId && b.some((item) => item.id === resolvedBuildingId)) {
+          setBuildingId(resolvedBuildingId);
           return;
         }
         if (b[0]) setBuildingId(b[0].id);
@@ -94,7 +104,7 @@ export function PurchaseOrderFormModal({
       setLines(prefill?.initialLineItems?.length ? prefill.initialLineItems : [{ description: "", quantity: 1, unitPrice: 0 }]);
       setNotes(prefill?.notes ?? "");
     }
-  }, [open, prefill, clearDraftError, clearSendError]);
+  }, [open, prefill, allowBuildingSelection, clearDraftError, clearSendError]);
 
   const updateLine = (i: number, field: keyof LineDraft, value: string | number) => {
     const next = [...lines];
@@ -173,7 +183,7 @@ export function PurchaseOrderFormModal({
           <select
             value={buildingId}
             onChange={(e) => setBuildingId(e.target.value)}
-            disabled={prefill?.lockBuilding}
+            disabled={lockBuilding}
             className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
           >
             {buildings.map((b) => (
@@ -216,6 +226,12 @@ export function PurchaseOrderFormModal({
           </button>
         </div>
         <p className="font-semibold">Total: ${total.toFixed(2)}</p>
+        {total === 0 && (
+          <p className="text-xs text-slate-500">
+            A $0 total sends this as a quote request — the vendor will propose pricing and you can
+            negotiate before accepting.
+          </p>
+        )}
         <label className="block">
           Notes
           <textarea

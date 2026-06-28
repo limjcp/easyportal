@@ -47,15 +47,149 @@ import {
 import { ensureDefaultDocumentFolders } from "./admin/documentFolders";
 import { ensureDefaultServiceCategoriesForBuilding } from "./admin/operationsRepository";
 import { buildingIdOrThrow, mapDbError, nowIso, sb, todayIsoDate } from "./base";
+import {
+  DOCUMENT_FOLDER_LIST_COLUMNS,
+  DOCUMENT_FILE_LIST_COLUMNS,
+  INCIDENT_CATEGORY_COLUMNS,
+  NEWS_LIST_COLUMNS,
+  RESIDENT_INCIDENT_LIST_COLUMNS,
+  RESIDENT_SERVICE_REQUEST_LIST_COLUMNS,
+  ADMIN_USER_PROFILE_COLUMNS,
+} from "./queryColumns";
 import { getBuildingDocumentSignedUrl, formatFileSize, getGalleryPhotoSignedUrl, inferDocumentFileType, removeBuildingDocument, uploadBuildingDocument } from "./storage";
 import { supabaseChatRepository } from "./chatRepository";
 import { ensureActiveBuildingForUser } from "./buildingContext";
 import { ensureIncidentCategory, insertComment, insertIncidentReportAttachment, insertServiceRequestAttachment, loadIncidentReportAttachments, loadServiceRequestAttachments } from "./admin/shared";
 import { fileToAttachmentPayload } from "../../shared/attachmentUtils";
+import type { ProfileCompletionPolicy, ProfileFieldOption } from "../../resident/data/types";
+import type { ProfileCompletionSavePayload } from "../../resident/data/repository";
+import {
+  clearProfileCompletedIfIncomplete,
+  markProfileCompleted,
+  resolveProfileCompletionStatus,
+  type ProfileCompletionStatus,
+} from "./profileCompletion";
 import {
   loadOccupancyProfileDetails,
   saveOccupancyProfileSection,
 } from "./occupancyProfileDetails";
+import { resolveProfileFieldOptions } from "./profileFieldOptions";
+
+type ProfileCompletionProfileRow = {
+  first_name: string;
+  last_name: string;
+  email: string;
+  timezone: string;
+  tel_home: string | null;
+  tel_mobile: string | null;
+  tel_business: string | null;
+  birth_month: number | null;
+  birth_day: number | null;
+};
+
+const PROFILE_COMPLETION_PROFILE_COLUMNS =
+  "first_name, last_name, email, timezone, tel_home, tel_mobile, tel_business, birth_month, birth_day";
+
+async function loadProfileCompletionPolicy(buildingId: string): Promise<ProfileCompletionPolicy> {
+  const { data, error } = await sb()
+    .from("portal_settings")
+    .select(
+      "profile_completion_enabled, profile_completion_resident_types, profile_completion_soft_login_count, profile_completion_block_login_count"
+    )
+    .eq("building_id", buildingId)
+    .maybeSingle();
+  mapDbError(error);
+  return {
+    enabled: data?.profile_completion_enabled ?? false,
+    residentTypes: (data?.profile_completion_resident_types ?? ["Owner", "Absentee Owner"]) as ProfileCompletionPolicy["residentTypes"],
+    softLoginCount: data?.profile_completion_soft_login_count ?? 2,
+    blockLoginCount: data?.profile_completion_block_login_count ?? 3,
+  };
+}
+
+async function loadProfileFieldOptions(buildingId: string): Promise<ProfileFieldOption[]> {
+  const { data, error } = await sb()
+    .from("profile_field_options")
+    .select("*")
+    .eq("building_id", buildingId);
+  mapDbError(error);
+  return resolveProfileFieldOptions(data ?? []);
+}
+
+async function evaluateProfileCompletionStatus(): Promise<ProfileCompletionStatus> {
+  const userId = await authUserId();
+  const buildingId = await bid();
+
+  const { data: occupancy, error: occupancyError } = await sb()
+    .from("unit_occupancies")
+    .select("id, profile_id, resident_type, profile_completion_login_count, profile_completed_at")
+    .eq("profile_id", userId)
+    .eq("building_id", buildingId)
+    .is("archived_at", null)
+    .maybeSingle();
+  mapDbError(occupancyError);
+
+  if (!occupancy) {
+    return {
+      phase: "none",
+      missingFields: [],
+      loginCount: 0,
+      policyEnabled: false,
+      appliesToUser: false,
+    };
+  }
+
+  const occupancyId = occupancy.id as string;
+  const [policy, requiredFields, profileResult, details] = await Promise.all([
+    loadProfileCompletionPolicy(buildingId),
+    loadProfileFieldOptions(buildingId),
+    sb().from("profiles").select(PROFILE_COMPLETION_PROFILE_COLUMNS).eq("id", userId).single(),
+    loadOccupancyProfileDetails(occupancyId, buildingId),
+  ]);
+  mapDbError(profileResult.error);
+
+  const profile: ProfileCompletionProfileRow = {
+    first_name: profileResult.data?.first_name ?? "",
+    last_name: profileResult.data?.last_name ?? "",
+    email: profileResult.data?.email ?? "",
+    timezone: profileResult.data?.timezone ?? "",
+    tel_home: profileResult.data?.tel_home ?? null,
+    tel_mobile: profileResult.data?.tel_mobile ?? null,
+    tel_business: profileResult.data?.tel_business ?? null,
+    birth_month: profileResult.data?.birth_month ?? null,
+    birth_day: profileResult.data?.birth_day ?? null,
+  };
+
+  const status = resolveProfileCompletionStatus({
+    policy,
+    residentType: occupancy.resident_type as string,
+    loginCount: occupancy.profile_completion_login_count ?? 0,
+    profileCompletedAt: occupancy.profile_completed_at as string | null,
+    requiredFields,
+    profile,
+    details,
+  });
+
+  if (status.missingFields.length > 0 && occupancy.profile_completed_at) {
+    await clearProfileCompletedIfIncomplete(occupancyId, buildingId, true);
+  }
+
+  return status;
+}
+
+function buildProfileUpdate(payload: ProfileCompletionSavePayload): Record<string, unknown> {
+  const update: Record<string, unknown> = {};
+  if (payload.firstName !== undefined) update.first_name = payload.firstName;
+  if (payload.lastName !== undefined) update.last_name = payload.lastName;
+  if (payload.email !== undefined) update.email = payload.email;
+  if (payload.timezone !== undefined) update.timezone = payload.timezone;
+  if (payload.homePhone !== undefined) update.tel_home = payload.homePhone || null;
+  if (payload.cellPhone !== undefined) update.tel_mobile = payload.cellPhone || null;
+  if (payload.workPhone !== undefined) update.tel_business = payload.workPhone || null;
+  if (payload.birthMonth !== undefined) update.birth_month = payload.birthMonth;
+  if (payload.birthDay !== undefined) update.birth_day = payload.birthDay;
+  return update;
+}
 
 async function bid() {
   return buildingIdOrThrow();
@@ -177,11 +311,17 @@ export const supabaseResidentRepository: ResidentRepository = {
     } = await sb().auth.getUser();
     if (!user) throw new Error("Not authenticated");
     const buildingId = await ensureActiveBuildingForUser(user.id);
-    const { data: profile, error } = await sb().from("profiles").select("*").eq("id", user.id).single();
+    const { data: profile, error } = await sb()
+      .from("profiles")
+      .select(`${ADMIN_USER_PROFILE_COLUMNS}, birth_month, birth_day`)
+      .eq("id", user.id)
+      .single();
     mapDbError(error);
     const { data: occupancy } = await sb()
       .from("unit_occupancies")
-      .select("*, units(label), buildings:building_id(id, condo_name, address, city, province, postal_zip)")
+      .select(
+        "resident_type, unit_id, units(label), buildings:building_id(id, condo_name, address, city, province, postal_zip)"
+      )
       .eq("profile_id", user.id)
       .eq("building_id", buildingId)
       .is("archived_at", null)
@@ -206,10 +346,16 @@ export const supabaseResidentRepository: ResidentRepository = {
       buildingAddress,
       unit: unit?.label ?? "",
       email: profile!.email,
-      phone: profile!.phone,
+      phone: (profile!.tel_mobile as string | null) || (profile!.phone as string) || "",
       role: occupancy?.resident_type ?? "Owner",
       birthMonth: profile!.birth_month ?? undefined,
       birthDay: profile!.birth_day ?? undefined,
+      firstName: (profile!.first_name as string | null) ?? "",
+      lastName: (profile!.last_name as string | null) ?? "",
+      timezone: (profile!.timezone as string | null) ?? "",
+      homePhone: (profile!.tel_home as string | null) ?? "",
+      cellPhone: (profile!.tel_mobile as string | null) ?? "",
+      workPhone: (profile!.tel_business as string | null) ?? "",
     };
   },
 
@@ -234,7 +380,7 @@ export const supabaseResidentRepository: ResidentRepository = {
     const buildingId = await bid();
     const { data, error } = await sb()
       .from("news_items")
-      .select("*")
+      .select(NEWS_LIST_COLUMNS)
       .eq("building_id", buildingId)
       .eq("archived", false)
       .eq("status", "active");
@@ -309,7 +455,7 @@ export const supabaseResidentRepository: ResidentRepository = {
     await ensureDefaultDocumentFolders(buildingId);
     const { data, error } = await sb()
       .from("document_folders")
-      .select("*")
+      .select(DOCUMENT_FOLDER_LIST_COLUMNS)
       .eq("building_id", buildingId)
       .eq("section", "resident-portal");
     mapDbError(error);
@@ -324,7 +470,7 @@ export const supabaseResidentRepository: ResidentRepository = {
     const buildingId = await bid();
     const { data, error } = await sb()
       .from("document_files")
-      .select("*")
+      .select(DOCUMENT_FILE_LIST_COLUMNS)
       .eq("folder_id", folderId)
       .eq("building_id", buildingId);
     mapDbError(error);
@@ -560,7 +706,7 @@ export const supabaseResidentRepository: ResidentRepository = {
     } = await sb().auth.getUser();
     const { data, error } = await sb()
       .from("service_requests")
-      .select("*")
+      .select(RESIDENT_SERVICE_REQUEST_LIST_COLUMNS)
       .eq("building_id", buildingId)
       .eq("created_by_profile_id", user?.id ?? "")
       .order("created_at", { ascending: false });
@@ -719,6 +865,7 @@ export const supabaseResidentRepository: ResidentRepository = {
         resident,
         action_required: true,
         pending_reply: true,
+        unread: true,
       })
       .select("*")
       .single();
@@ -750,7 +897,7 @@ export const supabaseResidentRepository: ResidentRepository = {
     } = await sb().auth.getUser();
     const { data, error } = await sb()
       .from("incident_reports")
-      .select("*")
+      .select(RESIDENT_INCIDENT_LIST_COLUMNS)
       .eq("building_id", buildingId)
       .eq("created_by_profile_id", user?.id ?? "")
       .order("submitted_at", { ascending: false, nullsFirst: false });
@@ -774,7 +921,7 @@ export const supabaseResidentRepository: ResidentRepository = {
     const buildingId = await bid();
     const { data, error } = await sb()
       .from("incident_report_categories")
-      .select("*")
+      .select(INCIDENT_CATEGORY_COLUMNS)
       .eq("building_id", buildingId)
       .order("sort_order", { ascending: true });
     mapDbError(error);
@@ -950,7 +1097,7 @@ export const supabaseResidentRepository: ResidentRepository = {
     } = await sb().auth.getUser();
     const { data, error } = await sb()
       .from("suggestions")
-      .insert({ building_id: buildingId, profile_id: user!.id, text: input.text, status: "Submitted" })
+      .insert({ building_id: buildingId, profile_id: user!.id, text: input.text, status: "Submitted", unread: true })
       .select("*")
       .single();
     mapDbError(error);
@@ -1793,32 +1940,32 @@ export const supabaseResidentRepository: ResidentRepository = {
       await Promise.all([
       sb()
         .from("service_requests")
-        .select("*", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true })
         .eq("building_id", buildingId)
         .eq("created_by_profile_id", userId)
         .or("unread.eq.true,status.eq.Pending"),
       sb()
         .from("incident_reports")
-        .select("*", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true })
         .eq("building_id", buildingId)
         .eq("created_by_profile_id", userId)
         .neq("status", "Draft")
         .or("unread.eq.true,status.eq.Pending"),
       sb()
         .from("status_certificates")
-        .select("*", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true })
         .eq("building_id", buildingId)
         .eq("requested_by_profile_id", userId)
         .eq("unread", true),
       sb()
         .from("amenity_bookings")
-        .select("*", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true })
         .eq("building_id", buildingId)
         .eq("profile_id", userId)
         .eq("unread", true),
       sb()
         .from("amenity_bookings")
-        .select("*", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true })
         .eq("building_id", buildingId)
         .eq("profile_id", userId)
         .eq("status", "approvedAwaitingPayment"),
@@ -1845,5 +1992,50 @@ export const supabaseResidentRepository: ResidentRepository = {
       chat: chatUnread,
       amenityBookings: (amenityUnreadResult.count ?? 0) + (amenityPaymentResult.count ?? 0),
     };
+  },
+
+  async getProfileCompletionStatus() {
+    return evaluateProfileCompletionStatus();
+  },
+
+  async saveProfileCompletion(payload: ProfileCompletionSavePayload) {
+    const userId = await authUserId();
+    const buildingId = await bid();
+    const occupancy = await currentOccupancy();
+    if (!occupancy) throw new Error("No active occupancy found.");
+
+    const occupancyId = occupancy.id as string;
+    const profileUpdate = buildProfileUpdate(payload);
+    if (Object.keys(profileUpdate).length > 0) {
+      const { error } = await sb().from("profiles").update(profileUpdate).eq("id", userId);
+      mapDbError(error);
+    }
+
+    const sectionEntries: [ResidentDetailSection, ResidentDetailSectionData | undefined][] = [
+      ["vehicles", payload.vehicles],
+      ["pets", payload.pets],
+      ["guestList", payload.guestList],
+      ["parkingSpots", payload.parkingSpots],
+      ["lockers", payload.lockers],
+      ["keyFobs", payload.keyFobs],
+      ["bikeSpaces", payload.bikeSpaces],
+      ["purchaseDateMaintFees", payload.purchaseDateMaintFees],
+    ];
+
+    for (const [section, data] of sectionEntries) {
+      if (data !== undefined) {
+        await saveOccupancyProfileSection(occupancyId, buildingId, section, data);
+      }
+    }
+
+    const status = await evaluateProfileCompletionStatus();
+    if (status.missingFields.length > 0) {
+      const labels = status.missingFields.map((f) => f.label).join(", ");
+      throw new Error(`Profile still incomplete. Missing: ${labels}`);
+    }
+    if (status.appliesToUser) {
+      await markProfileCompleted(occupancyId, buildingId);
+    }
+    return status;
   },
 };

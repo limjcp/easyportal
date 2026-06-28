@@ -70,6 +70,7 @@ export type Database = {
           property_email: string;
           accounting_email: string;
           billing_email: string;
+          sparc_email: string;
           visitor_parking_overnight_email: string | null;
           building_types: string[];
           building_features: string[];
@@ -148,6 +149,8 @@ export type Database = {
           date_created: string;
           last_login_at: string | null;
           archived_at: string | null;
+          profile_completion_login_count: number;
+          profile_completed_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -188,6 +191,21 @@ export type Database = {
           email: string;
           notes: string;
           status: string;
+          invoice_hst_number: string;
+          invoice_billing_address: string;
+          invoice_billing_city: string;
+          invoice_billing_province: string;
+          invoice_billing_postal: string;
+          invoice_logo_storage_path: string | null;
+          invoice_preferred_payment_method: string;
+          invoice_bank_name: string;
+          invoice_bank_account_name: string;
+          invoice_bank_account_number: string;
+          invoice_bank_institution_number: string;
+          invoice_bank_transit_number: string;
+          invoice_bank_swift_bic: string;
+          invoice_interac_recipient_name: string;
+          invoice_interac_email: string;
           created_at: string;
           updated_at: string;
         };
@@ -236,7 +254,28 @@ export type Database = {
       election_positions: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       election_candidates: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       election_ballots: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
-      portal_settings: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
+      portal_settings: {
+        Row: {
+          building_id: string;
+          enable_documents: boolean;
+          enable_events: boolean;
+          enable_gallery: boolean;
+          enable_faq: boolean;
+          enable_service_requests: boolean;
+          enable_suggestions: boolean;
+          enable_incident_reports: boolean;
+          default_language: string;
+          profile_completion_enabled: boolean;
+          profile_completion_resident_types: string[];
+          profile_completion_soft_login_count: number;
+          profile_completion_block_login_count: number;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["portal_settings"]["Row"]> & {
+          building_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["portal_settings"]["Row"]>;
+      };
       public_portal_settings: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       portal_tile_settings: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       portal_modules: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
@@ -244,7 +283,25 @@ export type Database = {
       portal_images: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       public_portal_documents: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       registration_field_options: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
-      profile_field_options: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
+      profile_field_options: {
+        Row: {
+          id: string;
+          building_id: string;
+          field_key: string;
+          label: string;
+          show_field: boolean;
+          editable_field: boolean;
+          locked: boolean;
+          note: string | null;
+          required_for_completion: boolean;
+        };
+        Insert: Partial<Database["public"]["Tables"]["profile_field_options"]["Row"]> & {
+          building_id: string;
+          field_key: string;
+          label: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["profile_field_options"]["Row"]>;
+      };
       building_links: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       building_tax_settings: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       building_unit_groups: { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown> };
@@ -275,6 +332,10 @@ export type Database = {
           owners: number;
           activated_users: number;
         }[];
+      };
+      get_admin_dashboard_counts: {
+        Args: { p_building_id: string };
+        Returns: Record<string, number>;
       };
     };
     Enums: Record<string, never>;

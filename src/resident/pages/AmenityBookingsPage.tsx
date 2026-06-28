@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { CrudPanel } from "../../shared/CrudPanel";
 import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
@@ -6,6 +6,7 @@ import { useAsyncAction } from "../../shared/useAsyncAction";
 import { useResidentAmenityBookingsData } from "../../shared/queries/residentListQueries";
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
+import { useSyncFromRefreshKey } from "../../shared/useSyncFromRefreshKey";
 import { useTabChangeWithBusy } from "../../shared/useTabChangeWithBusy";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { residentRepo } from "../data/mockRepository";
@@ -89,10 +90,7 @@ export function AmenityBookingsPage({ refreshKey = 0 }: { refreshKey?: number })
     await refetch();
   }, [invalidateBuilding, refetch]);
 
-  useEffect(() => {
-    if (refreshKey === 0) return;
-    void reload();
-  }, [refreshKey, reload]);
+  useSyncFromRefreshKey(refreshKey, () => void reload());
 
   const clearPageError = () => setPageError(null);
   const handleTabChange = useTabChangeWithBusy((next: TabId) => {

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { FaCheckCircle, FaCloudUploadAlt, FaFilePdf, FaSpinner } from "react-icons/fa";
 import { ActionButton } from "../ActionButton";
 import { FormAlert } from "../FormAlert";
 import { useAsyncAction } from "../useAsyncAction";
@@ -52,6 +53,9 @@ export function VendorComplianceUploadCard({
   const [coverageAmount, setCoverageAmount] = useState("");
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [aiSuggestions, setAiSuggestions] = useState<Record<string, unknown> | undefined>();
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (currentDocument) {
@@ -62,12 +66,22 @@ export function VendorComplianceUploadCard({
     }
   }, [currentDocument]);
 
-  const { run: stageAndExtract, loading: extracting, error: extractError } = useAsyncAction(
+  const { run: stageFile, loading: staging, error: stageError } = useAsyncAction(
+    useCallback(async (selected: File) => {
+      const path = await uploadVendorDocument(vendorId, selected);
+      setStagedPath(path);
+      setFile(selected);
+      setValidationError(null);
+      setAiNote(null);
+      setAiSuggestions(undefined);
+      return path;
+    }, [vendorId]),
+    { showSuccessToast: false, showErrorToast: false }
+  );
+
+  const { run: runExtraction, loading: extracting } = useAsyncAction(
     useCallback(
-      async (selected: File) => {
-        const path = await uploadVendorDocument(vendorId, selected);
-        setStagedPath(path);
-        setFile(selected);
+      async (path: string) => {
         const suggestions = await invokeExtractVendorDocument({
           storagePath: path,
           documentType,
@@ -80,17 +94,17 @@ export function VendorComplianceUploadCard({
           setAiSuggestions(suggestions as Record<string, unknown>);
           setAiNote(
             suggestions.confidence
-              ? `AI suggestions applied (confidence ${Math.round(suggestions.confidence * 100)}%). Please review before saving.`
-              : "AI suggestions applied. Please review before saving."
+              ? `AI read the expiry date (confidence ${Math.round(suggestions.confidence * 100)}%). Please review before saving.`
+              : "AI read the expiry date. Please review before saving."
           );
         } else {
           setAiSuggestions(undefined);
-          setAiNote("Enter the details manually or configure OPENAI_API_KEY for AI assist.");
+          setAiNote("Enter the expiry date manually. AI assist is unavailable right now.");
         }
       },
-      [documentType, vendorId]
+      [documentType]
     ),
-    { showSuccessToast: false, showErrorToast: false }
+    { showSuccessToast: false, showErrorToast: false, trackBusy: false }
   );
 
   const { run: saveDocument, loading: saving, error: saveError } = useAsyncAction(
@@ -139,18 +153,46 @@ export function VendorComplianceUploadCard({
 
   const handleFileChange = (selected: File | null) => {
     if (!selected) return;
-    void stageAndExtract(selected);
+    void stageFile(selected).then((path) => {
+      if (path) void runExtraction(path);
+    });
   };
+
+  const handleDragOver = (e: DragEvent) => {
+    e.preventDefault();
+    if (!disabled && !staging && !saving) setDragActive(true);
+  };
+
+  const handleDragLeave = (e: DragEvent) => {
+    e.preventDefault();
+    setDragActive(false);
+  };
+
+  const handleDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setDragActive(false);
+    if (disabled || staging || saving) return;
+    handleFileChange(e.dataTransfer.files?.[0] ?? null);
+  };
+
+  const uploadBusy = staging || extracting;
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
+    setValidationError(null);
     if (!stagedPath && !file) {
+      setValidationError("Upload a certificate file before saving.");
+      return;
+    }
+    if (!expiryDate.trim()) {
+      setValidationError("Expiry date is required.");
       return;
     }
     void saveDocument();
   };
 
-  const displayError = extractError ?? saveError;
+  const displayError = validationError ?? stageError ?? saveError;
+  const fileReady = Boolean(stagedPath || file);
 
   return (
     <div className="rounded border border-slate-200 bg-white p-4">
@@ -192,20 +234,90 @@ export function VendorComplianceUploadCard({
       {aiNote ? <p className="mb-3 text-xs text-slate-600">{aiNote}</p> : null}
 
       <form onSubmit={handleSubmit} className="space-y-3">
-        <label className="block text-sm">
-          <span className="text-slate-600">Upload new certificate (PDF or image)</span>
-          <input
-            type="file"
-            accept=".pdf,image/*"
-            disabled={disabled || extracting || saving}
-            onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
-            className="mt-1 block w-full text-sm"
-          />
-        </label>
-        {extracting ? <p className="text-xs text-slate-500">Reading document…</p> : null}
-        {file ? (
-          <p className="text-xs text-slate-500">Selected: {file.name}</p>
-        ) : null}
+        <div>
+          <p className="mb-2 text-sm font-medium text-slate-700">
+            {currentDocument ? "Upload replacement certificate" : "Upload certificate"}
+          </p>
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={[
+              "relative rounded-lg border-2 border-dashed p-6 text-center transition-colors",
+              fileReady
+                ? "border-[#0d9488] bg-[#ecfdf5]"
+                : dragActive
+                  ? "border-[#0d9488] bg-[#f0fdfa]"
+                  : "border-[#99f6e4] bg-[#f0fdfa]/60 hover:border-[#0d9488] hover:bg-[#ecfdf5]",
+              disabled || saving ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+            ].join(" ")}
+            onClick={() => {
+              if (!disabled && !staging && !saving) fileInputRef.current?.click();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                if (!disabled && !staging && !saving) fileInputRef.current?.click();
+              }
+            }}
+            role="button"
+            tabIndex={disabled || saving ? -1 : 0}
+            aria-label="Upload certificate file"
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,image/*"
+              disabled={disabled || staging || saving}
+              onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
+              className="hidden"
+            />
+
+            {uploadBusy ? (
+              <div className="flex flex-col items-center gap-2 text-[#0f766e]">
+                <FaSpinner className="animate-spin text-3xl" aria-hidden />
+                <p className="text-sm font-semibold">
+                  {staging ? "Uploading certificate…" : "Reading expiry date with AI…"}
+                </p>
+              </div>
+            ) : file ? (
+              <div className="flex flex-col items-center gap-2">
+                <FaCheckCircle className="text-3xl text-[#0d9488]" aria-hidden />
+                <p className="text-sm font-semibold text-[#0f766e]">Certificate ready to save</p>
+                <p className="flex max-w-full items-center justify-center gap-1.5 truncate text-sm text-slate-700">
+                  <FaFilePdf className="shrink-0 text-slate-500" aria-hidden />
+                  <span className="truncate">{file.name}</span>
+                </p>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                  className="mt-1 text-xs font-medium text-[#0d9488] underline-offset-2 hover:underline"
+                >
+                  Choose a different file
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-3">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#0d9488] text-white shadow-md">
+                  <FaCloudUploadAlt className="text-2xl" aria-hidden />
+                </div>
+                <div>
+                  <p className="text-base font-semibold text-slate-800">
+                    Drop your certificate here
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">PDF or image — click to browse</p>
+                </div>
+                <span className="inline-flex items-center gap-2 rounded-md bg-[#0d9488] px-5 py-2.5 text-sm font-semibold text-white shadow-sm">
+                  <FaCloudUploadAlt aria-hidden />
+                  Choose file
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
 
         <label className="block text-sm">
           <span className="text-slate-600">Expiry date</span>
@@ -257,8 +369,8 @@ export function VendorComplianceUploadCard({
           label={currentDocument ? "Upload replacement" : "Save certificate"}
           loadingLabel="Saving…"
           loading={saving}
-          disabled={disabled || (!stagedPath && !file)}
-          className="bg-[#0d9488] hover:bg-[#0b7a70]"
+          disabled={disabled || !fileReady || !expiryDate.trim()}
+          className="w-full bg-[#0d9488] py-2.5 text-base font-semibold shadow-sm hover:bg-[#0b7a70] sm:w-auto"
         />
       </form>
     </div>

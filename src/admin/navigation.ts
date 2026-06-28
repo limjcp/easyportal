@@ -1,5 +1,5 @@
 import type { IconType } from "react-icons";
-import type { ExternalDataTab } from "../resident/data/types";
+import type { ExternalDataTab, UnitsUsersTab } from "../resident/data/types";
 import {
   FaBell,
   FaBuilding,
@@ -80,7 +80,7 @@ export type AdminRoute =
   | { page: "status-certificates"; tab?: "current" | "archived" | "settings" }
   | { page: "suggestions" }
   | { page: "suggestion-detail"; id: string }
-  | { page: "units-users" }
+  | { page: "units-users"; tab: UnitsUsersTab }
   | { page: "chat" };
 
 export type AdminNavItem = {
@@ -270,7 +270,7 @@ const adminNavItemsById = {
     id: "units-users",
     label: "Units & Users",
     icon: FaUsers,
-    route: { page: "units-users" },
+    route: { page: "units-users", tab: "current" },
     moduleKey: "units-users",
   },
 } as const satisfies Record<string, AdminNavItem>;
@@ -645,8 +645,13 @@ export function getBreadcrumbTrail(route: AdminRoute): { label: string; route?: 
         { label: tabLabels[route.tab] },
       ];
     }
-    case "news-notices":
-      return [{ label: "News & Notices", route }];
+    case "news-notices": {
+      const tabLabel = route.tab === "archived" ? "Archived" : "Current";
+      return [
+        { label: "News & Notices", route: { page: "news-notices", tab: "current" } },
+        { label: tabLabel },
+      ];
+    }
     case "news-notice-edit":
       return [{ label: "News & Notices", route: { page: "news-notices", tab: "current" } }, { label: "Edit" }];
     case "polls":
@@ -663,8 +668,18 @@ export function getBreadcrumbTrail(route: AdminRoute): { label: string; route?: 
       return [{ label: "Suggestions", route: { page: "suggestions" } }, { label: "View" }];
     case "chat":
       return [{ label: "Chat", route }];
-    case "units-users":
-      return [{ label: "Units & Users", route }];
+    case "units-users": {
+      const tabLabels: Record<UnitsUsersTab, string> = {
+        current: "Current Users",
+        pending: "Users Pending Assignment",
+        unoccupied: "Unoccupied Units",
+        archived: "Archived Users",
+      };
+      return [
+        { label: "Units & Users", route: { page: "units-users", tab: "current" } },
+        { label: tabLabels[route.tab] },
+      ];
+    }
     default:
       return [{ label: "Home", route: home }];
   }

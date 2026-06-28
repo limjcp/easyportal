@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { generateTempPassword } from "../_shared/resend.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,7 +12,7 @@ type ProvisionKind = "resident" | "company_employee" | "building_admin";
 type ProvisionPayload = {
   kind: ProvisionKind;
   email: string;
-  password: string;
+  password?: string;
   firstName: string;
   lastName: string;
   buildingId?: string;
@@ -72,14 +73,14 @@ Deno.serve(async (req) => {
 
     const payload = (await req.json()) as ProvisionPayload;
     const email = payload.email?.trim().toLowerCase();
-    const password = payload.password ?? "";
+    const passwordInput = payload.password?.trim() ?? "";
     const firstName = payload.firstName?.trim() ?? "";
     const lastName = payload.lastName?.trim() ?? "";
 
-    if (!payload.kind || !email || !password || !firstName || !lastName) {
+    if (!payload.kind || !email || !firstName || !lastName) {
       return jsonResponse({ error: "Missing required fields." }, 400);
     }
-    if (password.length < 8) {
+    if (passwordInput && passwordInput.length < 8) {
       return jsonResponse({ error: "Password must be at least 8 characters." }, 400);
     }
 
@@ -145,6 +146,7 @@ Deno.serve(async (req) => {
     let created = false;
 
     if (!userId) {
+      const password = passwordInput || generateTempPassword();
       const { data: createdUser, error: createError } = await adminClient.auth.admin.createUser({
         email,
         password,
@@ -161,14 +163,20 @@ Deno.serve(async (req) => {
       userId = createdUser.user.id;
       created = true;
     } else {
-      const { error: updateAuthError } = await adminClient.auth.admin.updateUserById(userId, {
-        password,
+      const authUpdates: {
+        password?: string;
+        user_metadata: { first_name: string; last_name: string; display_name: string };
+      } = {
         user_metadata: {
           first_name: firstName,
           last_name: lastName,
           display_name: displayName(firstName, lastName),
         },
-      });
+      };
+      if (passwordInput) {
+        authUpdates.password = passwordInput;
+      }
+      const { error: updateAuthError } = await adminClient.auth.admin.updateUserById(userId, authUpdates);
       if (updateAuthError) {
         return jsonResponse({ error: updateAuthError.message }, 400);
       }

@@ -1,3 +1,4 @@
+import type { ProfileCompletionStatus } from "../../data/supabase/profileCompletion";
 import type {
   CalendarEvent,
   Comment,
@@ -30,7 +31,12 @@ import type {
   CreateFireSafetyPhotoInput,
   ResidentDetailSection,
   ResidentDetailSectionData,
+  ResidentGuest,
+  ResidentKeyFob,
+  ResidentPet,
   ResidentProfileDetails,
+  ResidentPurchaseMaintFees,
+  ResidentVehicle,
   Suggestion,
   BoardElection,
   ElectionPosition,
@@ -52,6 +58,28 @@ import type {
   SubmitPartyRoomBookingInput,
 } from "./types";
 import type { ArrangeTile } from "./portalTileLayout";
+
+export type { ProfileCompletionStatus };
+
+export type ProfileCompletionSavePayload = {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  timezone?: string;
+  homePhone?: string;
+  cellPhone?: string;
+  workPhone?: string;
+  birthMonth?: number;
+  birthDay?: number;
+  vehicles?: ResidentVehicle[];
+  pets?: ResidentPet[];
+  guestList?: ResidentGuest[];
+  parkingSpots?: string[];
+  lockers?: string[];
+  keyFobs?: ResidentKeyFob[];
+  bikeSpaces?: string[];
+  purchaseDateMaintFees?: ResidentPurchaseMaintFees;
+};
 
 export interface ResidentRepository {
   getUser(): Promise<ResidentUser>;
@@ -142,4 +170,6 @@ export interface ResidentRepository {
   getPersonalTileLayout(): Promise<ArrangeTile[] | null>;
   savePersonalTileLayout(tiles: ArrangeTile[]): Promise<void>;
   resetPersonalTileLayout(): Promise<void>;
+  getProfileCompletionStatus(): Promise<ProfileCompletionStatus>;
+  saveProfileCompletion(payload: ProfileCompletionSavePayload): Promise<ProfileCompletionStatus>;
 }

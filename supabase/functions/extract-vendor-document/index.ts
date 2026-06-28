@@ -7,9 +7,19 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const GEMINI_MODEL = "gemini-2.0-flash";
+
 type ExtractPayload = {
   storagePath: string;
   documentType: "insurance" | "wsib";
+};
+
+type ExtractedFields = {
+  expiryDate?: string;
+  carrier?: string;
+  policyNumber?: string;
+  coverageAmount?: string;
+  confidence?: number;
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -19,78 +29,152 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+function getGeminiApiKey(): string {
+  return (
+    Deno.env.get("GEMINI_API_KEY")?.trim() ??
+    Deno.env.get("GOOGLE_API_KEY")?.trim() ??
+    ""
+  );
+}
+
+function normalizeExpiryDate(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+
+  const slashMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashMatch) {
+    const [, month, day, year] = slashMatch;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  return undefined;
+}
+
 async function extractPdfText(bytes: Uint8Array): Promise<string> {
   const pdf = await getDocumentProxy(bytes);
   const { text } = await extractText(pdf, { mergePages: true });
   return (text ?? []).join("\n").trim();
 }
 
-async function extractWithOpenAi(input: {
+function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function buildExtractionPrompt(documentType: "insurance" | "wsib"): string {
+  const docLabel = documentType === "insurance" ? "insurance certificate" : "WSIB clearance";
+  return [
+    `Extract fields from this Ontario contractor ${docLabel} document.`,
+    "Return JSON only with keys:",
+    "expiryDate (YYYY-MM-DD or null),",
+    "carrier (string or null),",
+    "policyNumber (string or null),",
+    "coverageAmount (string or null, insurance only),",
+    "confidence (0-1 number).",
+    "Use null when unknown. Prefer the certificate expiry / valid-until date.",
+  ].join(" ");
+}
+
+async function extractWithGemini(input: {
   documentType: "insurance" | "wsib";
   textContent?: string;
   imageBase64?: string;
   mimeType?: string;
-}) {
-  const apiKey = Deno.env.get("OPENAI_API_KEY")?.trim() ?? "";
+}): Promise<ExtractedFields | null> {
+  const apiKey = getGeminiApiKey();
   if (!apiKey) return null;
 
-  const docLabel = input.documentType === "insurance" ? "insurance certificate" : "WSIB clearance";
-  const systemPrompt = `You extract fields from Ontario contractor ${docLabel} documents. Return JSON only with keys: expiryDate (YYYY-MM-DD or null), carrier (string or null), policyNumber (string or null), coverageAmount (string or null, insurance only), confidence (0-1 number). Use null when unknown.`;
-
-  const userParts: Array<Record<string, unknown>> = [
-    { type: "text", text: `Extract ${docLabel} fields from this document.` },
+  const parts: Array<Record<string, unknown>> = [
+    { text: buildExtractionPrompt(input.documentType) },
   ];
 
   if (input.imageBase64 && input.mimeType?.startsWith("image/")) {
-    userParts.push({
-      type: "image_url",
-      image_url: { url: `data:${input.mimeType};base64,${input.imageBase64}` },
+    parts.push({
+      inline_data: {
+        mime_type: input.mimeType,
+        data: input.imageBase64,
+      },
     });
   } else if (input.textContent) {
-    userParts.push({
-      type: "text",
+    parts.push({
       text: `Document text:\n\n${input.textContent.slice(0, 12000)}`,
     });
   } else {
     return null;
   }
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userParts },
-      ],
-      temperature: 0,
-    }),
-  });
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: {
+          temperature: 0,
+          responseMimeType: "application/json",
+        },
+      }),
+    }
+  );
 
   if (!response.ok) return null;
 
   const body = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
+    candidates?: Array<{
+      content?: { parts?: Array<{ text?: string }> };
+    }>;
   };
-  const content = body.choices?.[0]?.message?.content;
+
+  const content = body.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!content) return null;
 
   try {
-    return JSON.parse(content) as Record<string, unknown>;
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    return {
+      expiryDate: normalizeExpiryDate(parsed.expiryDate),
+      carrier: typeof parsed.carrier === "string" ? parsed.carrier : undefined,
+      policyNumber: typeof parsed.policyNumber === "string" ? parsed.policyNumber : undefined,
+      coverageAmount:
+        typeof parsed.coverageAmount === "string" ? parsed.coverageAmount : undefined,
+      confidence: typeof parsed.confidence === "number" ? parsed.confidence : undefined,
+    };
   } catch {
     return null;
   }
 }
 
-function toBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
+async function userCanManageVendorCompliance(
+  adminClient: ReturnType<typeof createClient>,
+  userId: string,
+  vendorId: string,
+  vendorUserLink: { vendor_id: string } | null
+): Promise<boolean> {
+  if (vendorUserLink) return true;
+
+  const { data: vendor } = await adminClient
+    .from("vendors")
+    .select("company_id")
+    .eq("id", vendorId)
+    .maybeSingle();
+
+  if (!vendor?.company_id) return false;
+
+  const { data: canView } = await adminClient.rpc("has_company_permission", {
+    p_user_id: userId,
+    p_company_id: vendor.company_id,
+    p_module_key: "company-vendors",
+    p_action: "view",
+  });
+
+  return canView === true;
 }
 
 Deno.serve(async (req) => {
@@ -136,26 +220,15 @@ Deno.serve(async (req) => {
       .eq("vendor_id", vendorId)
       .maybeSingle();
 
-    const { data: vendor } = await adminClient
-      .from("vendors")
-      .select("company_id")
-      .eq("id", vendorId)
-      .maybeSingle();
-
-    let allowed = Boolean(vendorUser);
-    if (!allowed && vendor?.company_id) {
-      const { data: permitted } = await adminClient.rpc("has_company_permission", {
-        p_user_id: user.id,
-        p_company_id: vendor.company_id,
-        p_module_key: "company-vendors",
-        p_action: "edit",
-      });
-      allowed = permitted === true;
-    }
-
+    const allowed = await userCanManageVendorCompliance(
+      adminClient,
+      user.id,
+      vendorId,
+      vendorUser
+    );
     if (!allowed) return jsonResponse({ error: "Access denied." }, 403);
 
-    if (!Deno.env.get("OPENAI_API_KEY")?.trim()) {
+    if (!getGeminiApiKey()) {
       return jsonResponse({ available: false });
     }
 
@@ -168,16 +241,16 @@ Deno.serve(async (req) => {
 
     const bytes = new Uint8Array(await fileData.arrayBuffer());
     const mimeType = fileData.type || "application/pdf";
-    let parsed: Record<string, unknown> | null = null;
+    let parsed: ExtractedFields | null = null;
 
     if (mimeType === "application/pdf" || payload.storagePath.toLowerCase().endsWith(".pdf")) {
       const text = await extractPdfText(bytes);
-      parsed = await extractWithOpenAi({
+      parsed = await extractWithGemini({
         documentType: payload.documentType,
         textContent: text,
       });
     } else if (mimeType.startsWith("image/")) {
-      parsed = await extractWithOpenAi({
+      parsed = await extractWithGemini({
         documentType: payload.documentType,
         imageBase64: toBase64(bytes),
         mimeType,
@@ -190,11 +263,11 @@ Deno.serve(async (req) => {
 
     return jsonResponse({
       available: true,
-      expiryDate: typeof parsed.expiryDate === "string" ? parsed.expiryDate : undefined,
-      carrier: typeof parsed.carrier === "string" ? parsed.carrier : undefined,
-      policyNumber: typeof parsed.policyNumber === "string" ? parsed.policyNumber : undefined,
-      coverageAmount: typeof parsed.coverageAmount === "string" ? parsed.coverageAmount : undefined,
-      confidence: typeof parsed.confidence === "number" ? parsed.confidence : undefined,
+      expiryDate: parsed.expiryDate,
+      carrier: parsed.carrier,
+      policyNumber: parsed.policyNumber,
+      coverageAmount: parsed.coverageAmount,
+      confidence: parsed.confidence,
     });
   } catch (error) {
     return jsonResponse(

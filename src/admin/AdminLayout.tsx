@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { FaChevronDown, FaSignOutAlt, FaUser, FaUserCircle } from "react-icons/fa";
+import { FaBars, FaChevronDown, FaSignOutAlt, FaUser, FaUserCircle } from "react-icons/fa";
 import { MvpLogo } from "../shared/MvpLogo";
 import { Modal } from "../shared/Modal";
+import { MobileDrawer } from "../shared/MobileDrawer";
 import { PageBusyProvider } from "../shared/PageBusyProvider";
 import { PORTAL_MAIN_SECTION_CLASS, PORTAL_SHELL_CLASS } from "../shared/portalLayout";
+import { useIsLgUp } from "../shared/useMediaQuery";
 import { cn } from "../utils/cn";
 import { AdminProfileModal } from "./modals/AdminProfileModal";
 import { AdminSidebarNav } from "./components/AdminSidebarNav";
-import { adminNavGroups, filterAdminNavGroups, formatBuildingOptionLabel } from "./navigation";
+import { adminNavGroups, filterAdminNavGroups, formatBuildingOptionLabel, getPageTitle } from "./navigation";
 import { adminRepository } from "./data/adminRepository";
 import type { AdminUser, CompanyBuilding } from "../resident/data/types";
 import type { AdminRoute } from "./navigation";
@@ -50,6 +52,9 @@ export function AdminLayout({
   const [profileOpen, setProfileOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [navDrawerOpen, setNavDrawerOpen] = useState(false);
+  const [buildingMenuOpen, setBuildingMenuOpen] = useState(false);
+  const isLgUp = useIsLgUp();
   const [profileUser, setProfileUser] = useState<Pick<AdminUser, "displayName" | "title">>({
     displayName: "Loading…",
     title: "",
@@ -60,19 +65,29 @@ export function AdminLayout({
     [navAccess]
   );
   const menuRef = useRef<HTMLDivElement>(null);
+  const buildingMenuRef = useRef<HTMLDivElement>(null);
 
   const closeBuilding = onCloseBuilding ?? onBackToCompany;
+  const pageTitle = getPageTitle(route);
+
+  const handleNavigate = (next: AdminRoute) => {
+    setNavDrawerOpen(false);
+    onNavigate(next);
+  };
 
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen && !buildingMenuOpen) return;
     const onDocClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
+      if (buildingMenuRef.current && !buildingMenuRef.current.contains(e.target as Node)) {
+        setBuildingMenuOpen(false);
+      }
     };
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
-  }, [menuOpen]);
+  }, [menuOpen, buildingMenuOpen]);
 
   useEffect(() => {
     adminRepository
@@ -106,32 +121,98 @@ export function AdminLayout({
   const residentPortalAction = embedded ? onOpenResidentPortal : onSwitchToResident;
 
   const buildingBar = (
-    <div className="flex flex-col gap-2 border-b border-slate-300 bg-[#666666] px-2 py-2 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm">
-        <div className="shrink-0 rounded bg-[#424242] px-3 py-1.5 text-[#4ec0ff]">Home / Buildings /</div>
+    <div className="border-b border-slate-300 bg-[#666666] px-2 py-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <div className="hidden shrink-0 rounded bg-[#424242] px-3 py-1.5 text-sm text-[#4ec0ff] sm:block">
+          Home / Buildings /
+        </div>
         {showBuildingSelect ? (
           <select
             value={activeBuildingId ?? ""}
             onChange={(e) => {
-              const next = buildings.find((b) => b.id === e.target.value);
-              if (next) onSwitchBuilding(next);
+              const next = buildings!.find((b) => b.id === e.target.value);
+              if (next) onSwitchBuilding!(next);
             }}
-            className="min-w-[200px] max-w-full flex-1 rounded border border-black/20 bg-white px-3 py-1.5 text-sm text-[#424242] shadow-inner"
+            className="min-w-0 flex-1 rounded border border-black/20 bg-white px-3 py-1.5 text-sm text-[#424242] shadow-inner"
           >
-            {buildings.map((b) => (
+            {buildings!.map((b) => (
               <option key={b.id} value={b.id}>
                 {formatBuildingOptionLabel(b)}
               </option>
             ))}
           </select>
         ) : (
-          <div className="flex min-w-[200px] flex-1 items-center justify-between rounded border border-black/20 bg-white px-3 py-1.5 text-[#424242] shadow-inner">
+          <div className="flex min-w-0 flex-1 items-center justify-between rounded border border-black/20 bg-white px-3 py-1.5 text-[#424242] shadow-inner">
             <span className="truncate text-sm">{displayBuildingLabel}</span>
             <FaChevronDown className="shrink-0 text-[10px] text-slate-400" />
           </div>
         )}
+        <div className="relative shrink-0 lg:hidden" ref={buildingMenuRef}>
+          <button
+            type="button"
+            onClick={() => setBuildingMenuOpen((o) => !o)}
+            className="rounded border border-white/30 bg-[#525252] px-2 py-1.5 text-sm text-white"
+            aria-expanded={buildingMenuOpen}
+            aria-haspopup="menu"
+            aria-label="Building actions"
+          >
+            <FaChevronDown />
+          </button>
+          {buildingMenuOpen && (
+            <ul
+              role="menu"
+              className="absolute right-0 z-50 mt-1 min-w-[200px] rounded border border-slate-200 bg-white py-1 text-sm text-slate-700 shadow-lg"
+            >
+              {!embedded && closeBuilding && (
+                <li role="none">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setBuildingMenuOpen(false);
+                      closeBuilding();
+                    }}
+                    className="block w-full px-3 py-2 text-left hover:bg-slate-50"
+                  >
+                    Close building view
+                  </button>
+                </li>
+              )}
+              {!embedded && onBackToCompany && (
+                <li role="none">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setBuildingMenuOpen(false);
+                      onBackToCompany();
+                    }}
+                    className="block w-full px-3 py-2 text-left hover:bg-slate-50"
+                  >
+                    Company Portal
+                  </button>
+                </li>
+              )}
+              {residentPortalAction && (
+                <li role="none">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setBuildingMenuOpen(false);
+                      residentPortalAction();
+                    }}
+                    className="block w-full px-3 py-2 text-left hover:bg-slate-50"
+                  >
+                    Resident Portal
+                  </button>
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="mt-2 hidden flex-wrap gap-2 lg:flex">
         {!embedded && closeBuilding && (
           <button
             type="button"
@@ -163,16 +244,42 @@ export function AdminLayout({
     </div>
   );
 
+  const sidebarNav = (
+    <AdminSidebarNav
+      route={route}
+      groups={visibleNavGroups}
+      embedded={embedded}
+      buildingId={activeBuildingId}
+      onNavigate={handleNavigate}
+    />
+  );
+
+  const mobileStickyBar = !isLgUp ? (
+    <div className="sticky top-0 z-40 flex items-center gap-2 border-b border-slate-300 bg-[#8d8d8d] px-2 py-2 text-white lg:hidden">
+      <button
+        type="button"
+        onClick={() => setNavDrawerOpen(true)}
+        className="inline-flex shrink-0 items-center justify-center rounded bg-[#6e6e6e] p-2 hover:bg-[#626262]"
+        aria-label="Open menu"
+      >
+        <FaBars />
+      </button>
+      <h1 className="min-w-0 flex-1 truncate text-sm font-semibold">{pageTitle}</h1>
+      <button
+        type="button"
+        onClick={openProfile}
+        className="inline-flex shrink-0 items-center justify-center rounded bg-[#6e6e6e] p-2 hover:bg-[#626262]"
+        aria-label="Your profile"
+      >
+        <FaUser className="text-sm" />
+      </button>
+    </div>
+  ) : null;
+
   const sidebarAndContent = (
     <div className="flex min-w-0 flex-col lg:flex-row lg:items-start">
-      <aside className="h-fit w-full shrink-0 self-start border-r border-slate-300 bg-[#8d8d8d] lg:w-[220px]">
-        <AdminSidebarNav
-          route={route}
-          groups={visibleNavGroups}
-          embedded={embedded}
-          buildingId={activeBuildingId}
-          onNavigate={onNavigate}
-        />
+      <aside className="hidden h-fit w-[220px] shrink-0 self-start border-r border-slate-300 bg-[#8d8d8d] lg:block">
+        {sidebarNav}
         <div className="border-t border-white/10 p-2">
           <label className="flex items-center gap-2 rounded border border-black/10 bg-white px-2 py-1.5 text-sm text-slate-600">
             <span aria-hidden="true">🇺🇸</span>
@@ -184,9 +291,28 @@ export function AdminLayout({
         </div>
       </aside>
 
-      <section className={PORTAL_MAIN_SECTION_CLASS}>
+      <section className={cn(PORTAL_MAIN_SECTION_CLASS, !isLgUp && "p-3")}>
+        {mobileStickyBar}
         <div className="min-w-0 max-w-full">{children}</div>
       </section>
+
+      <MobileDrawer
+        open={navDrawerOpen}
+        onClose={() => setNavDrawerOpen(false)}
+        title="Building Admin"
+        className="bg-[#8d8d8d]"
+      >
+        {sidebarNav}
+        <div className="border-t border-white/10 p-2">
+          <label className="flex items-center gap-2 rounded border border-black/10 bg-white px-2 py-1.5 text-sm text-slate-600">
+            <span aria-hidden="true">🇺🇸</span>
+            <select className="w-full bg-transparent outline-none">
+              <option>English</option>
+              <option>Français</option>
+            </select>
+          </label>
+        </div>
+      </MobileDrawer>
     </div>
   );
 
@@ -198,7 +324,7 @@ export function AdminLayout({
       )}
     >
       {!embedded && (
-        <div className="bg-white">
+        <div className="hidden bg-white lg:block">
           <div className="flex flex-col justify-between gap-6 px-5 py-6 md:flex-row md:items-start">
             <MvpLogo />
             <AdminProfileCard
@@ -235,41 +361,41 @@ export function AdminLayout({
     <PageBusyProvider>
     <div className="min-h-screen bg-[#e7edf3] text-slate-700">
       <div className="bg-[#3476ef] text-white shadow-sm">
-        <div className="mx-auto flex max-w-[2048px] items-center justify-between px-4 py-2 text-xs sm:px-6 sm:text-sm">
-          <div className="flex items-center gap-3 font-semibold tracking-[0.12em] text-white/95">
+        <div className="mx-auto flex max-w-[2048px] items-center justify-between gap-2 px-4 py-2 text-xs sm:px-6 sm:text-sm">
+          <div className="flex min-w-0 items-center gap-3 font-semibold tracking-[0.12em] text-white/95">
             <MvpLogo variant="navbar" />
           </div>
-          <div className="flex items-center gap-3 text-white/90">
+          <div className="flex shrink-0 items-center gap-2 text-white/90 sm:gap-3">
             {onGoToWebsite ? (
               <>
                 <button
                   type="button"
                   onClick={onGoToWebsite}
-                  className="transition hover:text-white"
+                  className="hidden transition hover:text-white sm:inline"
                 >
                   Website
                 </button>
-                <span className="text-white/50">|</span>
+                <span className="hidden text-white/50 sm:inline">|</span>
               </>
             ) : null}
             <a
               href="https://www.mvpmgmt.ca/"
               target="_blank"
               rel="noreferrer"
-              className="transition hover:text-white"
+              className="hidden transition hover:text-white sm:inline"
             >
               Change Log
             </a>
-            <span className="text-white/50">|</span>
+            <span className="hidden text-white/50 sm:inline">|</span>
             <div className="relative" ref={menuRef}>
               <button
                 type="button"
                 onClick={() => setMenuOpen((o) => !o)}
-                className="inline-flex items-center gap-2 rounded border border-white/30 bg-white/10 px-3 py-1 transition hover:bg-white/15"
+                className="inline-flex max-w-[10rem] items-center gap-1 rounded border border-white/30 bg-white/10 px-2 py-1 transition hover:bg-white/15 sm:max-w-none sm:gap-2 sm:px-3"
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
               >
-                Welcome back, {profileUser.displayName.split(" ")[0]}
+                Welcome, {profileUser.displayName.split(" ")[0]}
                 <FaChevronDown className="text-[10px]" />
               </button>
               {menuOpen && (

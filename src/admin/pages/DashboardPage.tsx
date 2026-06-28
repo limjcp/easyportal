@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaUserCircle } from "react-icons/fa";
+import type { AdminDashboardMessage } from "../../data/supabase/admin/dashboardNotificationsRepository";
 import { usePageContentBusy } from "../../shared/usePageContentBusy";
 import { adminRepository } from "../data/adminRepository";
 import type { AdminRoute } from "../navigation";
@@ -18,19 +19,13 @@ type DashboardSummary = {
 type DashboardPageProps = {
   refreshKey: number;
   onNavigate: (route: AdminRoute) => void;
-  unreadSuggestions: number;
-  pendingApprovals: number;
-  unreadBoardApplications: number;
-  unreadConsultationLeads: number;
+  messages: AdminDashboardMessage[];
 };
 
 export function DashboardPage({
   refreshKey,
   onNavigate,
-  unreadSuggestions,
-  pendingApprovals,
-  unreadBoardApplications,
-  unreadConsultationLeads,
+  messages,
 }: DashboardPageProps) {
   const [boardMembers, setBoardMembers] = useState<BoardMember[]>([]);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -50,30 +45,19 @@ export function DashboardPage({
     <div className="grid gap-4 xl:grid-cols-[1.05fr_1.1fr_1fr]">
       <PanelCard title="Messages">
         <div className="space-y-4 text-sm">
-          <MessageRow
-            count={unreadSuggestions}
-            label="New Suggestion(s)"
-            color="bg-lime-500"
-            onClick={() => onNavigate({ page: "suggestions" })}
-          />
-          <MessageRow
-            count={pendingApprovals}
-            label="Board Approval(s) Pending Vote"
-            color="bg-slate-800"
-            onClick={() => onNavigate({ page: "board-approvals", tab: "current" })}
-          />
-          <MessageRow
-            count={unreadBoardApplications}
-            label="New Board Member Application(s)"
-            color="bg-[#3476ef]"
-            onClick={() => onNavigate({ page: "board-members", tab: "applications" })}
-          />
-          <MessageRow
-            count={unreadConsultationLeads}
-            label="New Consultation Lead(s)"
-            color="bg-emerald-600"
-            onClick={() => onNavigate({ page: "consultation-leads" })}
-          />
+          {messages.length === 0 ? (
+            <p className="text-slate-500">No new notifications.</p>
+          ) : (
+            messages.map((message) => (
+              <MessageRow
+                key={message.id}
+                count={message.count}
+                label={message.label}
+                color={message.color}
+                onClick={() => onNavigate(message.route)}
+              />
+            ))
+          )}
         </div>
       </PanelCard>
       <PanelCard title="Board Members">

@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { StatusBadge } from "../../admin/components/AdminBadges";
 import { AdminPanelTable, AdminTabs } from "../../admin/components/AdminPanelTable";
+import { AdminMobileCard } from "../../admin/components/AdminMobileCard";
 import { CrudPanel } from "../../shared/CrudPanel";
 import { vendorRepository } from "../data/vendorRepository";
+import { purchaseOrderStatusLabel } from "../../shared/PurchaseOrderNegotiationPanel";
 import type { VendorRoute } from "../navigation";
 import type { CompanyBuilding, PurchaseOrder } from "../../resident/data/types";
 
@@ -16,13 +18,27 @@ export function PurchaseOrdersPage({ route, onNavigate, refreshKey }: PurchaseOr
   const tab = route.tab ?? "action";
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [buildings, setBuildings] = useState<CompanyBuilding[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    vendorRepository.getPurchaseOrders(tab).then(setOrders);
-    vendorRepository.getBuildings().then(setBuildings);
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      vendorRepository.getPurchaseOrders(tab).then((data) => {
+        if (!cancelled) setOrders(data);
+      }),
+      vendorRepository.getBuildings().then((data) => {
+        if (!cancelled) setBuildings(data);
+      }),
+    ]).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [tab, refreshKey]);
 
   const buildingName = (id: string) => {
@@ -30,18 +46,11 @@ export function PurchaseOrdersPage({ route, onNavigate, refreshKey }: PurchaseOr
     return b ? `${b.name}` : id;
   };
 
-  const statusLabel = (s: PurchaseOrder["status"]) => {
-    const map: Record<PurchaseOrder["status"], string> = {
-      draft: "Draft",
-      sent: "Pending",
-      accepted: "Accepted",
-      declined: "Declined",
-    };
-    return map[s];
-  };
+  const statusLabel = (order: PurchaseOrder) =>
+    purchaseOrderStatusLabel(order.status, order.isQuoteRequest);
 
   return (
-    <CrudPanel>
+    <CrudPanel loading={loading}>
       <div className="mb-4 rounded bg-[#0d9488] px-4 py-2 text-sm font-semibold text-white">
         Purchase Orders
       </div>
@@ -55,7 +64,7 @@ export function PurchaseOrdersPage({ route, onNavigate, refreshKey }: PurchaseOr
           { id: "action", label: "Action Required" },
           { id: "history", label: "History" },
         ]}
-        active={tab}
+        activeTab={tab}
         onChange={(id) => onNavigate({ page: "purchase-orders", tab: id as "action" | "history" })}
       />
 
@@ -81,7 +90,7 @@ export function PurchaseOrdersPage({ route, onNavigate, refreshKey }: PurchaseOr
           {
             key: "status",
             header: "Status",
-            render: (r) => <StatusBadge status={statusLabel(r.status)} />,
+            render: (r) => <StatusBadge status={statusLabel(r)} />,
           },
           {
             key: "view",
@@ -97,6 +106,27 @@ export function PurchaseOrdersPage({ route, onNavigate, refreshKey }: PurchaseOr
             ),
           },
         ]}
+        mobileCard={(r) => (
+          <AdminMobileCard
+            title={`PO ${r.poNumber}`}
+            subtitle={r.sentAt ?? "—"}
+            badges={<StatusBadge status={statusLabel(r)} />}
+            fields={[
+              { label: "Building", value: buildingName(r.buildingId) },
+              { label: "Total", value: `$${r.total.toFixed(2)}` },
+            ]}
+            actions={
+              <button
+                type="button"
+                onClick={() => onNavigate({ page: "purchase-order-detail", id: r.id })}
+                className="w-full rounded bg-[#0d9488] px-3 py-2 text-sm font-medium text-white hover:bg-[#0f766e]"
+              >
+                View purchase order
+              </button>
+            }
+            highlight={tab === "action"}
+          />
+        )}
       />
     </CrudPanel>
   );

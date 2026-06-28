@@ -5,6 +5,7 @@ import type {
   PortalModuleConfig,
   PortalSettings,
   PortalTileSettings,
+  ProfileCompletionPolicy,
   ProfileFieldOption,
   PublicPortalDocument,
   PublicPortalSettings,
@@ -51,6 +52,13 @@ const defaultTileSettings: PortalTileSettings = {
   useMasterLayout: false,
 };
 
+const defaultProfileCompletionPolicy: ProfileCompletionPolicy = {
+  enabled: false,
+  residentTypes: ["Owner", "Absentee Owner"],
+  softLoginCount: 2,
+  blockLoginCount: 3,
+};
+
 export async function loadPortalConfig(): Promise<PortalConfig> {
   const [
     publicPortalSettings,
@@ -61,6 +69,7 @@ export async function loadPortalConfig(): Promise<PortalConfig> {
     customPortalTiles,
     registrationFieldOptions,
     profileFieldOptions,
+    profileCompletionPolicy,
   ] = await Promise.all([
     adminRepository.getPublicPortalSettings(),
     adminRepository.getPortalImages(),
@@ -70,6 +79,7 @@ export async function loadPortalConfig(): Promise<PortalConfig> {
     adminRepository.getCustomPortalTiles(),
     adminRepository.getRegistrationFieldOptions(),
     adminRepository.getProfileFieldOptions(),
+    adminRepository.getProfileCompletionPolicy(),
   ]);
 
   const source = portalTileSettings.useMasterLayout ? "master" : "building";
@@ -113,6 +123,7 @@ export async function loadPortalConfig(): Promise<PortalConfig> {
     tileLayoutSource: source,
     registrationFieldOptions: registrationFieldOptions.map((f) => ({ ...f })),
     profileFieldOptions: profileFieldOptions.map((f) => ({ ...f })),
+    profileCompletionPolicy,
   };
 }
 
@@ -128,6 +139,7 @@ export function getPortalConfig(): PortalConfig {
     tileLayoutSource: "building",
     registrationFieldOptions: [],
     profileFieldOptions: [],
+    profileCompletionPolicy: defaultProfileCompletionPolicy,
   };
 }
 

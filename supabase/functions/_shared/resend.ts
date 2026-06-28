@@ -1,5 +1,6 @@
 export type SendEmailInput = {
   to: string | string[];
+  cc?: string | string[];
   subject: string;
   html: string;
   text?: string;
@@ -29,6 +30,9 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
     body: JSON.stringify({
       from: getEmailFromAddress(),
       to: Array.isArray(input.to) ? input.to : [input.to],
+      ...(input.cc
+        ? { cc: Array.isArray(input.cc) ? input.cc : [input.cc] }
+        : {}),
       subject: input.subject,
       html: input.html,
       text: input.text,

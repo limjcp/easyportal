@@ -5,16 +5,27 @@ import type {
   PortalModuleConfig,
   PortalSettings,
   PortalTileSettings,
+  ProfileCompletionPolicy,
   ProfileFieldOption,
   PublicPortalDocument,
   PublicPortalSettings,
   RegistrationFieldOption,
+  UnitsUsersResidentType,
 } from "../../../resident/data/types";
 import { normalizePortalLayout } from "../../../resident/data/portalTileLayout";
 import { normalizeExternalUrl } from "../../../shared/urlUtils";
 import { buildLobbyDisplayUrl } from "../../../shared/portalDomain";
 import { DEFAULT_PORTAL_MODULES } from "../../defaults/portalModules";
 import { mapDbError, sb } from "../base";
+import {
+  CUSTOM_PORTAL_TILE_COLUMNS,
+  PORTAL_IMAGE_COLUMNS,
+  PORTAL_MODULE_COLUMNS,
+  PORTAL_TILE_SETTINGS_COLUMNS,
+  PUBLIC_PORTAL_DOCUMENT_COLUMNS,
+  PUBLIC_PORTAL_SETTINGS_COLUMNS,
+} from "../queryColumns";
+import { resolveProfileFieldOptions } from "../profileFieldOptions";
 import { bid } from "./shared";
 
 function portalModuleInsertRow(buildingId: string, m: (typeof DEFAULT_PORTAL_MODULES)[number]) {
@@ -50,7 +61,7 @@ export async function syncMissingPortalModules(buildingId: string) {
 export async function ensureDefaultPortalModules(buildingId: string) {
   const { count, error: countError } = await sb()
     .from("portal_modules")
-    .select("*", { count: "exact", head: true })
+    .select("id", { count: "exact", head: true })
     .eq("building_id", buildingId);
   mapDbError(countError);
   if ((count ?? 0) === 0) {
@@ -90,7 +101,7 @@ function mapCustomTile(row: Record<string, unknown>): CustomPortalTile {
 async function loadPortalModules(buildingId: string) {
   const { data, error } = await sb()
     .from("portal_modules")
-    .select("*")
+    .select(PORTAL_MODULE_COLUMNS)
     .eq("building_id", buildingId)
     .order("sort_order", { ascending: true });
   mapDbError(error);
@@ -100,7 +111,7 @@ async function loadPortalModules(buildingId: string) {
 async function loadCustomTiles(buildingId: string) {
   const { data, error } = await sb()
     .from("custom_portal_tiles")
-    .select("*")
+    .select(CUSTOM_PORTAL_TILE_COLUMNS)
     .eq("building_id", buildingId)
     .order("sort_order", { ascending: true });
   mapDbError(error);
@@ -110,7 +121,7 @@ async function loadCustomTiles(buildingId: string) {
 async function loadTileSettings(buildingId: string): Promise<PortalTileSettings> {
   const { data, error } = await sb()
     .from("portal_tile_settings")
-    .select("*")
+    .select(PORTAL_TILE_SETTINGS_COLUMNS)
     .eq("building_id", buildingId)
     .maybeSingle();
   mapDbError(error);
@@ -210,7 +221,7 @@ export const portalRepository = {
     const buildingId = await bid();
     const { data, error } = await sb()
       .from("public_portal_settings")
-      .select("*")
+      .select(PUBLIC_PORTAL_SETTINGS_COLUMNS)
       .eq("building_id", buildingId)
       .maybeSingle();
     mapDbError(error);
@@ -251,7 +262,7 @@ export const portalRepository = {
 
   async getPortalImages(kind?: PortalImageKind) {
     const buildingId = await bid();
-    let query = sb().from("portal_images").select("*").eq("building_id", buildingId);
+    let query = sb().from("portal_images").select(PORTAL_IMAGE_COLUMNS).eq("building_id", buildingId);
     if (kind) query = query.eq("kind", kind);
     const { data, error } = await query.order("sort_order", { ascending: true });
     mapDbError(error);
@@ -309,7 +320,7 @@ export const portalRepository = {
     const buildingId = await bid();
     const { data, error } = await sb()
       .from("public_portal_documents")
-      .select("*")
+      .select(PUBLIC_PORTAL_DOCUMENT_COLUMNS)
       .eq("building_id", buildingId)
       .order("uploaded_at", { ascending: false });
     mapDbError(error);
@@ -473,14 +484,7 @@ export const portalRepository = {
       .select("*")
       .eq("building_id", buildingId);
     mapDbError(error);
-    return (data ?? []).map((f) => ({
-      fieldKey: f.field_key as string,
-      label: f.label as string,
-      show: f.show_field as boolean,
-      editable: f.editable_field as boolean,
-      locked: f.locked as boolean,
-      note: f.note as string | undefined,
-    }));
+    return resolveProfileFieldOptions(data ?? []);
   },
 
   async updateProfileFieldOptions(fields: ProfileFieldOption[]) {
@@ -494,8 +498,47 @@ export const portalRepository = {
         editable_field: f.editable,
         locked: f.locked,
         note: f.note,
+        required_for_completion: f.requiredForCompletion ?? false,
       });
     }
     return this.getProfileFieldOptions();
+  },
+
+  async getProfileCompletionPolicy(): Promise<ProfileCompletionPolicy> {
+    const buildingId = await bid();
+    const { data, error } = await sb()
+      .from("portal_settings")
+      .select(
+        "profile_completion_enabled, profile_completion_resident_types, profile_completion_soft_login_count, profile_completion_block_login_count"
+      )
+      .eq("building_id", buildingId)
+      .maybeSingle();
+    mapDbError(error);
+    return {
+      enabled: data?.profile_completion_enabled ?? false,
+      residentTypes: (data?.profile_completion_resident_types ?? [
+        "Owner",
+        "Absentee Owner",
+      ]) as UnitsUsersResidentType[],
+      softLoginCount: data?.profile_completion_soft_login_count ?? 2,
+      blockLoginCount: data?.profile_completion_block_login_count ?? 3,
+    };
+  },
+
+  async updateProfileCompletionPolicy(
+    policy: ProfileCompletionPolicy
+  ): Promise<ProfileCompletionPolicy> {
+    const buildingId = await bid();
+    const { error } = await sb()
+      .from("portal_settings")
+      .upsert({
+        building_id: buildingId,
+        profile_completion_enabled: policy.enabled,
+        profile_completion_resident_types: policy.residentTypes,
+        profile_completion_soft_login_count: policy.softLoginCount,
+        profile_completion_block_login_count: policy.blockLoginCount,
+      });
+    mapDbError(error);
+    return policy;
   },
 };

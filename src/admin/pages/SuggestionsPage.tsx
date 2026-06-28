@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { CrudPanel } from "../../shared/CrudPanel";
 import { AdminPanelTable } from "../components/AdminPanelTable";
+import { AdminMobileCard } from "../components/AdminMobileCard";
 import { UnreadBadge } from "../components/AdminBadges";
 import { adminRepository } from "../data/adminRepository";
 import { useAdminSuggestions } from "../../shared/queries/adminListQueries";
@@ -9,6 +10,7 @@ import { queryKeys } from "../../shared/queryKeys";
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { useTenantContext } from "../../shared/queries/useTenantContext";
 import { isQueryInitiallyLoading } from "../../shared/useQueryPageBusy";
+import { useSyncFromRefreshKey } from "../../shared/useSyncFromRefreshKey";
 import { AddSuggestionModal } from "../modals/AddSuggestionModal";
 import { AdminPageActions } from "../components/AdminPageActions";
 import type { AdminRoute } from "../navigation";
@@ -40,14 +42,7 @@ export function SuggestionsPage({ route, onNavigate, refreshKey, onRefresh }: Su
   const [visibilityFilter, setVisibilityFilter] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
 
-  const syncFromRefreshKey = useCallback(() => {
-    void refreshList();
-  }, [refreshList]);
-
-  useEffect(() => {
-    if (refreshKey === 0) return;
-    syncFromRefreshKey();
-  }, [refreshKey, syncFromRefreshKey]);
+  useSyncFromRefreshKey(refreshKey, () => void refreshList());
 
   const filtered =
     visibilityFilter === "all"
@@ -120,6 +115,33 @@ export function SuggestionsPage({ route, onNavigate, refreshKey, onRefresh }: Su
             ),
           },
         ]}
+        mobileCard={(row) => (
+          <AdminMobileCard
+            title={
+              <span className="flex items-center gap-2">
+                {row.unread && <UnreadBadge />}
+                <span>Suggestion #{row.id}</span>
+              </span>
+            }
+            subtitle={row.createdAt}
+            badges={
+              <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium capitalize text-slate-700">
+                {row.visibility}
+              </span>
+            }
+            fields={[{ label: "Message", value: row.text }]}
+            actions={
+              <button
+                type="button"
+                onClick={() => onNavigate({ page: "suggestion-detail", id: row.id })}
+                className="w-full rounded bg-[#3476ef] px-3 py-2 text-sm font-medium text-white hover:bg-[#2d68cf]"
+              >
+                View suggestion
+              </button>
+            }
+            highlight={row.unread}
+          />
+        )}
       />
 
       <AddSuggestionModal

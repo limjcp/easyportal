@@ -289,7 +289,6 @@ export function MasterReportDetailPage({ route, onNavigate }: MasterReportDetail
       buildingId: row.buildingId,
       lockBuilding: true,
       sourceRequest: { kind: "company-service-request", requestId: row.id },
-      initialLineItems: [{ description: row.title, quantity: 1, unitPrice: 0 }],
       notes,
     });
     setCreatePoOpen(true);

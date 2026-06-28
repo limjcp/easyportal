@@ -40,8 +40,8 @@ export function ComplianceTrackingDashboard({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Corporation</p>
           <p className="text-lg font-medium">{data.profile.corpNumber || "—"}</p>
           <p className="text-sm text-muted-foreground">
@@ -62,7 +62,7 @@ export function ComplianceTrackingDashboard({
             type="button"
             onClick={onSync}
             disabled={syncing}
-            className="rounded-sm bg-[#3476ef] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="w-full shrink-0 rounded-sm bg-[#3476ef] px-4 py-2 text-sm font-medium text-white disabled:opacity-50 sm:w-auto"
           >
             {syncing ? "Syncing…" : "Sync from CAO"}
           </button>

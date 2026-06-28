@@ -152,7 +152,8 @@ export function StatusBadge({
   const colors: Record<string, string> = {
     draft: "bg-slate-500",
     active: "bg-[#5cb85c]",
-    expired: "bg-orange-500",
+    expired: "bg-red-600",
+    Expired: "bg-red-600",
     archived: "bg-slate-500",
     inactive: "bg-slate-400",
     Received: "bg-[#5cb85c]",

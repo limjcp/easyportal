@@ -29,7 +29,7 @@ export function DeadlineProgressList({
 
   return (
     <div className={wrapClass}>
-      <div className="border-b border-border px-6 py-4">
+      <div className="border-b border-border px-4 py-4 sm:px-6">
         <h3 className="text-lg font-semibold text-foreground">Deadline progress</h3>
         <p className="text-sm text-muted-foreground">Date-to-completion tracking for CAO obligations</p>
       </div>
@@ -38,7 +38,7 @@ export function DeadlineProgressList({
           const timelinePct = toPercent(item.startDate, item.dueDate, today);
           const fill = item.status === "completed" ? 100 : item.progressPercent;
           return (
-            <div key={item.id} className="px-6 py-5">
+            <div key={item.id} className="px-4 py-4 sm:px-6 sm:py-5">
               <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
                 <div>
                   <p className="font-medium text-foreground">{item.title}</p>

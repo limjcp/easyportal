@@ -12,6 +12,12 @@ export interface ResidentUser {
   role: string;
   birthMonth?: number;
   birthDay?: number;
+  firstName?: string;
+  lastName?: string;
+  timezone?: string;
+  homePhone?: string;
+  cellPhone?: string;
+  workPhone?: string;
 }
 
 export type ConsultationCondoHealth = "excellent" | "good" | "fair" | "poor";
@@ -311,6 +317,14 @@ export interface EmailNoticeStats {
   delayed: number;
 }
 
+export interface EmailNoticeRecipientRow {
+  unit: string;
+  name: string;
+  email: string;
+  status: string;
+  opened: string;
+}
+
 export interface NewsEditHistoryEntry {
   status: string;
   date: string;
@@ -445,9 +459,11 @@ export type CreateAdminIncidentReportInput = {
   reportType: string;
   location: string;
   description: string;
+  visibility: string;
   status: "Draft" | "Pending" | "Resolved";
   unit?: string;
   assignedToAdmin?: string;
+  files?: File[];
 };
 
 export interface IncidentReportCategory {
@@ -681,6 +697,7 @@ export interface BuildingDefinition {
   propertyEmail: string;
   accountingEmail: string;
   billingEmail: string;
+  sparcEmail: string;
   visitorParkingOvernightEmail?: string;
   buildingTypes: string[];
   buildingFeatures: string[];
@@ -1045,6 +1062,14 @@ export interface ProfileFieldOption {
   editable: boolean;
   locked: boolean;
   note?: string;
+  requiredForCompletion?: boolean;
+}
+
+export interface ProfileCompletionPolicy {
+  enabled: boolean;
+  residentTypes: UnitsUsersResidentType[];
+  softLoginCount: number;
+  blockLoginCount: number;
 }
 
 export interface ResidentKeyFob {
@@ -1261,6 +1286,7 @@ export interface PortalConfig {
   tileLayoutSource: PortalTileLayoutSource;
   registrationFieldOptions: RegistrationFieldOption[];
   profileFieldOptions: ProfileFieldOption[];
+  profileCompletionPolicy: ProfileCompletionPolicy;
 }
 
 // --- Company portal ---
@@ -1427,7 +1453,6 @@ export type CreateBuildingAdminInput = {
   firstName: string;
   lastName: string;
   email?: string;
-  password: string;
 };
 
 export type UpdateBuildingAdminInput = {
@@ -1522,9 +1547,50 @@ export type UpdateVendorProfileInput = Partial<
   Pick<Vendor, "contactName" | "phone" | "notes">
 >;
 
+export interface VendorPaymentSettings {
+  hstNumber: string;
+  billingAddress: string;
+  billingCity: string;
+  billingProvince: string;
+  billingPostalCode: string;
+  preferredPaymentMethod: VendorPreferredPaymentMethod;
+  bankName: string;
+  bankAccountName: string;
+  bankAccountNumber: string;
+  bankInstitutionNumber: string;
+  bankTransitNumber: string;
+  bankSwiftBic: string;
+  interacRecipientName: string;
+  interacEmail: string;
+  logoStoragePath?: string;
+  logoUrl?: string;
+}
+
+export type VendorPreferredPaymentMethod = "bank_transfer" | "interac_etransfer" | "sparcpay";
+
+export type UpdateVendorPaymentSettingsInput = {
+  hstNumber: string;
+  billingAddress: string;
+  billingCity: string;
+  billingProvince: string;
+  billingPostalCode: string;
+  preferredPaymentMethod: VendorPreferredPaymentMethod;
+  bankName: string;
+  bankAccountName: string;
+  bankAccountNumber: string;
+  bankInstitutionNumber: string;
+  bankTransitNumber: string;
+  bankSwiftBic: string;
+  interacRecipientName: string;
+  interacEmail: string;
+  removeLogo?: boolean;
+};
+
 export type VendorNotificationType =
   | "po_received"
   | "po_reminder"
+  | "po_counter_offer"
+  | "po_quote_accepted"
   | "compliance_expiring"
   | "compliance_expired";
 
@@ -1538,7 +1604,35 @@ export interface VendorNotification {
   createdAt: string;
 }
 
-export type PurchaseOrderStatus = "draft" | "sent" | "accepted" | "declined";
+export type PurchaseOrderStatus =
+  | "draft"
+  | "sent"
+  | "quoted"
+  | "negotiating"
+  | "accepted"
+  | "declined";
+
+export type PoNegotiationAuthor = "company" | "vendor";
+
+export type PoNegotiationAction = "quote" | "counter" | "accept";
+
+export interface PoNegotiationLineItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface PurchaseOrderNegotiation {
+  id: string;
+  purchaseOrderId: string;
+  authorSide: PoNegotiationAuthor;
+  authorName: string;
+  action: PoNegotiationAction;
+  message?: string;
+  proposedTotal: number;
+  lineItems: PoNegotiationLineItem[];
+  createdAt: string;
+}
 
 export type PurchaseOrderSourceKind = "company-service-request" | "admin-service-request";
 
@@ -1569,9 +1663,69 @@ export interface PurchaseOrder {
   sentAt?: string;
   respondedAt?: string;
   declineReason?: string;
+  isQuoteRequest?: boolean;
+  awaitingResponseFrom?: PoNegotiationAuthor;
 }
 
-export type CompanyNotificationType = "po_accepted" | "po_declined";
+export type VendorInvoiceStatus = "draft" | "submitted";
+
+export interface VendorInvoiceLineItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+export interface VendorInvoice {
+  id: string;
+  purchaseOrderId: string;
+  vendorId: string;
+  buildingId: string;
+  invoiceNumber: string;
+  hstNumber: string;
+  billingAddress: string;
+  billingCity: string;
+  billingProvince: string;
+  billingPostalCode: string;
+  preferredPaymentMethod: VendorPreferredPaymentMethod;
+  paymentDetails: Record<string, string>;
+  logoStoragePath?: string;
+  logoUrl?: string;
+  subtotal: number;
+  hstRate: number;
+  hstAmount: number;
+  total: number;
+  lineItems: VendorInvoiceLineItem[];
+  status: VendorInvoiceStatus;
+  submittedAt?: string;
+  sparcRecipientEmail?: string;
+  createdAt: string;
+}
+
+export type CreateVendorInvoiceInput = {
+  hstNumber: string;
+  billingAddress: string;
+  billingCity: string;
+  billingProvince: string;
+  billingPostalCode: string;
+  preferredPaymentMethod: VendorPreferredPaymentMethod;
+  bankName: string;
+  bankAccountName: string;
+  bankAccountNumber: string;
+  bankInstitutionNumber: string;
+  bankTransitNumber: string;
+  bankSwiftBic: string;
+  interacRecipientName: string;
+  interacEmail: string;
+  logoFile?: File | null;
+  logoStoragePath?: string;
+};
+
+export type CompanyNotificationType =
+  | "po_accepted"
+  | "po_declined"
+  | "po_quoted"
+  | "po_counter_offer";
 
 export interface CompanyNotification {
   id: string;
@@ -1839,6 +1993,11 @@ export type CreatePurchaseOrderInput = {
   status?: PurchaseOrderStatus;
 };
 
+export type SubmitPoProposalInput = {
+  lineItems: PoNegotiationLineItem[];
+  message?: string;
+};
+
 export type PurchaseOrderPrefill = {
   buildingId?: string;
   lockBuilding?: boolean;
@@ -1853,7 +2012,6 @@ export type CreateEmployeeInput = {
   email: string;
   role: CompanyRole;
   assignedBuildingIds: string[];
-  password: string;
 };
 
 export type CreateBuildingInput = {

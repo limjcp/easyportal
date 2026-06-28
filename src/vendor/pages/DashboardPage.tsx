@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CrudPanel } from "../../shared/CrudPanel";
 import { vendorRepository } from "../data/vendorRepository";
 import type { VendorRoute } from "../navigation";
 import type { PurchaseOrder } from "../../resident/data/types";
@@ -14,18 +15,35 @@ export function DashboardPage({ onNavigate, refreshKey }: DashboardPageProps) {
   const [session, setSession] = useState<{ companyName: string; tradeCategory: string } | null>(
     null
   );
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    vendorRepository.getDashboardStats().then(setStats);
-    vendorRepository.getPurchaseOrders("action").then(setPendingOrders);
-    vendorRepository.getSession().then((s) =>
-      setSession({ companyName: s.companyName, tradeCategory: s.tradeCategory })
-    );
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      vendorRepository.getDashboardStats().then((data) => {
+        if (!cancelled) setStats(data);
+      }),
+      vendorRepository.getPurchaseOrders("action").then((data) => {
+        if (!cancelled) setPendingOrders(data);
+      }),
+      vendorRepository.getSession().then((s) => {
+        if (!cancelled) {
+          setSession({ companyName: s.companyName, tradeCategory: s.tradeCategory });
+        }
+      }),
+    ]).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [refreshKey]);
 
   const oldestPending = pendingOrders[0];
 
   return (
+    <CrudPanel loading={loading}>
     <div>
       <div className="mb-4 rounded bg-[#0d9488] px-4 py-2 text-sm font-semibold text-white">
         Vendor Dashboard
@@ -79,6 +97,7 @@ export function DashboardPage({ onNavigate, refreshKey }: DashboardPageProps) {
         </p>
       )}
     </div>
+    </CrudPanel>
   );
 }
 

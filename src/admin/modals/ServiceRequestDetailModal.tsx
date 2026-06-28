@@ -12,6 +12,7 @@ import { AdminSectionHeader, CommentSection } from "../components/CommentSection
 import { SeverityBadge } from "../components/AdminBadges";
 import { adminRepository } from "../data/adminRepository";
 import { companyRepository } from "../../company/data/companyRepository";
+import { getActiveBuildingId } from "../../data/supabase/buildingContext";
 import { PurchaseOrderFormModal } from "../../company/modals/PurchaseOrderFormModal";
 import type { AdminServiceRequest, PurchaseOrder, PurchaseOrderPrefill, UpdateAdminServiceRequestInput } from "../../resident/data/types";
 
@@ -231,9 +232,12 @@ export function ServiceRequestDetailModal({
       `Location: ${request.location}`,
       `Description: ${request.description}`,
     ].join("\n");
+    const activeBuildingId = getActiveBuildingId();
     setPoPrefill({
       sourceRequest: { kind: "admin-service-request", requestId: request.id },
-      initialLineItems: [{ description: request.description, quantity: 1, unitPrice: 0 }],
+      ...(activeBuildingId
+        ? { buildingId: activeBuildingId, lockBuilding: true }
+        : {}),
       notes,
     });
     setCreatePOOpen(true);

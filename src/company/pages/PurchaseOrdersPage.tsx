@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { StatusBadge } from "../../admin/components/AdminBadges";
 import { AdminPanelTable, AdminTabs } from "../../admin/components/AdminPanelTable";
+import { AdminMobileCard } from "../../admin/components/AdminMobileCard";
 import {
   useCompanyBuildings,
   useCompanyPurchaseOrders,
@@ -9,6 +10,7 @@ import {
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { PurchaseOrderDetailModal } from "../modals/PurchaseOrderDetailModal";
 import { PurchaseOrderFormModal } from "../modals/PurchaseOrderFormModal";
+import { purchaseOrderStatusLabel } from "../../shared/PurchaseOrderNegotiationPanel";
 import type { CompanyRoute } from "../navigation";
 import type { PurchaseOrder } from "../../resident/data/types";
 
@@ -47,14 +49,16 @@ export function PurchaseOrdersPage({ route, onNavigate, onRefresh }: PurchaseOrd
     setVendorFilter(route.vendorId ?? "all");
   }, [route.vendorId]);
 
-  const statusLabel = (s: PurchaseOrder["status"]) => {
-    const map: Record<PurchaseOrder["status"], string> = {
-      draft: "Draft",
-      sent: "Pending",
-      accepted: "Accepted",
-      declined: "Declined",
-    };
-    return map[s];
+  const statusLabel = (order: PurchaseOrder) =>
+    purchaseOrderStatusLabel(order.status, order.isQuoteRequest);
+
+  const filterStatusLabels: Record<string, string> = {
+    draft: "Draft",
+    sent: "Pending / Awaiting quote",
+    quoted: "Quoted",
+    negotiating: "Negotiating",
+    accepted: "Accepted",
+    declined: "Declined",
   };
 
   const filtered = orders.filter((order) => {
@@ -72,7 +76,7 @@ export function PurchaseOrdersPage({ route, onNavigate, onRefresh }: PurchaseOrd
     vendorFilter !== "all"
       ? `Vendor: ${vendors.find((vendor) => vendor.id === vendorFilter)?.companyName ?? vendorFilter}`
       : null,
-    statusFilter !== "all" ? `Status: ${statusLabel(statusFilter as PurchaseOrder["status"])}` : null,
+    statusFilter !== "all" ? `Status: ${filterStatusLabels[statusFilter] ?? statusFilter}` : null,
     buildingFilter !== "all"
       ? `Building: ${buildings.find((building) => building.id === buildingFilter)?.name ?? buildingFilter}`
       : null,
@@ -170,7 +174,9 @@ export function PurchaseOrdersPage({ route, onNavigate, onRefresh }: PurchaseOrd
             options: [
               { value: "all", label: "All" },
               { value: "draft", label: "Draft" },
-              { value: "sent", label: "Pending" },
+              { value: "sent", label: "Pending / Awaiting quote" },
+              { value: "quoted", label: "Quoted" },
+              { value: "negotiating", label: "Negotiating" },
               { value: "accepted", label: "Accepted" },
               { value: "declined", label: "Declined" },
             ],
@@ -246,7 +252,7 @@ export function PurchaseOrdersPage({ route, onNavigate, onRefresh }: PurchaseOrd
           {
             key: "status",
             header: "Status",
-            render: (o) => <StatusBadge status={statusLabel(o.status)} />,
+            render: (o) => <StatusBadge status={statusLabel(o)} />,
           },
           { key: "total", header: "Total", render: (o) => `$${o.total.toFixed(2)}` },
           {
@@ -263,10 +269,38 @@ export function PurchaseOrdersPage({ route, onNavigate, onRefresh }: PurchaseOrd
             ),
           },
         ]}
+        mobileCard={(o) => (
+          <AdminMobileCard
+            title={`PO ${o.poNumber}`}
+            subtitle={o.createdAt}
+            badges={<StatusBadge status={statusLabel(o)} />}
+            fields={[
+              {
+                label: "Vendor",
+                value: vendors.find((s) => s.id === o.vendorId)?.companyName ?? "—",
+              },
+              {
+                label: "Building",
+                value: buildings.find((b) => b.id === o.buildingId)?.name ?? "—",
+              },
+              { label: "Total", value: `$${o.total.toFixed(2)}` },
+            ]}
+            actions={
+              <button
+                type="button"
+                onClick={() => setDetailId(o.id)}
+                className="w-full rounded bg-[#3476ef] px-3 py-2 text-sm font-medium text-white hover:bg-[#2d68cf]"
+              >
+                View purchase order
+              </button>
+            }
+          />
+        )}
       />
 
       <PurchaseOrderFormModal
         open={createOpen}
+        allowBuildingSelection
         onClose={() => setCreateOpen(false)}
         onSaved={() => {
           load();

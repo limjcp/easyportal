@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminPanelTable, AdminTabs } from "../components/AdminPanelTable";
+import { AdminMobileCard } from "../components/AdminMobileCard";
 import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { CrudPanel } from "../../shared/CrudPanel";
@@ -13,6 +14,7 @@ import { queryKeys } from "../../shared/queryKeys";
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { useTenantContext } from "../../shared/queries/useTenantContext";
 import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
+import { useSyncFromRefreshKey } from "../../shared/useSyncFromRefreshKey";
 import { AdminPageActions } from "../components/AdminPageActions";
 import { adminRepository } from "../data/adminRepository";
 import { AmenityBookingDetailModal } from "../modals/AmenityBookingDetailModal";
@@ -87,9 +89,7 @@ export function AmenityBookingsPage({ route, onNavigate, refreshKey, onRefresh }
   const [search, setSearch] = useState("");
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
 
-  const syncFromRefreshKey = useCallback(() => {
-    void refreshList();
-  }, [refreshList]);
+  useSyncFromRefreshKey(refreshKey, () => void refreshList());
 
   const handleRefresh = useCallback(async () => {
     await refreshList();
@@ -102,11 +102,6 @@ export function AmenityBookingsPage({ route, onNavigate, refreshKey, onRefresh }
     },
     [refreshList]
   );
-
-  useEffect(() => {
-    if (refreshKey === 0) return;
-    syncFromRefreshKey();
-  }, [refreshKey, syncFromRefreshKey]);
 
   useEffect(() => {
     if (loadedSettings) {
@@ -258,6 +253,36 @@ export function AmenityBookingsPage({ route, onNavigate, refreshKey, onRefresh }
           ]}
           getRowKey={(row) => row.id}
           emptyMessage="No bookings in this tab."
+          mobileCard={(row) => (
+            <AdminMobileCard
+              title={labelType(row.bookingType)}
+              subtitle={`${row.bookingDate} · ${row.startTime}–${row.endTime}`}
+              badges={
+                <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                  {labelStatus(row.status)}
+                </span>
+              }
+              fields={[
+                { label: "Resource", value: row.amenityResourceName ?? "Unassigned" },
+                { label: "Unit", value: row.unit },
+                { label: "Resident", value: row.residentName },
+                {
+                  label: "Payment",
+                  value: row.paymentAmount ?? (row.paymentAt ? "Paid" : "—"),
+                },
+              ]}
+              actions={
+                <button
+                  type="button"
+                  onClick={() => setDetailId(row.id)}
+                  className="w-full rounded bg-[#3476ef] px-3 py-2 text-sm font-medium text-white hover:bg-[#2d68cf]"
+                >
+                  View booking
+                </button>
+              }
+              highlight={row.status === "pending"}
+            />
+          )}
         />
       )}
 

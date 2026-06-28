@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { useLocation, useNavigate } from "react-router-dom";
 import { FaCloudUploadAlt } from "react-icons/fa";
 import { useAuth } from "../auth/AuthProvider";
+import type { ProfileCompletionStatus } from "../data/supabase/profileCompletion";
 import { ensureActiveBuildingForUser, getActiveBuildingId } from "../data/supabase/buildingContext";
 import { PortalConfigProvider, usePortalConfig } from "./context/PortalConfigContext";
+import { isProfileCompletionBannerDismissed } from "./components/ProfileCompletionBanner";
 import { ResidentLayout } from "./ResidentLayout";
 import { residentRepo } from "./data/mockRepository";
 import { IncidentReportModal } from "./modals/IncidentReportModal";
@@ -45,6 +47,11 @@ import { queryKeys } from "../shared/queryKeys";
 import { useInvalidatePortalQueries } from "../shared/queries/useInvalidatePortalQueries";
 import { useTenantContext } from "../shared/queries/useTenantContext";
 import { useNavigateWithBusy } from "../shared/useNavigateWithBusy";
+import { DesktopPreferredBanner } from "../shared/DesktopPreferredBanner";
+import {
+  isResidentDesktopPreferred,
+  residentDesktopPreferredPageKey,
+} from "../shared/desktopPreferredPages";
 import type { ServiceRequest } from "./data/types";
 
 type ResidentPortalProps = {
@@ -118,6 +125,21 @@ function ResidentPortalInner({ onSwitchToAdmin, onLogout, onGoToWebsite }: Resid
     }
   }, [location.pathname, routerNavigate]);
 
+  useEffect(() => {
+    let cancelled = false;
+    residentRepo
+      .getProfileCompletionStatus()
+      .then((status) => {
+        if (!cancelled) setProfileCompletionStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) setProfileCompletionStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const { publicPortalSettings } = usePortalConfig();
   const themeColor = publicPortalSettings.portalThemeColor;
   const [profileOpen, setProfileOpen] = useState(false);
@@ -128,6 +150,9 @@ function ResidentPortalInner({ onSwitchToAdmin, onLogout, onGoToWebsite }: Resid
   const [uploadOpen, setUploadOpen] = useState(false);
   const [rsvpsOpen, setRsvpsOpen] = useState(false);
   const [listRefresh, setListRefresh] = useState(0);
+  const [profileCompletionStatus, setProfileCompletionStatus] =
+    useState<ProfileCompletionStatus | null>(null);
+  const [profileBannerDismissed, setProfileBannerDismissed] = useState(isProfileCompletionBannerDismissed);
   const { queryClient } = useInvalidatePortalQueries();
   const { userId, buildingId } = useTenantContext();
 
@@ -144,6 +169,9 @@ function ResidentPortalInner({ onSwitchToAdmin, onLogout, onGoToWebsite }: Resid
 
   const fullWidth = route.page !== "home";
 
+  const showProfileCompletionBanner =
+    profileCompletionStatus?.phase === "soft" && !profileBannerDismissed;
+
   return (
     <>
       <ResidentLayout
@@ -155,7 +183,22 @@ function ResidentPortalInner({ onSwitchToAdmin, onLogout, onGoToWebsite }: Resid
         onGoToWebsite={onGoToWebsite}
         navAction={navAction}
         fullWidth={fullWidth}
+        profileCompletionBanner={
+          showProfileCompletionBanner
+            ? {
+                missingCount: profileCompletionStatus.missingFields.length,
+                onComplete: () => routerNavigate("/complete-profile"),
+                onDismiss: () => setProfileBannerDismissed(true),
+              }
+            : undefined
+        }
       >
+        {isResidentDesktopPreferred(route) && (
+          <DesktopPreferredBanner
+            portal="resident"
+            pageKey={residentDesktopPreferredPageKey(route)}
+          />
+        )}
         {renderPage(route, navigate, listRefresh, {
           onAddService: () => setServiceModalOpen(true),
           onAddIncident: () => setIncidentModalOpen(true),

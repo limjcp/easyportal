@@ -5,6 +5,8 @@ import { getActiveBuildingId } from "../data/supabase/buildingContext";
 import { MvpLogo } from "../shared/MvpLogo";
 import { PageBusyProvider } from "../shared/PageBusyProvider";
 import { normalizeExternalUrl } from "../shared/urlUtils";
+import { ProfileCompletionBanner } from "./components/ProfileCompletionBanner";
+import { ResidentBottomNav } from "./components/ResidentBottomNav";
 import { ResidentNav } from "./components/ResidentNav";
 import { UserMenu } from "./components/UserMenu";
 import { usePortalConfig } from "./context/PortalConfigContext";
@@ -21,6 +23,11 @@ type ResidentLayoutProps = {
   navAction?: ReactNode;
   children: ReactNode;
   fullWidth?: boolean;
+  profileCompletionBanner?: {
+    missingCount: number;
+    onComplete: () => void;
+    onDismiss: () => void;
+  };
 };
 
 export function ResidentLayout({
@@ -33,6 +40,7 @@ export function ResidentLayout({
   navAction,
   children,
   fullWidth,
+  profileCompletionBanner,
 }: ResidentLayoutProps) {
   const { publicPortalSettings, portalTileSettings } = usePortalConfig();
   const auth = useAuth();
@@ -59,16 +67,24 @@ export function ResidentLayout({
           showBuildingAdmin={showBuildingAdmin}
         />
         <Header onOpenProfile={onOpenProfile} onLogout={onLogout} logoUrl={publicPortalSettings.buildingLogoUrl} />
+        {profileCompletionBanner ? (
+          <ProfileCompletionBanner
+            missingCount={profileCompletionBanner.missingCount}
+            onComplete={profileCompletionBanner.onComplete}
+            onDismiss={profileCompletionBanner.onDismiss}
+          />
+        ) : null}
         <ResidentNav route={route} onNavigate={onNavigate} rightAction={navAction} />
         <main
           className={
             fullWidth
-              ? "mx-auto w-full max-w-[1200px] flex-1 px-4 pb-24 pt-4 sm:px-6"
+              ? "mx-auto w-full max-w-[1200px] flex-1 px-4 pb-24 pt-4 sm:px-6 lg:pb-24"
               : "mx-auto flex w-full max-w-[980px] flex-1 flex-col px-4 pb-24 pt-4 sm:px-6 sm:pt-8 lg:max-w-[1040px] lg:pt-10"
           }
         >
           {children}
         </main>
+        <ResidentBottomNav route={route} onNavigate={onNavigate} />
         <Footer defaultLanguage={portalTileSettings.defaultLanguage} />
       </div>
     </div>
@@ -87,7 +103,7 @@ function HeroBackground({ imageUrl, themeColor }: { imageUrl?: string; themeColo
       <div className="absolute inset-0 bg-slate-950/40" />
       <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-[#0a2c66]/20" />
       <div
-        className="absolute -bottom-16 right-[-8%] h-[62vh] w-[52vw] min-w-[420px] rounded-[4rem] opacity-80"
+        className="absolute -bottom-16 right-[-8%] hidden h-[62vh] w-[52vw] min-w-[280px] rounded-[4rem] opacity-80 sm:block lg:min-w-[420px]"
         style={{
           clipPath: "polygon(24% 0%, 100% 0%, 100% 100%, 0% 100%)",
           background: `linear-gradient(to bottom right, ${themeColor}33, ${themeColor}73, #0f3e8e80)`,
@@ -118,27 +134,29 @@ function UtilityBar({
 }) {
   return (
     <div className="sticky top-0 z-50 bg-[#1b1d20]/95">
-      <div className="mx-auto flex max-w-[1500px] items-center justify-end gap-4 px-4 py-3 text-sm text-white/80 sm:px-6">
-        {twitterUrl && (
-          <a href={normalizeExternalUrl(twitterUrl)} target="_blank" rel="noreferrer" className="transition hover:text-white" aria-label="Twitter">
-            <FaTwitter />
-          </a>
-        )}
-        {facebookUrl && (
-          <a href={normalizeExternalUrl(facebookUrl)} target="_blank" rel="noreferrer" className="transition hover:text-white" aria-label="Facebook">
-            <FaFacebookF />
-          </a>
-        )}
-        {instaUrl && (
-          <a href={normalizeExternalUrl(instaUrl)} target="_blank" rel="noreferrer" className="transition hover:text-white" aria-label="Instagram">
-            <FaInstagram />
-          </a>
-        )}
-        {youTubeUrl && (
-          <a href={normalizeExternalUrl(youTubeUrl)} target="_blank" rel="noreferrer" className="transition hover:text-white" aria-label="YouTube">
-            <FaYoutube />
-          </a>
-        )}
+      <div className="mx-auto flex max-w-[1500px] items-center justify-end gap-2 px-4 py-2 text-sm text-white/80 sm:gap-4 sm:px-6 sm:py-3">
+        <div className="hidden items-center gap-3 sm:flex">
+          {twitterUrl && (
+            <a href={normalizeExternalUrl(twitterUrl)} target="_blank" rel="noreferrer" className="transition hover:text-white" aria-label="Twitter">
+              <FaTwitter />
+            </a>
+          )}
+          {facebookUrl && (
+            <a href={normalizeExternalUrl(facebookUrl)} target="_blank" rel="noreferrer" className="transition hover:text-white" aria-label="Facebook">
+              <FaFacebookF />
+            </a>
+          )}
+          {instaUrl && (
+            <a href={normalizeExternalUrl(instaUrl)} target="_blank" rel="noreferrer" className="transition hover:text-white" aria-label="Instagram">
+              <FaInstagram />
+            </a>
+          )}
+          {youTubeUrl && (
+            <a href={normalizeExternalUrl(youTubeUrl)} target="_blank" rel="noreferrer" className="transition hover:text-white" aria-label="YouTube">
+              <FaYoutube />
+            </a>
+          )}
+        </div>
         {onGoToWebsite ? (
           <button
             type="button"

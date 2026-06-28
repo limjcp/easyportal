@@ -2,8 +2,14 @@ import type { ReactNode } from "react";
 import { FaSort, FaSortDown, FaSortUp } from "react-icons/fa";
 import { cn } from "../../utils/cn";
 
+export type AdminTabDef = {
+  id: string;
+  label: string;
+  icon?: ReactNode;
+};
+
 type AdminTabsProps = {
-  tabs: { id: string; label: string }[];
+  tabs: AdminTabDef[];
   activeTab: string;
   onChange: (id: string) => void;
 };
@@ -17,12 +23,13 @@ export function AdminTabs({ tabs, activeTab, onChange }: AdminTabsProps) {
           type="button"
           onClick={() => onChange(tab.id)}
           className={cn(
-            "shrink-0 whitespace-nowrap px-3 py-2 text-sm font-medium transition sm:px-4",
+            "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-2 text-sm font-medium transition sm:px-4",
             activeTab === tab.id
               ? "border-b-2 border-[#3476ef] text-[#3476ef]"
               : "text-slate-600 hover:text-slate-800"
           )}
         >
+          {tab.icon}
           {tab.label}
         </button>
       ))}
@@ -30,11 +37,41 @@ export function AdminTabs({ tabs, activeTab, onChange }: AdminTabsProps) {
   );
 }
 
+export function AdminModuleTabs({ tabs, activeTab, onChange }: AdminTabsProps) {
+  return (
+    <>
+      <div className="mb-4 flex flex-col gap-2 sm:hidden">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onChange(tab.id)}
+            className={cn(
+              "inline-flex w-full items-center justify-center gap-2 rounded px-4 py-2 text-sm font-medium",
+              activeTab === tab.id
+                ? "bg-slate-700 text-white"
+                : "border border-slate-300 bg-white text-slate-700"
+            )}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div className="hidden sm:block">
+        <AdminTabs tabs={tabs} activeTab={activeTab} onChange={onChange} />
+      </div>
+    </>
+  );
+}
+
 export function AdminPanelHeader({
   title,
+  icon,
   color = "purple",
 }: {
   title: string;
+  icon?: ReactNode;
   color?: "purple" | "green" | "orange" | "red" | "brand";
 }) {
   const colors = {
@@ -46,7 +83,10 @@ export function AdminPanelHeader({
   };
   return (
     <div className={cn("px-4 py-2 text-sm font-semibold text-white", colors[color])}>
-      {title}
+      <span className="inline-flex items-center gap-2">
+        {icon}
+        {title}
+      </span>
     </div>
   );
 }
@@ -63,7 +103,7 @@ export type SortDirection = "asc" | "desc";
 
 export type AdminTableColumn<T> = {
   key: string;
-  header: string;
+  header: ReactNode;
   render: (row: T) => ReactNode;
   /** Hide column below this breakpoint (table still scrolls on smaller screens). */
   hideBelow?: "md" | "lg" | "xl";
@@ -80,6 +120,7 @@ const hideBelowClass: Record<NonNullable<AdminTableColumn<unknown>["hideBelow"]>
 
 type AdminPanelTableProps<T> = {
   title: string;
+  titleIcon?: ReactNode;
   showHeader?: boolean;
   headerColor?: "purple" | "green" | "orange" | "red" | "brand";
   data: T[];
@@ -100,10 +141,15 @@ type AdminPanelTableProps<T> = {
   getRowKey?: (row: T, index: number) => string;
   /** Defaults to [5, 10, 25, 50]. Use -1 for “All”. */
   pageSizeChoices?: number[];
+  /** Label after page size select, e.g. "entries" or "Records/page". */
+  pageSizeLabel?: string;
+  /** Below md, render touch-friendly cards instead of the horizontal table. */
+  mobileCard?: (row: T) => ReactNode;
 };
 
 export function AdminPanelTable<T>({
   title,
+  titleIcon,
   showHeader = true,
   headerColor = "purple",
   data,
@@ -123,6 +169,8 @@ export function AdminPanelTable<T>({
   onSortChange,
   getRowKey,
   pageSizeChoices = [5, 10, 25, 50],
+  pageSizeLabel = "entries",
+  mobileCard,
 }: AdminPanelTableProps<T>) {
   const filtered = data.filter((row) => {
     if (!search) return true;
@@ -156,7 +204,9 @@ export function AdminPanelTable<T>({
 
   return (
     <div className="min-w-0 max-w-full rounded-sm border border-slate-300 bg-white shadow-sm">
-      {showHeader && title ? <AdminPanelHeader title={title} color={headerColor} /> : null}
+      {showHeader && title ? (
+        <AdminPanelHeader title={title} icon={titleIcon} color={headerColor} />
+      ) : null}
       <div className="grid gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-sm sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center">
         <label className="flex min-w-0 items-center gap-2 text-slate-600">
           Show
@@ -174,7 +224,7 @@ export function AdminPanelTable<T>({
               </option>
             ))}
           </select>
-          entries
+            {pageSizeLabel}
         </label>
         <input
           type="search"
@@ -207,7 +257,11 @@ export function AdminPanelTable<T>({
         ))}
         {toolbarExtra}
       </div>
-      <div className="overflow-x-auto overscroll-x-contain lg:overflow-x-visible">
+      <div
+        className={cn(
+          mobileCard ? "hidden md:block overflow-x-auto overscroll-x-contain" : "overflow-x-auto overscroll-x-contain lg:overflow-x-visible"
+        )}
+      >
         {pageData.length === 0 ? (
           <div className="py-12 text-center text-sm text-slate-500">{emptyMessage}</div>
         ) : (
@@ -271,6 +325,17 @@ export function AdminPanelTable<T>({
           </table>
         )}
       </div>
+      {mobileCard && (
+        <div className="space-y-3 p-3 md:hidden">
+          {pageData.length === 0 ? (
+            <div className="py-12 text-center text-sm text-slate-500">{emptyMessage}</div>
+          ) : (
+            pageData.map((row, i) => (
+              <div key={getRowKey ? getRowKey(row, i) : i}>{mobileCard(row)}</div>
+            ))
+          )}
+        </div>
+      )}
       <div className="flex min-w-0 flex-col gap-2 border-t border-slate-200 px-3 py-2 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between sm:px-4">
         <div className="flex min-w-0 flex-wrap items-center gap-1">
           <button

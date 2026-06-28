@@ -28,8 +28,6 @@ export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalPro
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [role, setRole] = useState<CompanyRole>("Property Administrator");
   const [buildingIds, setBuildingIds] = useState<string[]>([]);
   const [buildings, setBuildings] = useState<CompanyBuilding[]>([]);
@@ -46,12 +44,11 @@ export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalPro
         email: email.trim(),
         role,
         assignedBuildingIds: buildingIds,
-        password,
       });
       await auth.refreshAuth();
-    }, [firstName, lastName, email, role, buildingIds, password, auth]),
+    }, [firstName, lastName, email, role, buildingIds, auth]),
     {
-      successMessage: "Employee created.",
+      successMessage: "Employee created. Login details emailed.",
       onSuccess: () => {
         onSaved();
         onClose();
@@ -65,8 +62,6 @@ export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalPro
       setFirstName("");
       setLastName("");
       setEmail("");
-      setPassword("");
-      setPasswordConfirm("");
       setRole("Property Administrator");
       setBuildingIds([]);
       setValidationError(null);
@@ -80,14 +75,6 @@ export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalPro
   const handleContinue = () => {
     if (!firstName.trim() || !lastName.trim() || !email.trim()) {
       setValidationError("Please fill in all required fields.");
-      return;
-    }
-    if (password.length < 8) {
-      setValidationError("Password must be at least 8 characters.");
-      return;
-    }
-    if (password !== passwordConfirm) {
-      setValidationError("Passwords do not match.");
       return;
     }
     setValidationError(null);
@@ -162,26 +149,10 @@ export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalPro
               className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
             />
           </label>
-          <label className="block text-sm">
-            Password *
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-              className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
-            />
-          </label>
-          <label className="block text-sm">
-            Confirm Password *
-            <input
-              type="password"
-              value={passwordConfirm}
-              onChange={(e) => setPasswordConfirm(e.target.value)}
-              autoComplete="new-password"
-              className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
-            />
-          </label>
+          <p className="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+            A temporary password will be emailed to this address. They must choose a new password on
+            first sign-in.
+          </p>
         </div>
       ) : (
         <div className="space-y-3">

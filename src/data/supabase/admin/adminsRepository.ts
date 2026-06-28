@@ -13,6 +13,7 @@ import {
 import { mapDbError, sb } from "../base";
 import { provisionUser } from "../provisionUser";
 import { invokeSendPortalEmail } from "../sendPortalEmail";
+import { ADMIN_USER_PROFILE_COLUMNS } from "../queryColumns";
 import { bid } from "./shared";
 import { mapCompanyPermissionDbRows } from "../portalModulePermissions";
 import { refreshBuildingCounts } from "../unitsUsersRepository";
@@ -23,7 +24,11 @@ export const adminsRepository = {
       data: { user },
     } = await sb().auth.getUser();
     if (!user) throw new Error("Not authenticated");
-    const { data: profile, error } = await sb().from("profiles").select("*").eq("id", user.id).single();
+    const { data: profile, error } = await sb()
+      .from("profiles")
+      .select(ADMIN_USER_PROFILE_COLUMNS)
+      .eq("id", user.id)
+      .single();
     mapDbError(error);
     const buildingId = await bid();
     const { data: membership } = await sb()
@@ -192,12 +197,16 @@ export const adminsRepository = {
     const result = await provisionUser({
       kind: "building_admin",
       email: input.email.trim(),
-      password: input.password,
       firstName: input.firstName.trim(),
       lastName: input.lastName.trim(),
       buildingId,
       roleCode: input.role,
       roleLabel,
+    });
+    const membershipId = result.membershipId ?? result.profileId;
+    await invokeSendPortalEmail({
+      type: "building_admin_login_details",
+      membershipId,
     });
     await refreshBuildingCounts(buildingId);
     return {

@@ -18,6 +18,11 @@ import { PARKING_PAYMENT_AMOUNTS } from "../../../resident/data/types";
 import { certificateDetailFromRow } from "../../../company/data/mock/certificateDetails";
 import { mapDbError, nowIso, sb, todayIsoDate } from "../base";
 import {
+  INCIDENT_REPORT_LIST_COLUMNS,
+  SERVICE_REQUEST_LIST_COLUMNS,
+  SUGGESTION_LIST_COLUMNS,
+} from "../queryColumns";
+import {
   mapCertificateRow,
   mapAmenityBooking,
   mapBuildingAmenitySettings,
@@ -54,14 +59,14 @@ async function ensureServiceCategory(name: string): Promise<string> {
   if (!normalized) throw new Error("Service request category is required.");
   const { data: existing } = await sb()
     .from("service_request_categories")
-    .select("*")
+    .select("id, name")
     .eq("building_id", buildingId);
   const match = (existing ?? []).find((c) => isSameCategoryName(c.name as string, normalized));
   if (match) return match.name as string;
   const { data, error } = await sb()
     .from("service_request_categories")
     .insert({ building_id: buildingId, name: normalized })
-    .select("*")
+    .select("name")
     .single();
   mapDbError(error);
   return data!.name as string;
@@ -168,7 +173,7 @@ export const operationsRepository = {
     const buildingId = await bid();
     const { data, error } = await sb()
       .from("service_requests")
-      .select("*")
+      .select(SERVICE_REQUEST_LIST_COLUMNS)
       .eq("building_id", buildingId)
       .eq("archived", archived);
     mapDbError(error);
@@ -356,7 +361,7 @@ export const operationsRepository = {
     const buildingId = await bid();
     const { data, error } = await sb()
       .from("suggestions")
-      .select("*")
+      .select(SUGGESTION_LIST_COLUMNS)
       .eq("building_id", buildingId)
       .order("created_at", { ascending: false });
     mapDbError(error);
@@ -408,7 +413,7 @@ export const operationsRepository = {
     const buildingId = await bid();
     const { count, error } = await sb()
       .from("suggestions")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("building_id", buildingId)
       .eq("unread", true);
     mapDbError(error);
@@ -438,7 +443,7 @@ export const operationsRepository = {
   async getUnreadConsultationLeadCount() {
     const { count, error } = await sb()
       .from("consultation_submissions")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("unread", true);
     mapDbError(error);
     return count ?? 0;
@@ -462,7 +467,7 @@ export const operationsRepository = {
     const buildingId = await bid();
     const { data, error } = await sb()
       .from("incident_reports")
-      .select("*")
+      .select(INCIDENT_REPORT_LIST_COLUMNS)
       .eq("building_id", buildingId)
       .eq("archived", archived);
     mapDbError(error);
@@ -499,6 +504,7 @@ export const operationsRepository = {
         status: input.status ?? "Pending",
         unit: input.unit ?? "—",
         resident: createdBy,
+        view_permission: input.visibility,
         assigned_to: input.assignedToAdmin ?? "All Admins",
         created_by_name: createdBy,
         submitted_at: nowIso(),
@@ -508,6 +514,13 @@ export const operationsRepository = {
       .select("*")
       .single();
     mapDbError(error);
+    const reportId = data!.id as string;
+    if (input.files?.length) {
+      for (const file of input.files) {
+        const payload = await fileToAttachmentPayload(file);
+        await insertIncidentReportAttachment(reportId, { ...payload, uploadedBy: createdBy });
+      }
+    }
     return mapIncidentReport(data as Record<string, unknown>);
   },
 

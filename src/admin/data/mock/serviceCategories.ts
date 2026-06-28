@@ -13,5 +13,6 @@ export const seedServiceCategories: ServiceRequestCategory[] = [
   { id: "10", status: "active", name: "Landscaping", usageCount: 4 },
   { id: "11", status: "active", name: "Other", usageCount: 6 },
   { id: "12", status: "active", name: "Plumbing", usageCount: 3 },
+  { id: "14", status: "active", name: "Rules Infraction", usageCount: 0 },
   { id: "13", status: "active", name: "Windows", usageCount: 1 },
 ];

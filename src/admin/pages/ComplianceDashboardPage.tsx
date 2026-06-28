@@ -4,8 +4,15 @@ import type { ComplianceDashboardData } from "../../compliance/types";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { adminRepository } from "../data/adminRepository";
+import { AdminPageActions } from "../components/AdminPageActions";
+import type { AdminRoute } from "../navigation";
 
-export function ComplianceDashboardPage() {
+type ComplianceDashboardPageProps = {
+  route: AdminRoute & { page: "compliance-dashboard" };
+  onNavigate: (route: AdminRoute) => void;
+};
+
+export function ComplianceDashboardPage({ route, onNavigate }: ComplianceDashboardPageProps) {
   const [data, setData] = useState<ComplianceDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -127,6 +134,7 @@ export function ComplianceDashboardPage() {
 
   return (
     <>
+      <AdminPageActions route={route} onNavigate={onNavigate} />
       {actionError ? <FormAlert message={actionError} className="mb-4" /> : null}
       <ComplianceTrackingDashboard
         data={

@@ -1,6 +1,11 @@
 import type { AddUnitRangeType, Comment, IncidentReportAttachment } from "../../../resident/data/types";
 import { mapIncidentReportAttachment, mapServiceRequestAttachment } from "./mappers";
 import { buildingIdOrThrow, mapDbError, sb } from "../base";
+import {
+  COMMENT_COLUMNS,
+  INCIDENT_ATTACHMENT_COLUMNS,
+  SERVICE_ATTACHMENT_COLUMNS,
+} from "../queryColumns";
 
 export async function bid(): Promise<string> {
   return buildingIdOrThrow();
@@ -47,14 +52,14 @@ export async function ensureIncidentCategory(name: string): Promise<string> {
   if (!normalized) throw new Error("Incident report type is required.");
   const { data: existing } = await sb()
     .from("incident_report_categories")
-    .select("*")
+    .select("id, name")
     .eq("building_id", buildingId);
   const match = (existing ?? []).find((c) => isSameCategoryName(c.name as string, normalized));
   if (match) return match.name as string;
   const { data, error } = await sb()
     .from("incident_report_categories")
     .insert({ building_id: buildingId, name: normalized })
-    .select("*")
+    .select("name")
     .single();
   mapDbError(error);
   return data!.name as string;
@@ -69,7 +74,7 @@ export async function getCompanyIdForBuilding(buildingId: string): Promise<strin
 export async function loadEntityComments(entityType: string, entityId: string) {
   const { data, error } = await sb()
     .from("comments")
-    .select("*")
+    .select(COMMENT_COLUMNS)
     .eq("entity_type", entityType)
     .eq("entity_id", entityId)
     .order("created_at", { ascending: true });
@@ -93,7 +98,7 @@ export async function loadEntityComments(entityType: string, entityId: string) {
 export async function loadIncidentReportAttachments(reportId: string) {
   const { data, error } = await sb()
     .from("incident_report_attachments")
-    .select("*")
+    .select(INCIDENT_ATTACHMENT_COLUMNS)
     .eq("incident_report_id", reportId)
     .order("uploaded_at", { ascending: true });
   mapDbError(error);
@@ -121,7 +126,7 @@ export async function insertIncidentReportAttachment(
       kind: input.kind,
       uploaded_by: input.uploadedBy,
     })
-    .select("*")
+    .select(INCIDENT_ATTACHMENT_COLUMNS)
     .single();
   mapDbError(error);
   return mapIncidentReportAttachment(data as Record<string, unknown>);
@@ -136,7 +141,7 @@ export async function removeIncidentReportAttachment(id: string) {
 export async function loadServiceRequestAttachments(serviceRequestId: string) {
   const { data, error } = await sb()
     .from("service_request_attachments")
-    .select("*")
+    .select(SERVICE_ATTACHMENT_COLUMNS)
     .eq("service_request_id", serviceRequestId)
     .order("uploaded_at", { ascending: true });
   mapDbError(error);
@@ -194,7 +199,7 @@ export async function insertComment(
       body: comment.text,
       visibility,
     })
-    .select("*")
+    .select(COMMENT_COLUMNS)
     .single();
   mapDbError(error);
   return {

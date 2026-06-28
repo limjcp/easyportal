@@ -1,7 +1,16 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Modal } from "../../shared/Modal";
+import {
+  PurchaseOrderNegotiationPanel,
+  purchaseOrderStatusLabel,
+} from "../../shared/PurchaseOrderNegotiationPanel";
 import { companyRepository } from "../data/companyRepository";
-import type { CompanyBuilding, PurchaseOrder, Vendor } from "../../resident/data/types";
+import type {
+  CompanyBuilding,
+  PurchaseOrder,
+  PurchaseOrderNegotiation,
+  Vendor,
+} from "../../resident/data/types";
 
 type PurchaseOrderDetailModalProps = {
   open: boolean;
@@ -17,23 +26,30 @@ export function PurchaseOrderDetailModal({
   onUpdated,
 }: PurchaseOrderDetailModalProps) {
   const [po, setPo] = useState<PurchaseOrder | null>(null);
+  const [negotiations, setNegotiations] = useState<PurchaseOrderNegotiation[]>([]);
   const [vendor, setVendor] = useState<Vendor | undefined>();
   const [building, setBuilding] = useState<CompanyBuilding | undefined>();
 
+  const load = useCallback(async () => {
+    if (!poId) return;
+    const p = await companyRepository.getPurchaseOrder(poId);
+    setPo(p ?? null);
+    if (p) {
+      const [sups, blds, negs] = await Promise.all([
+        companyRepository.getVendors(),
+        companyRepository.getBuildings(),
+        companyRepository.getPurchaseOrderNegotiations(poId),
+      ]);
+      setVendor(sups.find((s) => s.id === p.vendorId));
+      setBuilding(blds.find((b) => b.id === p.buildingId));
+      setNegotiations(negs);
+    }
+  }, [poId]);
+
   useEffect(() => {
     if (!open || !poId) return;
-    companyRepository.getPurchaseOrder(poId).then(async (p) => {
-      setPo(p ?? null);
-      if (p) {
-        const [sups, blds] = await Promise.all([
-          companyRepository.getVendors(),
-          companyRepository.getBuildings(),
-        ]);
-        setVendor(sups.find((s) => s.id === p.vendorId));
-        setBuilding(blds.find((b) => b.id === p.buildingId));
-      }
-    });
-  }, [open, poId]);
+    void load();
+  }, [open, poId, load]);
 
   const handleSend = async () => {
     if (!po) return;
@@ -41,6 +57,11 @@ export function PurchaseOrderDetailModal({
     onUpdated();
     onClose();
   };
+
+  const handleRefresh = useCallback(() => {
+    void load();
+    onUpdated();
+  }, [load, onUpdated]);
 
   if (!po) return null;
 
@@ -69,8 +90,13 @@ export function PurchaseOrderDetailModal({
     >
       <div className="space-y-3 text-sm text-slate-700">
         <p>
-          <strong>Status:</strong> {po.status}
+          <strong>Status:</strong> {purchaseOrderStatusLabel(po.status, po.isQuoteRequest)}
         </p>
+        {po.isQuoteRequest && (
+          <p className="text-xs text-slate-500">
+            This is a quote request — pricing will be negotiated with the vendor.
+          </p>
+        )}
         <p>
           <strong>Vendor:</strong> {vendor?.companyName ?? po.vendorId}
         </p>
@@ -116,7 +142,7 @@ export function PurchaseOrderDetailModal({
             <strong>Notes:</strong> {po.notes}
           </p>
         )}
-        {po.status === "sent" && (
+        {po.status === "sent" && !po.isQuoteRequest && (
           <p className="text-xs text-slate-500">
             Awaiting vendor response in the Vendor Portal. You will receive a notification when
             they accept or decline.
@@ -128,6 +154,20 @@ export function PurchaseOrderDetailModal({
           </p>
         )}
       </div>
+
+      <PurchaseOrderNegotiationPanel
+        po={po}
+        actor="company"
+        negotiations={negotiations}
+        onRefresh={handleRefresh}
+        onSubmitQuote={async () => {}}
+        onSubmitCounter={async (input) => {
+          await companyRepository.submitCompanyCounterOffer(po.id, input);
+        }}
+        onAccept={async () => {
+          await companyRepository.acceptVendorQuote(po.id);
+        }}
+      />
     </Modal>
   );
 }

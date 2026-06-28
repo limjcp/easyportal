@@ -57,7 +57,7 @@ export const governanceRepository = {
     const buildingId = await bid();
     const { count, error } = await sb()
       .from("board_approvals")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("building_id", buildingId)
       .eq("archived", false)
       .eq("status", "Pending");
@@ -145,7 +145,7 @@ export const governanceRepository = {
     const buildingId = await bid();
     const { count, error } = await sb()
       .from("board_member_applications")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("building_id", buildingId)
       .eq("unread", true);
     mapDbError(error);
@@ -259,7 +259,7 @@ export const governanceRepository = {
     const buildingId = await bid();
     const { count } = await sb()
       .from("election_positions")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("election_id", electionId);
     const { data, error } = await sb()
       .from("election_positions")
@@ -363,7 +363,7 @@ export const governanceRepository = {
     const buildingId = await bid();
     const { count, error } = await sb()
       .from("units")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("building_id", buildingId);
     mapDbError(error);
     return count ?? 0;

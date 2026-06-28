@@ -3,8 +3,8 @@ import { companyRepository } from "../../company/data/companyRepository";
 import { queryKeys } from "../queryKeys";
 import { useTenantContext } from "./useTenantContext";
 
-const COMPANY_BUILDINGS_STALE = 60_000;
-const COMPANY_LIST_STALE = 60_000;
+const COMPANY_BUILDINGS_STALE = 120_000;
+const COMPANY_LIST_STALE = 120_000;
 
 export function useCompanyUser() {
   const { userId, companyId, isCompanyReady } = useTenantContext();

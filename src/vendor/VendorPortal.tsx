@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { VendorLayout } from "./VendorLayout";
-import { CompliancePage } from "./pages/CompliancePage";
+import { DesktopPreferredBanner } from "../shared/DesktopPreferredBanner";
+import {
+  isVendorDesktopPreferred,
+  vendorDesktopPreferredPageKey,
+} from "../shared/desktopPreferredPages";import { CompliancePage } from "./pages/CompliancePage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { PaymentSettingsPage } from "./pages/PaymentSettingsPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { PurchaseOrderDetailPage } from "./pages/PurchaseOrderDetailPage";
 import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
@@ -24,6 +29,9 @@ export function VendorPortal({ onLogout }: VendorPortalProps) {
       onLogout={onLogout}
       refreshKey={refreshKey}
     >
+      {isVendorDesktopPreferred(route) && (
+        <DesktopPreferredBanner portal="vendor" pageKey={vendorDesktopPreferredPageKey(route)} />
+      )}
       {route.page === "dashboard" && (
         <DashboardPage onNavigate={setRoute} refreshKey={refreshKey} />
       )}
@@ -38,6 +46,9 @@ export function VendorPortal({ onLogout }: VendorPortalProps) {
         />
       )}
       {route.page === "compliance" && <CompliancePage onRefresh={bumpRefresh} />}
+      {route.page === "payment-settings" && (
+        <PaymentSettingsPage onRefresh={bumpRefresh} />
+      )}
       {route.page === "profile" && <ProfilePage onRefresh={bumpRefresh} />}
     </VendorLayout>
   );

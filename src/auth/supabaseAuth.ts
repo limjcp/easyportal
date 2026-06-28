@@ -7,6 +7,9 @@ import {
   setRememberMe,
 } from "../lib/supabaseAuthStorage";
 import type { LoginPortalRole } from "../resident/data/types";
+import type { ProfileCompletionStatus } from "../data/supabase/profileCompletion";
+import { supabaseResidentRepository } from "../data/supabase/residentRepository";
+import { AUTH_PROFILE_COLUMNS } from "../data/supabase/queryColumns";
 
 export { clearSupabaseAuthStorage, getRememberMe, setRememberMe };
 
@@ -61,7 +64,7 @@ export async function getCurrentUser(): Promise<User | null> {
 export async function fetchProfile(userId: string) {
   const { data, error } = await requireSupabase()
     .from("profiles")
-    .select("*")
+    .select(AUTH_PROFILE_COLUMNS)
     .eq("id", userId)
     .maybeSingle();
   if (error) throw error;
@@ -83,14 +86,20 @@ export async function completeRequiredPasswordChange(newPassword: string): Promi
   if (userError) throw userError;
   if (!user) throw new Error("Your session has expired. Sign out and sign in again, then retry.");
 
-  const { error: passwordError } = await client.auth.updateUser({ password: newPassword });
-  if (passwordError) throw passwordError;
-
   const { error: profileError } = await client
     .from("profiles")
     .update({ must_change_password: false, updated_at: new Date().toISOString() })
     .eq("id", user.id);
   if (profileError) throw profileError;
+
+  const { error: passwordError } = await client.auth.updateUser({ password: newPassword });
+  if (passwordError) {
+    await client
+      .from("profiles")
+      .update({ must_change_password: true, updated_at: new Date().toISOString() })
+      .eq("id", user.id);
+    throw passwordError;
+  }
 }
 
 export async function updateLastLogin(userId: string) {
@@ -98,6 +107,10 @@ export async function updateLastLogin(userId: string) {
     .from("profiles")
     .update({ last_login_at: new Date().toISOString() })
     .eq("id", userId);
+}
+
+export async function fetchProfileCompletionStatusForCurrentUser(): Promise<ProfileCompletionStatus> {
+  return supabaseResidentRepository.getProfileCompletionStatus();
 }
 
 export type PortalAccess = {
@@ -110,11 +123,14 @@ export type PortalAccess = {
   vendorId: string | null;
 };
 
-export async function resolvePortalAccess(userId: string): Promise<PortalAccess> {
+export async function resolvePortalAccess(
+  userId: string,
+  profile?: AuthProfile | null
+): Promise<PortalAccess> {
   const client = requireSupabase();
-  const profile = await fetchProfile(userId);
+  const resolvedProfile = profile ?? (await fetchProfile(userId));
 
-  if (profile?.is_super_admin) {
+  if (resolvedProfile?.is_super_admin) {
     return {
       isSuperAdmin: true,
       portals: ["company", "building", "resident", "vendor"],

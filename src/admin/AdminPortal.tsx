@@ -9,7 +9,8 @@ import { AdminLayout } from "./AdminLayout";
 import { adminRepository } from "./data/adminRepository";
 import type { AdminRoute } from "./navigation";
 import { isAdminRouteAllowed } from "./navigation";
-import { useBuildingBadgeCounts, useBuildingNavAccess } from "../shared/queries/buildingQueries";
+import { useAdminDashboardMessages, useBuildingNavAccess } from "../shared/queries/buildingQueries";
+import { useInvalidatePortalQueries } from "../shared/queries/useInvalidatePortalQueries";
 import { AdminPageActions } from "./components/AdminPageActions";
 import { AdminDocumentsPage } from "./pages/AdminDocumentsPage";
 import { AdminEventsPage } from "./pages/AdminEventsPage";
@@ -44,6 +45,11 @@ import { ConsultationLeadsPage } from "./pages/ConsultationLeadsPage";
 import type { CompanyBuilding } from "../resident/data/types";
 import { setActiveBuildingId } from "../data/supabase/buildingContext";
 import { useNavigateWithBusy } from "../shared/useNavigateWithBusy";
+import { DesktopPreferredBanner } from "../shared/DesktopPreferredBanner";
+import {
+  adminDesktopPreferredPageKey,
+  isAdminDesktopPreferred,
+} from "../shared/desktopPreferredPages";
 
 type AdminPortalProps = {
   adminPathPrefix: string;
@@ -87,21 +93,16 @@ export function AdminPortal({
     [adminPathPrefix, routerNavigate]
   );
   const navigate = useNavigateWithBusy(navigateRaw);
+  const { invalidateBuilding } = useInvalidatePortalQueries();
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // bumpRefresh increments refreshKey so mounted pages refetch locally (syncFromRefreshKey).
-  // Child pages must NOT call onRefresh from their refreshKey listener — that would loop.
+  // Invalidate React Query caches; child pages refetch via query invalidation (not refreshKey).
   const bumpRefresh = useCallback(() => {
-    setRefreshKey((k) => k + 1);
-  }, []);
-
-  const { data: badgeCounts } = useBuildingBadgeCounts();
-  const unreadSuggestions = badgeCounts?.unreadSuggestions ?? 0;
-  const pendingApprovals = badgeCounts?.pendingApprovals ?? 0;
-  const unreadBoardApplications = badgeCounts?.unreadBoardApplications ?? 0;
-  const unreadConsultationLeads = badgeCounts?.unreadConsultationLeads ?? 0;
+    invalidateBuilding();
+  }, [invalidateBuilding]);
 
   const { data: navAccess = null } = useBuildingNavAccess();
+  const { messages: dashboardMessages } = useAdminDashboardMessages(navAccess);
 
   useEffect(() => {
     if (!activeBuildingId) return;
@@ -132,16 +133,19 @@ export function AdminPortal({
       embedded={embedded}
       navAccess={navAccess}
     >
+      {isAdminDesktopPreferred(route) && (
+        <DesktopPreferredBanner
+          portal="admin"
+          pageKey={adminDesktopPreferredPageKey(route)}
+        />
+      )}
       {route.page === "dashboard" && (
         <>
           <AdminPageActions route={route} onNavigate={navigate} />
           <DashboardPage
             refreshKey={refreshKey}
             onNavigate={navigate}
-            unreadSuggestions={unreadSuggestions}
-            pendingApprovals={pendingApprovals}
-            unreadBoardApplications={unreadBoardApplications}
-            unreadConsultationLeads={unreadConsultationLeads}
+            messages={dashboardMessages}
           />
         </>
       )}
@@ -217,7 +221,9 @@ export function AdminPortal({
           onRefresh={bumpRefresh}
         />
       )}
-      {route.page === "compliance-dashboard" && <ComplianceDashboardPage />}
+      {route.page === "compliance-dashboard" && (
+        <ComplianceDashboardPage route={route} onNavigate={navigate} />
+      )}
       {route.page === "fire-safety" && (
         <FireSafetySubmissionsPage route={route} onNavigate={navigate} refreshKey={refreshKey} />
       )}
@@ -318,7 +324,12 @@ export function AdminPortal({
         <SuggestionDetailPage route={route} onNavigate={navigate} />
       )}
       {route.page === "units-users" && (
-        <UnitsUsersPage refreshKey={refreshKey} onRefresh={bumpRefresh} />
+        <UnitsUsersPage
+          route={route}
+          onNavigate={navigate}
+          refreshKey={refreshKey}
+          onRefresh={bumpRefresh}
+        />
       )}
       {route.page === "chat" && (
         <AdminChatPage activeBuildingId={activeBuildingId} embedded={embedded} />

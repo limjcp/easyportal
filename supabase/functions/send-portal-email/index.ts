@@ -4,8 +4,14 @@ import {
   certificateResendEmail,
   customMessageEmail,
   loginDetailsEmail,
+  newsNoticeEmail,
   vendorInviteEmail,
+  vendorInvoiceSubmitEmail,
 } from "../_shared/emailTemplates.ts";
+import {
+  resolveNewsNoticeAdminCcEmails,
+  resolveNewsNoticeResidents,
+} from "../_shared/newsNoticeRecipients.ts";
 import { generateTempPassword, getPortalAppUrl, sendEmail } from "../_shared/resend.ts";
 
 const corsHeaders = {
@@ -20,7 +26,9 @@ type SendPortalEmailPayload =
   | { type: "occupancy_activate"; occupancyId: string }
   | { type: "occupancy_custom_email"; occupancyId: string; subject: string; body: string }
   | { type: "vendor_invite"; vendorId: string; email: string }
-  | { type: "certificate_resend"; certificateId: string };
+  | { type: "certificate_resend"; certificateId: string }
+  | { type: "news_notice_blast"; newsItemId: string }
+  | { type: "vendor_invoice_submit"; invoiceId: string };
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -658,6 +666,305 @@ async function handleCertificateResend(
   };
 }
 
+async function isVendorUser(
+  adminClient: SupabaseClient,
+  userId: string,
+  vendorId: string,
+  isSuperAdmin: boolean
+): Promise<boolean> {
+  if (isSuperAdmin) return true;
+  const { data, error } = await adminClient
+    .from("vendor_users")
+    .select("vendor_id")
+    .eq("profile_id", userId)
+    .eq("vendor_id", vendorId)
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+type VendorInvoiceLineItemRow = {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+};
+
+async function handleVendorInvoiceSubmit(
+  adminClient: SupabaseClient,
+  callerId: string,
+  isSuperAdmin: boolean,
+  invoiceId: string
+) {
+  const { data: invoice, error } = await adminClient
+    .from("vendor_invoices")
+    .select(
+      "id, vendor_id, building_id, invoice_number, hst_number, subtotal, hst_rate, hst_amount, total, line_items, status, preferred_payment_method, payment_details, purchase_orders(po_number), vendors(company_name, contact_name), buildings(name, address, corp_number, sparc_email, accounting_email)"
+    )
+    .eq("id", invoiceId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!invoice) throw new Error("Invoice not found.");
+  if (invoice.status !== "draft") {
+    throw new Error("This invoice has already been submitted.");
+  }
+
+  const vendorId = invoice.vendor_id as string;
+  if (!(await isVendorUser(adminClient, callerId, vendorId, isSuperAdmin))) {
+    throw new Error("Not allowed to submit this invoice.");
+  }
+
+  const building = invoice.buildings as {
+    name: string;
+    address: string;
+    corp_number: string;
+    sparc_email: string;
+    accounting_email: string;
+  } | null;
+  const vendor = invoice.vendors as {
+    company_name: string;
+    contact_name: string;
+  } | null;
+  const purchaseOrder = invoice.purchase_orders as { po_number: string } | null;
+
+  const sparcEmail = building?.sparc_email?.trim() ?? "";
+  if (!sparcEmail) {
+    throw new Error(
+      "This building does not have a SPARC bill email configured. Contact property management."
+    );
+  }
+
+  const lineItems = ((invoice.line_items as VendorInvoiceLineItemRow[] | null) ?? []).map((li) => ({
+    description: String(li.description ?? ""),
+    quantity: Number(li.quantity ?? 0),
+    unitPrice: Number(li.unitPrice ?? 0),
+    lineTotal: Number(li.lineTotal ?? 0),
+  }));
+
+  const paymentDetailsRaw = (invoice.payment_details as Record<string, unknown> | null) ?? {};
+  const paymentDetails = Object.fromEntries(
+    Object.entries(paymentDetailsRaw).map(([key, value]) => [key, String(value ?? "")])
+  );
+
+  const template = vendorInvoiceSubmitEmail({
+    invoiceNumber: invoice.invoice_number as string,
+    poNumber: purchaseOrder?.po_number ?? "—",
+    vendorCompanyName: vendor?.company_name?.trim() || "Vendor",
+    vendorContactName: vendor?.contact_name?.trim() || "—",
+    hstNumber: (invoice.hst_number as string)?.trim() || "—",
+    buildingName: building?.name?.trim() || "Building",
+    buildingAddress: building?.address?.trim() || "",
+    corpNumber: building?.corp_number?.trim() || "",
+    lineItems,
+    subtotal: Number(invoice.subtotal ?? 0),
+    hstRate: Number(invoice.hst_rate ?? 0.13),
+    hstAmount: Number(invoice.hst_amount ?? 0),
+    total: Number(invoice.total ?? 0),
+    preferredPaymentMethod:
+      (invoice.preferred_payment_method as "bank_transfer" | "interac_etransfer" | "sparcpay") ??
+      "bank_transfer",
+    paymentDetails,
+  });
+
+  const accountingEmail = building?.accounting_email?.trim();
+  await sendEmail({
+    to: sparcEmail,
+    cc: accountingEmail && accountingEmail !== sparcEmail ? accountingEmail : undefined,
+    subject: template.subject,
+    html: template.html,
+    text: template.text,
+  });
+
+  const { error: updateError } = await adminClient
+    .from("vendor_invoices")
+    .update({
+      status: "submitted",
+      submitted_at: new Date().toISOString(),
+      sparc_recipient_email: sparcEmail,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", invoiceId)
+    .eq("status", "draft");
+  if (updateError) throw new Error(updateError.message);
+
+  return {
+    email: sparcEmail,
+    message: `Invoice submitted for payment to ${sparcEmail}.`,
+  };
+}
+
+async function handleNewsNoticeBlast(
+  adminClient: SupabaseClient,
+  callerId: string,
+  isSuperAdmin: boolean,
+  newsItemId: string
+) {
+  const { data: newsItem, error } = await adminClient
+    .from("news_items")
+    .select(
+      "id, building_id, title, body, status, no_notifications, resident_types, admin_cc_types"
+    )
+    .eq("id", newsItemId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!newsItem) throw new Error("News/notice not found.");
+
+  if (newsItem.no_notifications) {
+    throw new Error("Notifications are disabled for this notice.");
+  }
+  if (newsItem.status !== "active") {
+    throw new Error("Only active notices can send email notifications.");
+  }
+
+  const buildingId = newsItem.building_id as string;
+  if (!(await hasBuildingAccess(adminClient, callerId, buildingId, isSuperAdmin))) {
+    throw new Error("Not allowed to send notifications for this notice.");
+  }
+
+  const selectedResidentTypes = (newsItem.resident_types as string[]) ?? [];
+  const selectedAdminCcTypes = (newsItem.admin_cc_types as string[]) ?? [];
+
+  const [residents, adminCcEmails] = await Promise.all([
+    resolveNewsNoticeResidents(adminClient, buildingId, selectedResidentTypes),
+    resolveNewsNoticeAdminCcEmails(adminClient, buildingId, selectedAdminCcTypes),
+  ]);
+
+  if (residents.length === 0) {
+    throw new Error("No activated residents match the selected resident types for this building.");
+  }
+
+  const { data: building } = await adminClient
+    .from("buildings")
+    .select("name")
+    .eq("id", buildingId)
+    .maybeSingle();
+  const buildingName = (building?.name as string)?.trim() || "Your building";
+  const portalUrl = `${getPortalAppUrl()}/login`;
+
+  const residentEmailSet = new Set(residents.map((recipient) => recipient.email));
+  const ccForResidents = adminCcEmails.filter((email) => !residentEmailSet.has(email));
+
+  let delivered = 0;
+  let failed = 0;
+
+  for (const recipient of residents) {
+    const template = newsNoticeEmail({
+      title: newsItem.title as string,
+      body: (newsItem.body as string) || "",
+      buildingName,
+      portalUrl,
+      recipientName: recipient.residentName,
+    });
+
+    try {
+      await sendEmail({
+        to: recipient.email,
+        cc: ccForResidents.length > 0 ? ccForResidents : undefined,
+        subject: template.subject,
+        html: template.html,
+        text: template.text,
+      });
+
+      delivered += 1;
+      const { error: recordError } = await adminClient.from("email_records").insert({
+        building_id: buildingId,
+        profile_id: recipient.profileId,
+        news_item_id: newsItemId,
+        recipient_email: recipient.email,
+        subject: template.subject,
+        body: (newsItem.body as string) || "",
+        status: "delivered",
+      });
+      if (recordError) throw new Error(recordError.message);
+    } catch {
+      failed += 1;
+      await adminClient.from("email_records").insert({
+        building_id: buildingId,
+        profile_id: recipient.profileId,
+        news_item_id: newsItemId,
+        recipient_email: recipient.email,
+        subject: template.subject,
+        body: (newsItem.body as string) || "",
+        status: "bounced",
+      });
+    }
+  }
+
+  const ccOnlyRecipients = adminCcEmails.filter((email) => !residentEmailSet.has(email));
+  for (const ccEmail of ccOnlyRecipients) {
+    const template = newsNoticeEmail({
+      title: newsItem.title as string,
+      body: (newsItem.body as string) || "",
+      buildingName,
+      portalUrl,
+    });
+
+    const { data: ccProfile } = await adminClient
+      .from("profiles")
+      .select("id")
+      .ilike("email", ccEmail)
+      .maybeSingle();
+
+    try {
+      await sendEmail({
+        to: ccEmail,
+        subject: template.subject,
+        html: template.html,
+        text: template.text,
+      });
+      delivered += 1;
+      await adminClient.from("email_records").insert({
+        building_id: buildingId,
+        profile_id: (ccProfile?.id as string | undefined) ?? null,
+        news_item_id: newsItemId,
+        recipient_email: ccEmail,
+        subject: template.subject,
+        body: (newsItem.body as string) || "",
+        status: "delivered",
+      });
+    } catch {
+      failed += 1;
+      await adminClient.from("email_records").insert({
+        building_id: buildingId,
+        profile_id: (ccProfile?.id as string | undefined) ?? null,
+        news_item_id: newsItemId,
+        recipient_email: ccEmail,
+        subject: template.subject,
+        body: (newsItem.body as string) || "",
+        status: "bounced",
+      });
+    }
+  }
+
+  const sent = residents.length + ccOnlyRecipients.length;
+  const emailStats = {
+    sent,
+    delivered,
+    opened: 0,
+    clicked: 0,
+    bounced: failed,
+    spamReports: 0,
+    rejections: 0,
+    delayed: 0,
+  };
+
+  const { error: updateError } = await adminClient
+    .from("news_items")
+    .update({
+      email_total: sent,
+      email_delivered: delivered,
+      email_stats: emailStats,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", newsItemId);
+  if (updateError) throw new Error(updateError.message);
+
+  return {
+    email: residents[0]?.email ?? adminCcEmails[0] ?? "",
+    message: `Sent ${delivered} of ${sent} news/notice emails for "${newsItem.title as string}".`,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -754,6 +1061,28 @@ Deno.serve(async (req) => {
           caller.id,
           isSuperAdmin,
           payload.certificateId.trim()
+        );
+        break;
+      case "news_notice_blast":
+        if (!payload.newsItemId?.trim()) {
+          return jsonResponse({ error: "newsItemId is required." }, 400);
+        }
+        result = await handleNewsNoticeBlast(
+          adminClient,
+          caller.id,
+          isSuperAdmin,
+          payload.newsItemId.trim()
+        );
+        break;
+      case "vendor_invoice_submit":
+        if (!payload.invoiceId?.trim()) {
+          return jsonResponse({ error: "invoiceId is required." }, 400);
+        }
+        result = await handleVendorInvoiceSubmit(
+          adminClient,
+          caller.id,
+          isSuperAdmin,
+          payload.invoiceId.trim()
         );
         break;
       default:

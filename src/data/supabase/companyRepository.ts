@@ -15,6 +15,7 @@ import type {
   MasterReportType,
   PermissionModuleRow,
   PurchaseOrder,
+  PurchaseOrderNegotiation,
   PurchaseOrderStatus,
   RoleNameOverride,
   RolePermissionDefaults,
@@ -38,6 +39,7 @@ import type {
   CertificateFile,
   CertificateHistoryEntry,
   BoardApprovalComment,
+  SubmitPoProposalInput,
 } from "../../resident/data/types";
 import {
   getActiveBuildingId,
@@ -58,6 +60,11 @@ import { ensureCompanyRolePermissions, mapCompanyPermissionDbRows, mergePermissi
 import { certificateDetailFromRow } from "../../company/data/mock/certificateDetails";
 import { boardApprovalDetailFromRow } from "../../company/data/mock/boardApprovalDetails";
 import { buildLobbyDisplayUrl } from "../../shared/portalDomain";
+import { BUILDING_LIST_COLUMNS, ADMIN_USER_PROFILE_COLUMNS } from "./queryColumns";
+import {
+  prepareQuoteRequestOnSend,
+  purchaseOrderNegotiationRepository,
+} from "./purchaseOrderNegotiationRepository";
 
 function mapBuilding(row: Record<string, unknown>): CompanyBuilding {
   return {
@@ -284,7 +291,11 @@ export const supabaseCompanyRepository = {
       data: { user },
     } = await sb().auth.getUser();
     if (!user) throw new Error("Not authenticated");
-    const { data: profile, error } = await sb().from("profiles").select("*").eq("id", user.id).single();
+    const { data: profile, error } = await sb()
+      .from("profiles")
+      .select(ADMIN_USER_PROFILE_COLUMNS)
+      .eq("id", user.id)
+      .single();
     mapDbError(error);
     const companyId = await ensureCompanyId();
     const { data: membership } = await sb()
@@ -399,7 +410,7 @@ export const supabaseCompanyRepository = {
     const companyId = await ensureCompanyId();
     const { data, error } = await sb()
       .from("buildings")
-      .select("*")
+      .select(BUILDING_LIST_COLUMNS)
       .eq("company_id", companyId)
       .eq("status", status);
     mapDbError(error);
@@ -409,7 +420,11 @@ export const supabaseCompanyRepository = {
   },
 
   async getBuilding(id: string): Promise<CompanyBuilding | undefined> {
-    const { data, error } = await sb().from("buildings").select("*").eq("id", id).maybeSingle();
+    const { data, error } = await sb()
+      .from("buildings")
+      .select(BUILDING_LIST_COLUMNS)
+      .eq("id", id)
+      .maybeSingle();
     mapDbError(error);
     if (!data) return undefined;
     const building = mapBuilding(data as Record<string, unknown>);
@@ -534,13 +549,19 @@ export const supabaseCompanyRepository = {
     const result = await provisionUser({
       kind: "company_employee",
       email: input.email.trim(),
-      password: input.password,
       firstName: input.firstName.trim(),
       lastName: input.lastName.trim(),
       companyId,
       role: input.role,
       assignedBuildingIds: input.assignedBuildingIds,
     });
+    const membershipId = result.membershipId;
+    if (membershipId) {
+      await invokeSendPortalEmail({
+        type: "employee_login_details",
+        membershipId,
+      });
+    }
     const employees = await this.getEmployees();
     const created =
       employees.find((e) => e.id === result.membershipId) ??
@@ -897,7 +918,9 @@ export const supabaseCompanyRepository = {
     const orders = await this.getAllPurchaseOrders();
     const counts: Record<string, number> = {};
     for (const po of orders) {
-      if (po.status === "sent") counts[po.vendorId] = (counts[po.vendorId] ?? 0) + 1;
+      if (["sent", "quoted", "negotiating"].includes(po.status)) {
+        counts[po.vendorId] = (counts[po.vendorId] ?? 0) + 1;
+      }
     }
     return counts;
   },
@@ -918,6 +941,9 @@ export const supabaseCompanyRepository = {
   async createPurchaseOrder(input: CreatePurchaseOrderInput): Promise<PurchaseOrder> {
     const companyId = await ensureCompanyId();
     const total = input.lineItems.reduce((sum, li) => sum + li.quantity * li.unitPrice, 0);
+    const status = input.status ?? "draft";
+    const quoteMeta =
+      status === "sent" ? prepareQuoteRequestOnSend(total) : { isQuoteRequest: false, awaitingResponseFrom: null };
     const { data: po, error } = await sb()
       .from("purchase_orders")
       .insert({
@@ -925,17 +951,20 @@ export const supabaseCompanyRepository = {
         building_id: input.buildingId,
         vendor_id: input.vendorId,
         po_number: `PO-${Date.now()}`,
-        status: input.status ?? "draft",
+        status,
         source_kind: input.sourceRequest?.kind,
         source_request_id: input.sourceRequest?.requestId,
         total,
         notes: input.notes,
         created_by_name: "Admin",
+        is_quote_request: quoteMeta.isQuoteRequest,
+        awaiting_response_from: quoteMeta.awaitingResponseFrom,
+        sent_at: status === "sent" ? nowIso() : null,
       })
       .select("*")
       .single();
     mapDbError(error);
-    await sb().from("purchase_order_line_items").insert(
+    const { error: lineError } = await sb().from("purchase_order_line_items").insert(
       input.lineItems.map((li) => ({
         purchase_order_id: po!.id,
         description: li.description,
@@ -943,6 +972,7 @@ export const supabaseCompanyRepository = {
         unit_price: li.unitPrice,
       }))
     );
+    mapDbError(lineError);
     return (await this.getPurchaseOrder(po!.id as string))!;
   },
 
@@ -956,12 +986,41 @@ export const supabaseCompanyRepository = {
   },
 
   async sendPurchaseOrder(id: string) {
+    const po = await this.getPurchaseOrder(id);
+    if (!po) throw new Error("Purchase order not found.");
+    const quoteMeta = prepareQuoteRequestOnSend(po.total);
     const { error } = await sb()
       .from("purchase_orders")
-      .update({ status: "sent", sent_at: nowIso() })
+      .update({
+        status: "sent",
+        sent_at: nowIso(),
+        is_quote_request: quoteMeta.isQuoteRequest,
+        awaiting_response_from: quoteMeta.awaitingResponseFrom,
+      })
       .eq("id", id);
     mapDbError(error);
     return this.getPurchaseOrder(id);
+  },
+
+  async getPurchaseOrderNegotiations(purchaseOrderId: string): Promise<PurchaseOrderNegotiation[]> {
+    return purchaseOrderNegotiationRepository.getNegotiations(purchaseOrderId);
+  },
+
+  async submitCompanyCounterOffer(
+    purchaseOrderId: string,
+    input: SubmitPoProposalInput
+  ): Promise<PurchaseOrder | undefined> {
+    const po = await this.getPurchaseOrder(purchaseOrderId);
+    if (!po) return undefined;
+    await purchaseOrderNegotiationRepository.submitCompanyCounterOffer(po, "Company", input);
+    return this.getPurchaseOrder(purchaseOrderId);
+  },
+
+  async acceptVendorQuote(purchaseOrderId: string): Promise<PurchaseOrder | undefined> {
+    const po = await this.getPurchaseOrder(purchaseOrderId);
+    if (!po) return undefined;
+    await purchaseOrderNegotiationRepository.acceptOffer(po, "company", "Company");
+    return this.getPurchaseOrder(purchaseOrderId);
   },
 
   async getNotifications(): Promise<CompanyNotification[]> {
@@ -995,7 +1054,7 @@ export const supabaseCompanyRepository = {
     const companyId = await ensureCompanyId();
     const { count, error } = await sb()
       .from("company_notifications")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("company_id", companyId)
       .eq("read", false);
     mapDbError(error);
@@ -1259,6 +1318,8 @@ function mapPurchaseOrder(row: Record<string, unknown>): PurchaseOrder {
     sentAt: row.sent_at ? String(row.sent_at).slice(0, 10) : undefined,
     respondedAt: row.responded_at ? String(row.responded_at).slice(0, 10) : undefined,
     declineReason: (row.decline_reason as string) ?? undefined,
+    isQuoteRequest: (row.is_quote_request as boolean) ?? false,
+    awaitingResponseFrom: (row.awaiting_response_from as PurchaseOrder["awaitingResponseFrom"]) ?? undefined,
   };
 }
 

@@ -29,6 +29,11 @@ import {
 import { setActiveBuildingId } from "../data/supabase/buildingContext";
 import { removeBuildingQueries } from "../shared/queryInvalidation";
 import { useNavigateWithBusy } from "../shared/useNavigateWithBusy";
+import { DesktopPreferredBanner } from "../shared/DesktopPreferredBanner";
+import {
+  companyDesktopPreferredPageKey,
+  isCompanyDesktopPreferred,
+} from "../shared/desktopPreferredPages";
 
 type CompanyPortalProps = {
   onOpenResidentPortal?: () => void;
@@ -201,6 +206,12 @@ export function CompanyPortal({
         />
       ) : (
         <>
+          {isCompanyDesktopPreferred(route) && (
+            <DesktopPreferredBanner
+              portal="company"
+              pageKey={companyDesktopPreferredPageKey(route)}
+            />
+          )}
           {route.page === "buildings" && (
             <BuildingsPage
               onOpenBuilding={(building) => void handleOpenBuilding(building)}

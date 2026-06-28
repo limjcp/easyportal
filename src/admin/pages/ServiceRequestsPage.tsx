@@ -16,12 +16,14 @@ import { queryKeys } from "../../shared/queryKeys";
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { useTenantContext } from "../../shared/queries/useTenantContext";
 import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
+import { useSyncFromRefreshKey } from "../../shared/useSyncFromRefreshKey";
 import {
   ActionRequiredBadge,
   SeverityBadge,
   StatusBadge,
 } from "../components/AdminBadges";
 import { AdminPanelTable, AdminTabs } from "../components/AdminPanelTable";
+import { AdminMobileCard } from "../components/AdminMobileCard";
 import { adminRepository } from "../data/adminRepository";
 import { AdminServiceRequestModal } from "../modals/AdminServiceRequestModal";
 import { ServiceRequestDetailModal } from "../modals/ServiceRequestDetailModal";
@@ -93,9 +95,7 @@ export function ServiceRequestsPage({
     if (route.tab === "terms") setTerms(loadedTerms);
   }, [loadedTerms, route.tab]);
 
-  const syncFromRefreshKey = useCallback(() => {
-    void refreshList();
-  }, [refreshList]);
+  useSyncFromRefreshKey(refreshKey, () => void refreshList());
 
   const handleRefresh = useCallback(async () => {
     await refreshList();
@@ -108,11 +108,6 @@ export function ServiceRequestsPage({
     },
     [refreshList]
   );
-
-  useEffect(() => {
-    if (refreshKey === 0) return;
-    syncFromRefreshKey();
-  }, [refreshKey, syncFromRefreshKey]);
 
   const { run: updateCategoryRun, error: categoryError } = useAsyncAction(
     useCallback(async () => {
@@ -347,6 +342,40 @@ export function ServiceRequestsPage({
                 ),
               },
             ]}
+            mobileCard={(row) => (
+              <AdminMobileCard
+                title={`Request #${row.id}`}
+                subtitle={row.createdAt}
+                badges={
+                  <>
+                    <SeverityBadge severity={row.adminSeverity} />
+                    <StatusBadge status={row.status} />
+                  </>
+                }
+                fields={[
+                  { label: "User", value: row.resident },
+                  { label: "Unit", value: row.unit },
+                  { label: "Type", value: row.adminCategory },
+                  ...(showColumns && row.assignedTo
+                    ? [{ label: "Assigned", value: row.assignedTo }]
+                    : []),
+                  {
+                    label: "Action",
+                    value: <ActionRequiredBadge required={row.actionRequired} />,
+                  },
+                ]}
+                actions={
+                  <button
+                    type="button"
+                    onClick={() => setDetailId(row.id)}
+                    className="w-full rounded bg-[#3476ef] px-3 py-2 text-sm font-medium text-white hover:bg-[#2d68cf]"
+                  >
+                    View request
+                  </button>
+                }
+                highlight={row.actionRequired}
+              />
+            )}
           />
         </>
       )}

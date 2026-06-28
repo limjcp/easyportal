@@ -26,14 +26,18 @@ type VendorsPageProps = {
   onNavigate: (route: CompanyRoute) => void;
 };
 
+const EMPTY_VENDORS: Vendor[] = [];
+const EMPTY_BUILDINGS: CompanyBuilding[] = [];
+const EMPTY_PO_COUNTS: Record<string, number> = {};
+
 export function VendorsPage({ onNavigate }: VendorsPageProps) {
   const { invalidateCompany } = useInvalidatePortalQueries();
   const vendorsQuery = useCompanyVendors();
-  const { data: vendors = [], refetch: refetchVendors } = vendorsQuery;
+  const { data: vendors = EMPTY_VENDORS, refetch: refetchVendors } = vendorsQuery;
   const buildingsQuery = useCompanyBuildings();
-  const { data: buildings = [] } = buildingsQuery;
+  const { data: buildings = EMPTY_BUILDINGS } = buildingsQuery;
   const poCountsQuery = useCompanyActivePoCountsByVendor();
-  const { data: activePoCounts = {}, refetch: refetchPoCounts } = poCountsQuery;
+  const { data: activePoCounts = EMPTY_PO_COUNTS, refetch: refetchPoCounts } = poCountsQuery;
   const pageLoading =
     isQueryInitiallyLoading(vendorsQuery) ||
     isQueryInitiallyLoading(buildingsQuery) ||
@@ -54,6 +58,17 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
   >({});
   const pendingVendorRef = useRef<{ id: string; email: string } | null>(null);
   const pendingDeactivateIdRef = useRef<string | null>(null);
+  const vendorsRef = useRef(vendors);
+  vendorsRef.current = vendors;
+
+  const vendorComplianceKey = useMemo(
+    () =>
+      vendors
+        .map((vendor) => `${vendor.id}:${vendor.wsibRequired ?? true}`)
+        .sort()
+        .join("|"),
+    [vendors]
+  );
 
   const load = useCallback(() => {
     invalidateCompany();
@@ -62,16 +77,17 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
   }, [invalidateCompany, refetchVendors, refetchPoCounts]);
 
   useEffect(() => {
-    if (vendors.length === 0) {
-      setComplianceByVendor({});
+    if (vendorComplianceKey === "") {
+      setComplianceByVendor((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       return;
     }
+    const currentVendors = vendorsRef.current;
     const wsibRequiredByVendor = Object.fromEntries(
-      vendors.map((vendor) => [vendor.id, vendor.wsibRequired ?? true])
+      currentVendors.map((vendor) => [vendor.id, vendor.wsibRequired ?? true])
     );
     void vendorComplianceRepository
       .getComplianceSummariesForVendors(
-        vendors.map((vendor) => vendor.id),
+        currentVendors.map((vendor) => vendor.id),
         wsibRequiredByVendor
       )
       .then((summaries) => {
@@ -87,7 +103,7 @@ export function VendorsPage({ onNavigate }: VendorsPageProps) {
         }
         setComplianceByVendor(next);
       });
-  }, [vendors]);
+  }, [vendorComplianceKey]);
 
   const { run: inviteVendor, loading: inviting, error: inviteError } = useAsyncAction(
     useCallback(async () => {

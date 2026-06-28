@@ -1,11 +1,7 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FaCommentDots, FaTimes } from "react-icons/fa";
 import { residentRepo } from "../resident/data/mockRepository";
 import type { ResidentProfileDetails } from "../resident/data/types";
-
-type MvpCondosChatbotProps = {
-  open: boolean;
-  onClose: () => void;
-};
 
 type ChatMessage = {
   id: number;
@@ -32,19 +28,55 @@ type FlowState =
     }
   | null;
 
+type Point = { x: number; y: number };
+
+const LAUNCHER_SIZE = 48;
+const PANEL_WIDTH = 384;
+const PANEL_HEIGHT = 520;
+const VIEWPORT_MARGIN = 16;
+const DRAG_THRESHOLD = 4;
+
 const starterPrompts = [
   "Register my vehicle",
   "Update my birthday",
   "Complete my profile",
 ];
 
-const initialMessages: ChatMessage[] = [
-  {
-    id: 1,
-    role: "bot",
-    text: "Hi, I am your MVPCondos personal assistant. I can answer questions and complete tasks like vehicle registration and profile updates for you.",
-  },
-];
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function defaultLauncherPosition(): Point {
+  if (typeof window === "undefined") return { x: 0, y: 0 };
+  return {
+    x: window.innerWidth - LAUNCHER_SIZE - VIEWPORT_MARGIN,
+    y: window.innerHeight - LAUNCHER_SIZE - VIEWPORT_MARGIN,
+  };
+}
+
+function clampLauncherPosition(position: Point): Point {
+  if (typeof window === "undefined") return position;
+  return {
+    x: clamp(position.x, VIEWPORT_MARGIN, window.innerWidth - LAUNCHER_SIZE - VIEWPORT_MARGIN),
+    y: clamp(position.y, VIEWPORT_MARGIN, window.innerHeight - LAUNCHER_SIZE - VIEWPORT_MARGIN),
+  };
+}
+
+function panelPosition(launcher: Point): Point {
+  if (typeof window === "undefined") return launcher;
+  const width = Math.min(PANEL_WIDTH, window.innerWidth - VIEWPORT_MARGIN * 2);
+  const left = clamp(
+    launcher.x + LAUNCHER_SIZE - width,
+    VIEWPORT_MARGIN,
+    window.innerWidth - width - VIEWPORT_MARGIN
+  );
+  const top = clamp(
+    launcher.y - PANEL_HEIGHT - 12,
+    VIEWPORT_MARGIN,
+    window.innerHeight - PANEL_HEIGHT - VIEWPORT_MARGIN
+  );
+  return { x: left, y: top };
+}
 
 function buildBotReply(input: string) {
   const normalized = input.toLowerCase();
@@ -103,15 +135,28 @@ function buildBotReply(input: string) {
   return "I can help with app navigation, vehicle registration, birthday updates, and profile completion. Try: 'register my vehicle' or 'complete my profile'.";
 }
 
-export function MvpCondosChatbot({ open, onClose }: MvpCondosChatbotProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+export function MvpCondosChatbot() {
+  const [open, setOpen] = useState(false);
+  const [launcherPosition, setLauncherPosition] = useState<Point>(defaultLauncherPosition);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [flow, setFlow] = useState<FlowState>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const launcherRef = useRef<HTMLButtonElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const nextIdRef = useRef(2);
+  const nextIdRef = useRef(1);
   const timeoutIdsRef = useRef<number[]>([]);
+  const dragStateRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    origin: Point;
+    moved: boolean;
+  } | null>(null);
+
+  const panelPos = panelPosition(launcherPosition);
+  const panelWidth = Math.min(PANEL_WIDTH, window.innerWidth - VIEWPORT_MARGIN * 2);
 
   useEffect(() => {
     return () => {
@@ -120,18 +165,25 @@ export function MvpCondosChatbot({ open, onClose }: MvpCondosChatbotProps) {
   }, []);
 
   useEffect(() => {
+    const onResize = () => {
+      setLauncherPosition((current) => clampLauncherPosition(current));
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
     if (!open) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") setOpen(false);
     };
 
     const onMouseDown = (event: MouseEvent) => {
       const target = event.target as Node;
-      const launcher = document.getElementById("mvpcondos-chatbot-launcher");
       if (panelRef.current?.contains(target)) return;
-      if (launcher?.contains(target)) return;
-      onClose();
+      if (launcherRef.current?.contains(target)) return;
+      setOpen(false);
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -140,36 +192,73 @@ export function MvpCondosChatbot({ open, onClose }: MvpCondosChatbotProps) {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("mousedown", onMouseDown);
     };
-  }, [open, onClose]);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping, open]);
 
-  useEffect(() => {
-    if (!open) return;
-    let active = true;
-    const run = async () => {
-      const [user, details] = await Promise.all([residentRepo.getUser(), residentRepo.getResidentDetails()]);
-      if (!active) return;
-      const today = new Date();
-      if (user.birthMonth === today.getMonth() + 1 && user.birthDay === today.getDate()) {
-        pushBotMessage(`Happy Birthday, ${user.name}! Wishing you a wonderful day from MVPCondos.`);
-      }
-      const missing: string[] = [];
-      if (!user.phone?.trim()) missing.push("phone number");
-      if (!user.birthMonth || !user.birthDay) missing.push("birthday (month/day)");
-      if (!details.vehicles.length) missing.push("vehicle details");
-      if (missing.length > 0) {
-        pushBotMessage(`I can help complete your profile. Missing: ${missing.join(", ")}. Say "complete my profile".`);
-      }
+  const finishDrag = useCallback((event: React.PointerEvent) => {
+    const dragState = dragStateRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    dragStateRef.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  }, []);
+
+  const startDrag = useCallback((event: React.PointerEvent, origin: Point) => {
+    if (event.button !== 0) return;
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      origin,
+      moved: false,
     };
-    run();
-    return () => {
-      active = false;
-    };
-  }, [open]);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }, []);
+
+  const moveDrag = useCallback((event: React.PointerEvent) => {
+    const dragState = dragStateRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+    const dx = event.clientX - dragState.startX;
+    const dy = event.clientY - dragState.startY;
+    if (!dragState.moved && Math.hypot(dx, dy) >= DRAG_THRESHOLD) {
+      dragState.moved = true;
+    }
+    if (!dragState.moved) return;
+
+    event.preventDefault();
+    setLauncherPosition(
+      clampLauncherPosition({
+        x: dragState.origin.x + dx,
+        y: dragState.origin.y + dy,
+      })
+    );
+  }, []);
+
+  const handleLauncherPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    startDrag(event, launcherPosition);
+  };
+
+  const handleLauncherPointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const dragState = dragStateRef.current;
+    const wasClick = dragState && !dragState.moved;
+    finishDrag(event);
+    if (wasClick) {
+      setOpen((isOpen) => !isOpen);
+    }
+  };
+
+  const handleHeaderPointerDown = (event: React.PointerEvent<HTMLElement>) => {
+    if ((event.target as HTMLElement).closest("button")) return;
+    startDrag(event, launcherPosition);
+  };
+
+  const handleHeaderPointerUp = (event: React.PointerEvent<HTMLElement>) => {
+    finishDrag(event);
+  };
 
   const pushBotMessage = (text: string) => {
     const botMessage: ChatMessage = {
@@ -333,83 +422,109 @@ export function MvpCondosChatbot({ open, onClose }: MvpCondosChatbotProps) {
     sendMessage(draft);
   };
 
-  if (!open) return null;
-
   return (
-    <section
-      id="mvpcondos-chatbot-panel"
-      aria-label="MVPCondos chatbot panel"
-      ref={panelRef}
-      className="fixed bottom-24 right-5 z-[60] w-[min(24rem,calc(100vw-2.5rem))] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl"
-    >
-      <header className="flex items-center justify-between bg-[#7d5aae] px-4 py-3 text-white">
-        <div>
-          <p className="text-sm font-semibold">MVPCondos Chatbot</p>
-          <p className="text-xs text-white/80">Personal assistant</p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded px-2 py-1 text-sm text-white/90 transition hover:bg-white/15 hover:text-white"
+    <>
+      <button
+        id="mvpcondos-chatbot-launcher"
+        ref={launcherRef}
+        type="button"
+        onPointerDown={handleLauncherPointerDown}
+        onPointerMove={moveDrag}
+        onPointerUp={handleLauncherPointerUp}
+        onPointerCancel={handleLauncherPointerUp}
+        aria-label={open ? "Close MVPCondos chatbot" : "Open MVPCondos chatbot"}
+        aria-expanded={open}
+        aria-controls="mvpcondos-chatbot-panel"
+        style={{ left: launcherPosition.x, top: launcherPosition.y, width: LAUNCHER_SIZE, height: LAUNCHER_SIZE }}
+        className="fixed z-[70] inline-flex touch-none select-none items-center justify-center rounded-full bg-[#7d5aae] text-white shadow-lg shadow-[#7d5aae]/30 transition hover:bg-[#6f4fa0] active:cursor-grabbing"
+      >
+        {open ? <FaTimes className="h-5 w-5" /> : <FaCommentDots className="h-5 w-5" />}
+      </button>
+
+      {open ? (
+        <section
+          id="mvpcondos-chatbot-panel"
+          aria-label="MVPCondos chatbot panel"
+          ref={panelRef}
+          style={{ left: panelPos.x, top: panelPos.y, width: panelWidth }}
+          className="fixed z-[60] touch-none select-none overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl"
         >
-          Close
-        </button>
-      </header>
-
-      <div className="h-80 space-y-3 overflow-y-auto bg-slate-50 px-3 py-3">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
-              message.role === "user"
-                ? "ml-auto bg-[#3476ef] text-white"
-                : "mr-auto border border-slate-200 bg-white text-slate-700"
-            }`}
+          <header
+            onPointerDown={handleHeaderPointerDown}
+            onPointerMove={moveDrag}
+            onPointerUp={handleHeaderPointerUp}
+            onPointerCancel={handleHeaderPointerUp}
+            className="flex cursor-grab items-center justify-between bg-[#7d5aae] px-4 py-3 text-white active:cursor-grabbing"
           >
-            {message.text}
-          </div>
-        ))}
-        {isTyping && (
-          <div className="mr-auto max-w-[85%] rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500">
-            Typing...
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
-
-      <div className="border-t border-slate-200 bg-white px-3 py-3">
-        <div className="mb-2 flex flex-wrap gap-2">
-          {starterPrompts.map((prompt) => (
+            <div>
+              <p className="text-sm font-semibold">MVPCondos Chatbot</p>
+              <p className="text-xs text-white/80">Drag to move</p>
+            </div>
             <button
-              key={prompt}
               type="button"
-              onClick={() => sendMessage(prompt)}
-              className="rounded-full border border-slate-300 px-2.5 py-1 text-xs text-slate-700 transition hover:border-[#7d5aae] hover:text-[#7d5aae]"
+              onClick={() => setOpen(false)}
+              className="rounded px-2 py-1 text-sm text-white/90 transition hover:bg-white/15 hover:text-white"
             >
-              {prompt}
+              Close
             </button>
-          ))}
-        </div>
+          </header>
 
-        <form onSubmit={handleSubmit} className="flex items-center gap-2">
-          <input
-            type="text"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="Ask how the app works..."
-            className="h-10 flex-1 rounded border border-slate-300 px-3 text-sm outline-none focus:border-[#7d5aae]"
-          />
-          <button
-            type="submit"
-            className="h-10 rounded bg-[#7d5aae] px-4 text-sm font-semibold text-white transition hover:bg-[#6f4fa0]"
-          >
-            Send
-          </button>
-        </form>
-        <p className="mt-2 text-[11px] text-slate-500">
-          MVPCondos assistant can guide forms and save your details.
-        </p>
-      </div>
-    </section>
+          <div className="h-80 space-y-3 overflow-y-auto bg-slate-50 px-3 py-3">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
+                  message.role === "user"
+                    ? "ml-auto bg-[#3476ef] text-white"
+                    : "mr-auto border border-slate-200 bg-white text-slate-700"
+                }`}
+              >
+                {message.text}
+              </div>
+            ))}
+            {isTyping && (
+              <div className="mr-auto max-w-[85%] rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500">
+                Typing...
+              </div>
+            )}
+            <div ref={bottomRef} />
+          </div>
+
+          <div className="border-t border-slate-200 bg-white px-3 py-3">
+            <div className="mb-2 flex flex-wrap gap-2">
+              {starterPrompts.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => sendMessage(prompt)}
+                  className="rounded-full border border-slate-300 px-2.5 py-1 text-xs text-slate-700 transition hover:border-[#7d5aae] hover:text-[#7d5aae]"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+
+            <form onSubmit={handleSubmit} className="flex items-center gap-2">
+              <input
+                type="text"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder="Ask how the app works..."
+                className="h-10 flex-1 rounded border border-slate-300 px-3 text-sm outline-none focus:border-[#7d5aae]"
+              />
+              <button
+                type="submit"
+                className="h-10 rounded bg-[#7d5aae] px-4 text-sm font-semibold text-white transition hover:bg-[#6f4fa0]"
+              >
+                Send
+              </button>
+            </form>
+            <p className="mt-2 text-[11px] text-slate-500">
+              MVPCondos assistant can guide forms and save your details.
+            </p>
+          </div>
+        </section>
+      ) : null}
+    </>
   );
 }

@@ -4,15 +4,14 @@ import { FaDownload, FaSearch } from "react-icons/fa";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { useResidentDocumentFolders, useResidentDocuments } from "../../shared/queries/residentListQueries";
-import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
+import { useSyncFromRefreshKey } from "../../shared/useSyncFromRefreshKey";
 import { DataTable } from "../../shared/DataTable";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { residentRepo } from "../data/mockRepository";
 import type { DocumentFile } from "../data/types";
 
 export function DocumentsPage({ refreshKey = 0 }: { refreshKey?: number }) {
-  const { invalidateBuilding } = useInvalidatePortalQueries();
   const foldersQuery = useResidentDocumentFolders();
   const { data: folders = [], refetch: refetchFolders } = foldersQuery;
   const [folderId, setFolderId] = useState("");
@@ -44,12 +43,10 @@ export function DocumentsPage({ refreshKey = 0 }: { refreshKey?: number }) {
     void downloadDocument();
   };
 
-  useEffect(() => {
-    if (refreshKey === 0) return;
-    invalidateBuilding();
+  useSyncFromRefreshKey(refreshKey, () => {
     void refetchFolders();
-    void refetchDocuments();
-  }, [refreshKey, invalidateBuilding, refetchFolders, refetchDocuments]);
+    if (folderId) void refetchDocuments();
+  });
 
   useEffect(() => {
     if (folders.length > 0) {

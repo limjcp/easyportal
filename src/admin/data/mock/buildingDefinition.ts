@@ -14,6 +14,7 @@ export const seedBuildingDefinition: BuildingDefinition = {
   propertyEmail: "parking@mvpcondos.com",
   accountingEmail: "",
   billingEmail: "",
+  sparcEmail: "",
   visitorParkingOvernightEmail: "overnightparking@mvpcondos.com",
   buildingTypes: ["Low Rise", "Town Houses"],
   buildingFeatures: ["Pets Allowed", "Phone Entry System"],

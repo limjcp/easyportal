@@ -49,16 +49,17 @@ export function ResidentNav({ route, onNavigate, rightAction }: ResidentNavProps
 
   return (
     <div className="bg-[#1b1d20]/95">
-      <div className="mx-auto flex max-w-[1500px] items-center justify-between px-4 py-2.5 sm:px-6">
-        <nav className="flex flex-wrap items-center gap-2 text-sm text-white/90">
+      <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-2 px-4 py-2.5 sm:gap-4 sm:px-6">
+        <nav className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto text-sm text-white/90">
           <button
             type="button"
             onClick={() => onNavigate({ page: "home" })}
-            className="inline-flex items-center gap-1.5 transition hover:text-white"
+            className="inline-flex shrink-0 items-center gap-1.5 transition hover:text-white"
           >
             <FaHome className="text-xs" />
-            Home
+            <span className="hidden sm:inline">Home</span>
           </button>
+          <div className="hidden min-w-0 flex-wrap items-center gap-2 sm:flex">
           {crumbs.map((crumb, i) => {
             const pageKey = crumb.route?.page ?? "home";
             const Icon = iconMap[pageKey] ?? FaChevronRight;
@@ -83,8 +84,14 @@ export function ResidentNav({ route, onNavigate, rightAction }: ResidentNavProps
               </span>
             );
           })}
+          </div>
+          {crumbs.length > 0 && (
+            <span className="truncate text-white sm:hidden">
+              {crumbs[crumbs.length - 1]?.label}
+            </span>
+          )}
         </nav>
-        {rightAction}
+        {rightAction ? <div className="shrink-0">{rightAction}</div> : null}
       </div>
     </div>
   );

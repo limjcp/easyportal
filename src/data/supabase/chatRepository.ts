@@ -1,46 +1,50 @@
 import type { ChatActor, ChatContact, ChatConversation, ChatMessage } from "../../resident/data/types";
 import { canMessageContact } from "../../chat/utils/access";
 import { conversationsMatchParticipants } from "../../chat/utils/conversationMatch";
+import { CHAT_MESSAGE_COLUMNS } from "./queryColumns";
 import { mapDbError, sb } from "./base";
 
-async function resolvePrimaryBuildingForProfile(profileId: string): Promise<string | null> {
-  const { data: membership } = await sb()
-    .from("building_memberships")
-    .select("building_id")
-    .eq("profile_id", profileId)
-    .limit(1)
-    .maybeSingle();
-  if (membership?.building_id) return membership.building_id as string;
+type ChatDirectoryRow = {
+  profile_id: string;
+  display_name: string;
+  role_label: string;
+  contact_kind: string;
+  email: string;
+  building_id: string;
+};
 
-  const { data: occupancy } = await sb()
-    .from("unit_occupancies")
-    .select("building_id")
-    .eq("profile_id", profileId)
-    .is("archived_at", null)
-    .limit(1)
-    .maybeSingle();
-  return (occupancy?.building_id as string) ?? null;
+async function resolvePrimaryBuildingForProfile(profileId: string): Promise<string | null> {
+  const { data, error } = await sb().rpc("get_profile_primary_building", {
+    p_profile_id: profileId,
+  });
+  mapDbError(error);
+  return (data as string | null) ?? null;
 }
 
 export const supabaseChatRepository = {
   getContacts: async (actor: ChatActor): Promise<ChatContact[]> => {
-    const { data: profiles, error } = await sb().from("profiles").select("id, display_name, email");
+    const { data, error } = await sb().rpc("get_building_chat_contacts", {
+      p_building_id: actor.canMessageAnyBuilding ? null : actor.buildingId,
+    });
     mapDbError(error);
-    const { data: memberships } = await sb().from("building_memberships").select("profile_id, building_id, role_label");
-    return (profiles ?? [])
-      .filter((p) => p.id !== actor.contactId)
-      .map((p) => {
-        const membership = memberships?.find((m) => m.profile_id === p.id);
-        const buildingId = membership?.building_id ?? actor.buildingId;
-        if (!canMessageContact(actor.buildingId, buildingId, actor.canMessageAnyBuilding)) return null;
+
+    return ((data as ChatDirectoryRow[] | null) ?? [])
+      .map((row) => {
+        const buildingId = row.building_id;
+        if (!canMessageContact(actor.buildingId, buildingId, actor.canMessageAnyBuilding)) {
+          return null;
+        }
         return {
-          id: p.id as string,
-          name: p.display_name as string,
-          email: p.email as string,
-          role: membership?.role_label ?? "Resident",
+          id: row.profile_id,
+          name: row.display_name,
+          email: row.email ?? "",
+          role: row.role_label || "Resident",
           buildingId,
           buildingLabel: buildingId,
-          kind: membership ? ("building_admin" as const) : ("resident" as const),
+          kind:
+            row.contact_kind === "building_admin"
+              ? ("building_admin" as const)
+              : ("resident" as const),
         };
       })
       .filter(Boolean) as ChatContact[];
@@ -78,7 +82,9 @@ export const supabaseChatRepository = {
         profile_id: string;
         last_read_at: string;
       }>;
-      const participantIds = nestedParticipants.map((p) => p.profile_id);
+      const participantIds = [
+        ...new Set(nestedParticipants.map((p) => p.profile_id).filter(Boolean)),
+      ];
       const lastReadAtByContact = Object.fromEntries(
         nestedParticipants.map((p) => [p.profile_id, String(p.last_read_at)])
       );
@@ -103,7 +109,7 @@ export const supabaseChatRepository = {
     if (!participant) return [];
     const { data, error } = await sb()
       .from("chat_messages")
-      .select("*")
+      .select(CHAT_MESSAGE_COLUMNS)
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true });
     mapDbError(error);
@@ -220,23 +226,45 @@ export const supabaseChatRepository = {
   },
 
   getContactById: async (id: string): Promise<ChatContact | undefined> => {
-    const { data, error } = await sb().from("profiles").select("*").eq("id", id).maybeSingle();
+    const { data, error } = await sb().rpc("get_building_chat_contacts", {
+      p_building_id: null,
+    });
     mapDbError(error);
-    if (!data) return undefined;
+    const row = ((data as ChatDirectoryRow[] | null) ?? []).find((entry) => entry.profile_id === id);
+    if (!row) return undefined;
     return {
-      id: data.id as string,
-      name: data.display_name as string,
-      email: data.email as string,
-      role: "Resident",
-      buildingId: "",
-      buildingLabel: "",
-      kind: "resident",
+      id: row.profile_id,
+      name: row.display_name,
+      email: row.email ?? "",
+      role: row.role_label || "Resident",
+      buildingId: row.building_id,
+      buildingLabel: row.building_id,
+      kind: row.contact_kind === "building_admin" ? "building_admin" : "resident",
     };
   },
 
   getContactsByIds: async (ids: string[]): Promise<ChatContact[]> => {
-    const contacts = await Promise.all(ids.map((id) => supabaseChatRepository.getContactById(id)));
-    return contacts.filter(Boolean) as ChatContact[];
+    const uniqueIds = [...new Set(ids.filter(Boolean))];
+    if (uniqueIds.length === 0) return [];
+    const { data, error } = await sb().rpc("get_building_chat_contacts", {
+      p_building_id: null,
+    });
+    mapDbError(error);
+    const byId = new Map(
+      ((data as ChatDirectoryRow[] | null) ?? []).map((row) => [row.profile_id, row])
+    );
+    return uniqueIds
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((row) => ({
+        id: row!.profile_id,
+        name: row!.display_name,
+        email: row!.email ?? "",
+        role: row!.role_label || "Resident",
+        buildingId: row!.building_id,
+        buildingLabel: row!.building_id,
+        kind: row!.contact_kind === "building_admin" ? ("building_admin" as const) : ("resident" as const),
+      }));
   },
 
   subscribeToMessages: (

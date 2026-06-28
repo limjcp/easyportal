@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AdminPanelTable } from "../components/AdminPanelTable";
+import { AdminMobileCard } from "../components/AdminMobileCard";
 import { AdminPageActions } from "../components/AdminPageActions";
 import { adminRepository } from "../data/adminRepository";
 import { formatDisplayDate, isFireSafetyDue } from "../../resident/data/fireSafetyUtils";
@@ -105,6 +106,37 @@ export function FireSafetySubmissionsPage({
             ),
           },
         ]}
+        mobileCard={(row) => {
+          const due = isFireSafetyDue(row.uploadedAt);
+          return (
+            <AdminMobileCard
+              title={`Unit ${row.unit}`}
+              subtitle={formatDisplayDate(row.uploadedAt)}
+              badges={
+                <span
+                  className={
+                    due
+                      ? "rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+                      : "rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800"
+                  }
+                >
+                  {due ? "Due for renewal" : "Current"}
+                </span>
+              }
+              fields={[{ label: "Notes", value: row.notes ?? "—" }]}
+              actions={
+                <button
+                  type="button"
+                  onClick={() => setDetailItem(row)}
+                  className="w-full rounded bg-[#3476ef] px-3 py-2 text-sm font-medium text-white hover:bg-[#2d68cf]"
+                >
+                  View photo
+                </button>
+              }
+              highlight={due}
+            />
+          );
+        }}
       />
 
       <FireSafetyDetailModal

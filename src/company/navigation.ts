@@ -83,6 +83,29 @@ export function getMasterReportTitle(reportType: MasterReportType): string {
   return MASTER_REPORT_TILES.find((t) => t.id === reportType)?.label ?? reportType;
 }
 
+export function getCompanyPageTitle(route: CompanyRoute): string {
+  switch (route.page) {
+    case "buildings":
+      return "Buildings";
+    case "master-reports":
+      return "Master Reports";
+    case "master-report-detail":
+      return getMasterReportTitle(route.reportType);
+    case "employees":
+      return "Employees";
+    case "vendors":
+      return "Vendors";
+    case "purchase-orders":
+      return "Purchase Orders";
+    case "chat":
+      return "Chat";
+    case "account":
+      return "Account";
+    default:
+      return "Company Portal";
+  }
+}
+
 export function getCompanyBreadcrumbs(route: CompanyRoute): { label: string; route?: CompanyRoute }[] {
   const home: CompanyRoute = { page: "buildings" };
   switch (route.page) {

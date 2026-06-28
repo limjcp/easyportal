@@ -72,7 +72,7 @@ export function adminRouteToPath(route: AdminRoute): string {
     case "suggestion-detail":
       return `suggestions/${encodeURIComponent(route.id)}`;
     case "units-users":
-      return "units-users";
+      return route.tab ? `units-users/${route.tab}` : "units-users/current";
     case "chat":
       return "chat";
     default:
@@ -212,7 +212,13 @@ export function pathToAdminRoute(subPath: string, search = ""): AdminRoute {
       }
       return { page: "suggestions" };
     case "units-users":
-      return { page: "units-users" };
+      return {
+        page: "units-users",
+        tab:
+          second === "pending" || second === "unoccupied" || second === "archived"
+            ? second
+            : "current",
+      };
     case "chat":
       return { page: "chat" };
     default:
