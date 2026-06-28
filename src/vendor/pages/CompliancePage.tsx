@@ -41,10 +41,20 @@ export function CompliancePage({ onRefresh }: CompliancePageProps) {
     return <p className="text-sm text-red-600">{loadError}</p>;
   }
 
-  const wsibRequired = vendor?.wsibRequired ?? true;
+  if (loading || !vendor || !summary) {
+    return (
+      <CrudPanel loading>
+        <div className="mb-4 rounded bg-[#0d9488] px-4 py-2 text-sm font-semibold text-white">
+          Insurance &amp; WSIB Compliance
+        </div>
+      </CrudPanel>
+    );
+  }
+
+  const wsibRequired = vendor.wsibRequired ?? true;
 
   return (
-    <CrudPanel loading={loading}>
+    <CrudPanel>
     <div>
       <div className="mb-4 rounded bg-[#0d9488] px-4 py-2 text-sm font-semibold text-white">
         Insurance &amp; WSIB Compliance
@@ -58,9 +68,9 @@ export function CompliancePage({ onRefresh }: CompliancePageProps) {
         <VendorComplianceUploadCard
           title="Insurance certificate"
           documentType="insurance"
-          vendorId={vendor!.id}
-          status={summary!.insuranceStatus}
-          currentDocument={summary!.insuranceDocument}
+          vendorId={vendor.id}
+          status={summary.insuranceStatus}
+          currentDocument={summary.insuranceDocument}
           showInsuranceFields
           onUpload={(type, file, input) => vendorRepository.uploadComplianceDocument(type, file, input)}
           onDownload={(id) => vendorRepository.getComplianceDocumentUrl(id)}
@@ -71,9 +81,9 @@ export function CompliancePage({ onRefresh }: CompliancePageProps) {
           <VendorComplianceUploadCard
             title="WSIB clearance"
             documentType="wsib"
-            vendorId={vendor!.id}
-            status={summary!.wsibStatus}
-            currentDocument={summary!.wsibDocument}
+            vendorId={vendor.id}
+            status={summary.wsibStatus}
+            currentDocument={summary.wsibDocument}
             onUpload={(type, file, input) =>
               vendorRepository.uploadComplianceDocument(type, file, input)
             }
