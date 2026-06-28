@@ -3,7 +3,7 @@ import {
   ensureActiveBuildingForUser,
   setActiveBuildingId,
 } from "../data/supabase/buildingContext";
-import { verifyRecaptchaOnServer } from "../shared/recaptcha";
+import { preloadRecaptcha, verifyRecaptchaOnServer } from "../shared/recaptcha";
 import {
   clearSupabaseAuthStorage,
   fetchProfile,
@@ -69,6 +69,10 @@ export function LoginPage({
   useEffect(() => {
     setMode(initialMode);
   }, [initialMode]);
+
+  useEffect(() => {
+    preloadRecaptcha();
+  }, []);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
