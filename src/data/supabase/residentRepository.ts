@@ -327,7 +327,7 @@ export const supabaseResidentRepository: ResidentRepository = {
       .is("archived_at", null)
       .maybeSingle();
     const unit = occupancy?.units as { label: string } | undefined;
-    const building = occupancy?.buildings as {
+    let building = occupancy?.buildings as {
       id: string;
       condo_name: string;
       address: string;
@@ -335,6 +335,15 @@ export const supabaseResidentRepository: ResidentRepository = {
       province: string;
       postal_zip: string;
     } | null;
+    if (!building) {
+      const { data: buildingRow, error: buildingError } = await sb()
+        .from("buildings")
+        .select("id, condo_name, address, city, province, postal_zip")
+        .eq("id", buildingId)
+        .maybeSingle();
+      mapDbError(buildingError);
+      building = buildingRow as typeof building;
+    }
     const buildingAddress = building
       ? [building.address, building.city, building.province, building.postal_zip].filter(Boolean).join(" ")
       : undefined;

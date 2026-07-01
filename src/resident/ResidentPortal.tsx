@@ -80,7 +80,7 @@ export function ResidentPortal({ onSwitchToAdmin, onLogout, onGoToWebsite }: Res
     return () => {
       cancelled = true;
     };
-  }, [auth.session?.user?.id]);
+  }, [auth.session?.user?.id, auth.portalAccess?.buildingIds]);
 
   if (buildingError) {
     return (

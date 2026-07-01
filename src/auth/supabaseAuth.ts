@@ -184,6 +184,16 @@ export async function resolvePortalAccess(
     if (companyBuildingIds.size > 0) {
       portals.add("building");
       companyBuildingIds.forEach((id) => buildingIds.add(id));
+    } else if (companyRole === "Company Owner" || companyRole === "Company Administrator") {
+      const { data: allBuildings } = await client
+        .from("buildings")
+        .select("id")
+        .eq("company_id", companyId as string)
+        .eq("status", "active");
+      allBuildings?.forEach((row) => buildingIds.add(row.id as string));
+      if (allBuildings?.length) {
+        portals.add("building");
+      }
     }
   }
 

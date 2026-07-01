@@ -168,7 +168,6 @@ async function ensureCompanyId(): Promise<string> {
   throw new Error("No active company context. Sign in as a company user first.");
 }
 
-/** Building IDs the signed-in user may open in building admin (portal access). Null = super admin (all). */
 async function loadAccessibleBuildingIds(): Promise<Set<string> | null> {
   const {
     data: { user },
