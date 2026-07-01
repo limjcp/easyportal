@@ -19,7 +19,6 @@ export function getVendorPaymentMethodLabel(method: VendorPreferredPaymentMethod
 export function validateVendorPaymentSettings(
   settings: Pick<
     VendorPaymentSettings,
-    | "hstNumber"
     | "preferredPaymentMethod"
     | "bankName"
     | "bankAccountName"
@@ -28,10 +27,6 @@ export function validateVendorPaymentSettings(
     | "interacEmail"
   >
 ): string | null {
-  if (!settings.hstNumber.trim()) {
-    return "HST number is required.";
-  }
-
   if (settings.preferredPaymentMethod === "bank_transfer") {
     if (!settings.bankName.trim()) return "Bank name is required.";
     if (!settings.bankAccountName.trim()) return "Account name is required.";

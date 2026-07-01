@@ -117,9 +117,11 @@ export function VendorInvoicePanel({
             {billingLines.map((line) => (
               <p key={line}>{line}</p>
             ))}
-            <p className="mt-2">
-              <strong>HST #:</strong> {invoice.hstNumber}
-            </p>
+            {invoice.hstNumber ? (
+              <p className="mt-2">
+                <strong>HST #:</strong> {invoice.hstNumber}
+              </p>
+            ) : null}
           </div>
           <div className="text-right">
             <p className="font-semibold text-slate-900">Bill to</p>

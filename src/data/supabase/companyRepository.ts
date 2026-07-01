@@ -168,7 +168,7 @@ async function ensureCompanyId(): Promise<string> {
   throw new Error("No active company context. Sign in as a company user first.");
 }
 
-/** Building IDs the signed-in user may open in building admin (explicit assignments only). Null = super admin (all). */
+/** Building IDs the signed-in user may open in building admin (portal access). Null = super admin (all). */
 async function loadAccessibleBuildingIds(): Promise<Set<string> | null> {
   const {
     data: { user },
@@ -462,8 +462,8 @@ export const supabaseCompanyRepository = {
     mapDbError(error);
     let buildings = (data ?? []).map((row) => mapBuilding(row as Record<string, unknown>));
     if (options?.scope !== "company") {
-      const assignedIds = await loadAssignedCompanyBuildingIds();
-      buildings = filterBuildingsByAccessibleIds(buildings, assignedIds);
+      const accessibleIds = await loadAccessibleBuildingIds();
+      buildings = filterBuildingsByAccessibleIds(buildings, accessibleIds);
     }
     const summaries = await loadBuildingAdminSummaries(buildings.map((b) => b.id));
     return buildings.map((b) => enrichBuilding(b, summaries.get(b.id)));

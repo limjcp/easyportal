@@ -373,6 +373,35 @@ export async function getEffectiveBuildingAdminModuleAccessForUser(
   mapDbError(profileError);
   if (profile?.is_super_admin) return null;
 
+  const { data: occupancy, error: occupancyError } = await sb()
+    .from("unit_occupancies")
+    .select("id, building_admin_role_label, can_access_building_admin")
+    .eq("profile_id", userId)
+    .eq("building_id", buildingId)
+    .is("archived_at", null)
+    .maybeSingle();
+  mapDbError(occupancyError);
+
+  if (occupancy?.can_access_building_admin === true) {
+    const roleLabel = (occupancy.building_admin_role_label as string) || "Resident (Admin)";
+    await ensureOccupancyBuildingAdminModuleDefaults(occupancy.id as string, buildingId, roleLabel);
+    const roleDefaults = await loadBuildingRolePermissionDefaultsForBuilding(buildingId, roleLabel);
+    const { data: occRows, error: occError } = await sb()
+      .from("occupancy_building_admin_modules")
+      .select("module_key, enabled")
+      .eq("occupancy_id", occupancy.id as string);
+    mapDbError(occError);
+    const effective = mergeEffectiveBuildingAdminModules(
+      roleDefaults,
+      (occRows ?? []) as Array<{ module_key: string; enabled: boolean }>
+    );
+    const access = new Map<string, boolean>();
+    for (const module of effective) {
+      access.set(module.moduleKey, module.enabled);
+    }
+    return access;
+  }
+
   const { data: building, error: buildingError } = await sb()
     .from("buildings")
     .select("company_id")
@@ -405,47 +434,21 @@ export async function getEffectiveBuildingAdminModuleAccessForUser(
     }
   }
 
-  const { data: occupancy, error: occupancyError } = await sb()
-    .from("unit_occupancies")
-    .select("id, building_admin_role_label, can_access_building_admin")
+  const { data: membership, error: membershipError } = await sb()
+    .from("building_memberships")
+    .select("role_label, status")
     .eq("profile_id", userId)
     .eq("building_id", buildingId)
-    .is("archived_at", null)
+    .eq("status", "active")
     .maybeSingle();
-  mapDbError(occupancyError);
+  mapDbError(membershipError);
+  if (!membership?.role_label) return null;
 
-  let roleLabel: string | null = null;
-  let occupancyId: string | null = null;
-  let occupancyOverrides: Array<{ module_key: string; enabled: boolean }> = [];
-
-  if (occupancy?.can_access_building_admin === true) {
-    roleLabel = (occupancy.building_admin_role_label as string) || "Resident";
-    occupancyId = occupancy.id as string;
-  } else {
-    const { data: membership, error: membershipError } = await sb()
-      .from("building_memberships")
-      .select("role_label, status")
-      .eq("profile_id", userId)
-      .eq("building_id", buildingId)
-      .eq("status", "active")
-      .maybeSingle();
-    mapDbError(membershipError);
-    if (!membership?.role_label) return null;
-    roleLabel = membership.role_label as string;
-  }
-
-  const roleDefaults = await loadBuildingRolePermissionDefaultsForBuilding(buildingId, roleLabel);
-
-  if (occupancyId) {
-    const { data: occRows, error: occError } = await sb()
-      .from("occupancy_building_admin_modules")
-      .select("module_key, enabled")
-      .eq("occupancy_id", occupancyId);
-    mapDbError(occError);
-    occupancyOverrides = (occRows ?? []) as Array<{ module_key: string; enabled: boolean }>;
-  }
-
-  const effective = mergeEffectiveBuildingAdminModules(roleDefaults, occupancyOverrides);
+  const roleDefaults = await loadBuildingRolePermissionDefaultsForBuilding(
+    buildingId,
+    membership.role_label as string
+  );
+  const effective = mergeEffectiveBuildingAdminModules(roleDefaults, []);
   const access = new Map<string, boolean>();
   for (const module of effective) {
     access.set(module.moduleKey, module.enabled);
@@ -469,4 +472,31 @@ async function loadBuildingRolePermissionDefaultsForBuilding(
     );
   }
   return mapCompanyPermissionDbRows(data, BUILDING_SIDEBAR_MODULES);
+}
+
+async function ensureOccupancyBuildingAdminModuleDefaults(
+  occupancyId: string,
+  buildingId: string,
+  roleLabel: string
+): Promise<void> {
+  const { data: existing, error: existingError } = await sb()
+    .from("occupancy_building_admin_modules")
+    .select("module_key")
+    .eq("occupancy_id", occupancyId);
+  mapDbError(existingError);
+  if (existing?.length) return;
+
+  const roleDefaults = await loadBuildingRolePermissionDefaultsForBuilding(buildingId, roleLabel);
+  const toInsert = roleDefaults
+    .filter((row) => row.view)
+    .map((row) => ({
+      occupancy_id: occupancyId,
+      building_id: buildingId,
+      module_key: row.moduleKey,
+      enabled: true,
+    }));
+  if (toInsert.length === 0) return;
+
+  const { error } = await sb().from("occupancy_building_admin_modules").insert(toInsert);
+  mapDbError(error);
 }

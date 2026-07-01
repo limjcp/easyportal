@@ -271,6 +271,33 @@ async function loadResidentTypePortalModules(
   });
 }
 
+async function ensureOccupancyBuildingAdminModules(
+  occupancyId: string,
+  buildingId: string,
+  roleLabel: string
+): Promise<void> {
+  const { data: existing, error: existingError } = await sb()
+    .from("occupancy_building_admin_modules")
+    .select("module_key")
+    .eq("occupancy_id", occupancyId);
+  mapDbError(existingError);
+  if (existing?.length) return;
+
+  const roleDefaults = await loadBuildingRolePermissionDefaults(roleLabel);
+  const toInsert = roleDefaults
+    .filter((row) => row.view && !row.moduleKey.startsWith("company-"))
+    .map((row) => ({
+      occupancy_id: occupancyId,
+      building_id: buildingId,
+      module_key: row.moduleKey,
+      enabled: true,
+    }));
+  if (toInsert.length === 0) return;
+
+  const { error } = await sb().from("occupancy_building_admin_modules").insert(toInsert);
+  mapDbError(error);
+}
+
 export const unitsUsersRepository = {
   async getUnitsUsersCurrent(): Promise<UnitsUsersCurrentRow[]> {
     const buildingId = await bid();
@@ -784,6 +811,13 @@ export const unitsUsersRepository = {
         buildingAdminEnabled,
         buildingAdminRoleLabel
       );
+      if (buildingAdminEnabled) {
+        await ensureOccupancyBuildingAdminModules(
+          occupancyId,
+          buildingId,
+          buildingAdminRoleLabel
+        );
+      }
     }
 
     const sections = updates.changedProfileSections ?? [];

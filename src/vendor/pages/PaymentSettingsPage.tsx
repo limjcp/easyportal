@@ -185,7 +185,7 @@ export function PaymentSettingsPage({ onRefresh }: PaymentSettingsPageProps) {
           <h3 className="text-sm font-semibold text-slate-800">Tax & billing</h3>
 
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">HST registration number *</span>
+            <span className="font-medium text-slate-700">HST registration number (optional)</span>
             <input
               value={hstNumber}
               onChange={(e) => setHstNumber(e.target.value)}

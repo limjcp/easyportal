@@ -4,7 +4,10 @@ import { FileUploadZone } from "../../shared/FileUploadZone";
 import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
 import { toDataUrl, validateBuildingImageFile } from "../../shared/attachmentUtils";
-import { validateVendorPaymentSettings } from "../../shared/vendorPaymentUtils";
+import {
+  isVendorPaymentSettingsConfigured,
+  validateVendorPaymentSettings,
+} from "../../shared/vendorPaymentUtils";
 import {
   VendorPaymentMethodFields,
   type VendorPaymentMethodFormValues,
@@ -143,7 +146,7 @@ export function ConvertToInvoiceModal({
   };
 
   const displayError = localError ?? error;
-  const hasSavedSettings = Boolean(paymentSettings?.hstNumber.trim());
+  const hasSavedSettings = isVendorPaymentSettingsConfigured(paymentSettings);
 
   return (
     <Modal
@@ -204,7 +207,7 @@ export function ConvertToInvoiceModal({
         <section className="space-y-3">
           <h3 className="text-sm font-semibold text-slate-800">Tax & billing</h3>
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">HST number *</span>
+            <span className="font-medium text-slate-700">HST number (optional)</span>
             <input
               type="text"
               value={hstNumber}

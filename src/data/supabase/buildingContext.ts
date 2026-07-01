@@ -33,24 +33,37 @@ export function requireActiveCompanyId(): string {
   return activeCompanyId;
 }
 
-export async function resolvePrimaryBuildingIdForUser(userId: string): Promise<string | null> {
+export async function resolveOccupancyBuildingIdsForUser(userId: string): Promise<string[]> {
   const { data, error } = await requireSupabase()
     .from("unit_occupancies")
     .select("building_id, account_status")
     .eq("profile_id", userId)
     .is("archived_at", null);
   if (error) throw new Error(error.message);
-  if (!data?.length) return null;
+  if (!data?.length) return [];
 
-  const activated = data.find((row) => row.account_status === "Activated");
-  if (activated?.building_id) return activated.building_id as string;
-  return (data[0].building_id as string) ?? null;
+  const activated = data
+    .filter((row) => row.account_status === "Activated" && row.building_id)
+    .map((row) => row.building_id as string);
+  const other = data
+    .filter((row) => row.account_status !== "Activated" && row.building_id)
+    .map((row) => row.building_id as string);
+  return [...new Set([...activated, ...other])];
+}
+
+export async function resolvePrimaryBuildingIdForUser(userId: string): Promise<string | null> {
+  const buildingIds = await resolveOccupancyBuildingIdsForUser(userId);
+  return buildingIds[0] ?? null;
 }
 
 export async function ensureActiveBuildingForUser(userId: string): Promise<string> {
-  if (activeBuildingId) return activeBuildingId;
+  const occupancyBuildingIds = await resolveOccupancyBuildingIdsForUser(userId);
 
-  const buildingId = await resolvePrimaryBuildingIdForUser(userId);
+  if (activeBuildingId && occupancyBuildingIds.includes(activeBuildingId)) {
+    return activeBuildingId;
+  }
+
+  const buildingId = occupancyBuildingIds[0] ?? null;
   if (!buildingId) {
     throw new Error("No building assigned to this account.");
   }

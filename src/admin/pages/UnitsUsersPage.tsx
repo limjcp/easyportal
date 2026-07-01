@@ -394,9 +394,9 @@ export function UnitsUsersPage({ route, onNavigate, refreshKey }: UnitsUsersPage
       if (!assignOccupancyId || !assignUnitId) return;
       await adminRepository.assignUnitToOccupancy(assignOccupancyId, assignUnitId);
       setAssignUnitOpen(false);
-      setActiveTab("current");
+      handleTabChange("current");
       refetchLists();
-    }, [assignOccupancyId, assignUnitId, refetchLists]),
+    }, [assignOccupancyId, assignUnitId, handleTabChange, refetchLists]),
     { successMessage: "Unit assigned successfully.", onError: setActionError, showErrorToast: false }
   );
 
@@ -485,9 +485,9 @@ export function UnitsUsersPage({ route, onNavigate, refreshKey }: UnitsUsersPage
         );
       }
       if (
-        plan.buildingAdminModulesChanged &&
         userDraft.canAccessBuildingAdmin === true &&
-        userDraft.buildingAdminModules?.length
+        userDraft.buildingAdminModules?.length &&
+        (plan.buildingAdminModulesChanged || plan.scalar.canAccessBuildingAdmin === true)
       ) {
         await adminRepository.saveOccupancyBuildingAdminModules(
           userDraft.id,
@@ -533,7 +533,7 @@ export function UnitsUsersPage({ route, onNavigate, refreshKey }: UnitsUsersPage
       setNewResidentLastName("");
       setNewResidentEmail("");
       setAddResidentOpen(false);
-      setActiveTab("current");
+      handleTabChange("current");
       refetchLists();
     }, [
       newResidentFirstName,
@@ -541,6 +541,7 @@ export function UnitsUsersPage({ route, onNavigate, refreshKey }: UnitsUsersPage
       newResidentEmail,
       newResidentType,
       newResidentUnit,
+      handleTabChange,
       refetchLists,
     ]),
     { successMessage: "Resident created. Login details emailed.", onError: setActionError, showErrorToast: false }

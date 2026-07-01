@@ -94,11 +94,10 @@ export function LoginPage({
         setError("Your registration is pending approval. Contact your property manager if you need access.");
         return;
       }
-      if (access.buildingIds[0]) {
-        setActiveBuildingId(access.buildingIds[0]);
-      }
-      if (access.defaultPortal === "resident" || access.portals.includes("resident")) {
+      if (access.defaultPortal === "resident") {
         await ensureActiveBuildingForUser(user.id);
+      } else if (access.buildingIds[0]) {
+        setActiveBuildingId(access.buildingIds[0]);
       }
       const profile = await fetchProfile(user.id);
       if (profileMustChangePassword(profile)) {

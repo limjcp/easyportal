@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { FaCloudUploadAlt } from "react-icons/fa";
 import { useAuth } from "../auth/AuthProvider";
 import type { ProfileCompletionStatus } from "../data/supabase/profileCompletion";
-import { ensureActiveBuildingForUser, getActiveBuildingId } from "../data/supabase/buildingContext";
+import { ensureActiveBuildingForUser } from "../data/supabase/buildingContext";
 import { PortalConfigProvider, usePortalConfig } from "./context/PortalConfigContext";
 import { isProfileCompletionBannerDismissed } from "./components/ProfileCompletionBanner";
 import { ResidentLayout } from "./ResidentLayout";
@@ -62,7 +62,7 @@ type ResidentPortalProps = {
 
 export function ResidentPortal({ onSwitchToAdmin, onLogout, onGoToWebsite }: ResidentPortalProps) {
   const auth = useAuth();
-  const [buildingKey, setBuildingKey] = useState<string | null>(() => getActiveBuildingId());
+  const [buildingKey, setBuildingKey] = useState<string | null>(null);
   const [buildingError, setBuildingError] = useState<string | null>(null);
 
   useEffect(() => {
