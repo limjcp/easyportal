@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Calendar } from "../components/Calendar";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { usePortalConfig } from "../context/PortalConfigContext";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type { CalendarEvent } from "../data/types";
 
 export function EventsPage() {

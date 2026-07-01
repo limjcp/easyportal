@@ -16,7 +16,7 @@ import { OptionsDropdown } from "../components/AdminBadges";
 import { AdminModuleTabs, AdminPanelTable, type AdminTableColumn } from "../components/AdminPanelTable";
 import { AdminPageActions } from "../components/AdminPageActions";
 import { adminRepository } from "../data/adminRepository";
-import { BUILDING_ADMIN_ROLES } from "../data/mock/buildingPermissions";
+import { BUILDING_ADMIN_ROLES } from "../data/buildingPermissions";
 import { Modal } from "../../shared/Modal";
 import { ConfirmModal } from "../../shared/ConfirmModal";
 import { ColumnPrefsModal } from "../../shared/ColumnPrefsModal";
@@ -320,7 +320,6 @@ export function UnitsUsersPage({ route, onNavigate, refreshKey }: UnitsUsersPage
   const pendingUnitTouchedRef = useRef<Set<string>>(new Set());
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmKind, setConfirmKind] = useState<"deleteUser" | "passwordReset" | null>(null);
-  const [savingEmail, setSavingEmail] = useState(false);
   const [savingRestore, setSavingRestore] = useState(false);
   const [activationSelections, setActivationSelections] = useState<Set<string>>(() => new Set());
   const [composeEmailTarget, setComposeEmailTarget] = useState<{
@@ -658,7 +657,6 @@ export function UnitsUsersPage({ route, onNavigate, refreshKey }: UnitsUsersPage
         throw new Error("Email is required to activate this user.");
       }
       const result = await adminRepository.activateOccupancy(selectedUser.id);
-      window.alert(result.message);
       await refetchLists();
       const refreshed = await adminRepository.getUnitsUsersUserDetail(selectedUser.id);
       if (refreshed) {
@@ -667,7 +665,27 @@ export function UnitsUsersPage({ route, onNavigate, refreshKey }: UnitsUsersPage
         setUserDetailBaseline(cloneUserDetail(refreshed));
       }
     }, [selectedUser, refetchLists]),
-    { onError: setActionError, showErrorToast: false }
+    {
+      successMessage: (result) => result?.message ?? "User activated.",
+      onError: setActionError,
+      showErrorToast: false,
+    }
+  );
+
+  const { run: confirmPasswordReset, loading: savingEmail } = useAsyncAction(
+    useCallback(async () => {
+      const pending = pendingLoginDetailsRef.current;
+      if (!pending) return;
+      const result = await adminRepository.emailOccupancyLoginDetails(pending.occupancyId);
+      setConfirmKind(null);
+      pendingLoginDetailsRef.current = null;
+      return result;
+    }, []),
+    {
+      successMessage: (result) => result?.message ?? "Login details sent.",
+      onError: setActionError,
+      showErrorToast: false,
+    }
   );
 
   const { run: bulkActivateUsers, loading: bulkActivating } = useAsyncAction(
@@ -929,23 +947,6 @@ export function UnitsUsersPage({ route, onNavigate, refreshKey }: UnitsUsersPage
     }
     pendingLoginDetailsRef.current = { occupancyId, email };
     setConfirmKind("passwordReset");
-  };
-
-  const confirmPasswordReset = async () => {
-    const pending = pendingLoginDetailsRef.current;
-    if (!pending) return;
-    setSavingEmail(true);
-    setActionError(null);
-    try {
-      const result = await adminRepository.emailOccupancyLoginDetails(pending.occupancyId);
-      window.alert(result.message);
-      setConfirmKind(null);
-      pendingLoginDetailsRef.current = null;
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to send login details email.");
-    } finally {
-      setSavingEmail(false);
-    }
   };
 
   const handleRestoreUser = async (occupancyId: string) => {

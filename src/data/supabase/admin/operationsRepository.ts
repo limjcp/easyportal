@@ -15,7 +15,7 @@ import type {
   UpdateAdminServiceRequestInput,
 } from "../../../resident/data/types";
 import { PARKING_PAYMENT_AMOUNTS } from "../../../resident/data/types";
-import { certificateDetailFromRow } from "../../../company/data/mock/certificateDetails";
+import { certificateDetailFromRow } from "../../../company/data/certificateDetailMapper";
 import { mapDbError, nowIso, sb, todayIsoDate } from "../base";
 import {
   INCIDENT_REPORT_LIST_COLUMNS,

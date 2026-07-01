@@ -8,7 +8,7 @@ import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
 import { useSyncFromRefreshKey } from "../../shared/useSyncFromRefreshKey";
 import { DataTable } from "../../shared/DataTable";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type { DocumentFile } from "../data/types";
 
 export function DocumentsPage({ refreshKey = 0 }: { refreshKey?: number }) {

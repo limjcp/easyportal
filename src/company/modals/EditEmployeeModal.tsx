@@ -6,7 +6,7 @@ import { Modal } from "../../shared/Modal";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { employeePermissionsDirty } from "../../shared/formDirty";
 import { useAuth } from "../../auth/AuthProvider";
-import { companyRepository, requiresExplicitBuildingAssignments } from "../data/companyRepository";
+import { companyRepository } from "../data/companyRepository";
 import type {
   CompanyBuilding,
   CompanyEmployee,
@@ -144,8 +144,8 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
   const { run, loading, error, setError, clearError } = useAsyncAction(
     useCallback(async () => {
       if (!employee || !profileBaseline) return;
-      if (requiresExplicitBuildingAssignments(role) && buildingIds.length === 0) {
-        throw new Error("Select at least one building assignment for this role.");
+      if (buildingIds.length === 0) {
+        throw new Error("Select at least one building assignment for this employee.");
       }
 
       const profileChanged =
@@ -172,7 +172,11 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
         await companyRepository.emailEmployeeLoginDetails(employee.membershipId ?? employee.id);
       }
       if (profileChanged || permissionsChanged) {
-        await auth.refreshAuth();
+        const editingSelf =
+          employee.email.trim().toLowerCase() === auth.profile?.email?.trim().toLowerCase();
+        if (editingSelf) {
+          await auth.refreshAuth();
+        }
       }
     }, [
       employee,
@@ -221,7 +225,7 @@ export function EditEmployeeModal({ open, employee, onClose, onSaved }: EditEmpl
       });
       setNotifications(defaultNotificationRows());
       clearError();
-      companyRepository.getBuildings().then(setBuildings);
+      companyRepository.getCompanyBuildingsForAssignment().then(setBuildings);
       companyRepository.getEmployeePermissions(employee.membershipId ?? employee.id).then((loaded) => {
         setPermissions(loaded);
         setPermissionsBaseline(structuredClone(loaded));

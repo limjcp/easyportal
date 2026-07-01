@@ -9,7 +9,7 @@ import { isQueryPageLoading } from "../../shared/useQueryPageBusy";
 import { useSyncFromRefreshKey } from "../../shared/useSyncFromRefreshKey";
 import { useTabChangeWithBusy } from "../../shared/useTabChangeWithBusy";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type {
   AmenityBooking,
   SubmitElevatorBookingInput,

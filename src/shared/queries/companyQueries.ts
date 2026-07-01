@@ -48,6 +48,16 @@ export function useCompanyBuildings() {
   });
 }
 
+export function useCompanyBuildingsForAssignment() {
+  const { userId, companyId, isCompanyReady } = useTenantContext();
+  return useQuery({
+    queryKey: [...queryKeys.company.buildings(userId!, companyId!), "assignment"] as const,
+    queryFn: () => companyRepository.getCompanyBuildingsForAssignment(),
+    enabled: isCompanyReady,
+    staleTime: COMPANY_BUILDINGS_STALE,
+  });
+}
+
 export function useCompanyArchivedBuildings() {
   const { userId, companyId, isCompanyReady } = useTenantContext();
   return useQuery({

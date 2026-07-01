@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type { BoardElection } from "../data/types";
 import type { ResidentRoute } from "../navigation";
 

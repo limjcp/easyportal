@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaPaperclip } from "react-icons/fa";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type { NewsItem } from "../data/types";
 
 export function NewsDetailPage({ id }: { id: string }) {

@@ -20,7 +20,7 @@ import {
   FaWrench,
 } from "react-icons/fa";
 import { usePortalConfig } from "../context/PortalConfigContext";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import {
   mergeArrangeTiles,
   moveArrangeTile,

@@ -37,12 +37,16 @@ export function SendOccupancyEmailModal({
         subject.trim(),
         body.trim()
       );
-      window.alert(result.message);
       setSubject("");
       setBody("");
       onClose();
+      return result;
     }, [body, occupancyId, onClose, subject]),
-    { onError: () => undefined, showErrorToast: false, showSuccessToast: false }
+    {
+      successMessage: (result) => result?.message ?? "Email sent.",
+      onError: () => undefined,
+      showErrorToast: false,
+    }
   );
 
   const handleSend = async () => {

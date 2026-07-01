@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type {
   BoardElection,
   ElectionBallot,

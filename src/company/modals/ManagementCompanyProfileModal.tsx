@@ -11,7 +11,7 @@ import {
   initRegionsFromProvince,
 } from "../components/RegionFields";
 import { companyRepository } from "../data/companyRepository";
-import { TIMEZONE_OPTIONS } from "../data/mock/timezoneOptions";
+import { TIMEZONE_OPTIONS } from "../../shared/timezoneOptions";
 import type { ManagementCompanyProfile } from "../../resident/data/types";
 
 const inputClass = "mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm";

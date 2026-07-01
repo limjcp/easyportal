@@ -1,8 +1,8 @@
-import type { CompanyRole, PermissionModuleRow, RoleNameOverride } from "../../../resident/data/types";
+import type { CompanyRole, PermissionModuleRow, RoleNameOverride } from "../../resident/data/types";
 import {
   BUILDING_PERMISSION_MODULES,
   createDefaultBuildingPermissionsForRole,
-} from "../../../admin/data/mock/buildingPermissions";
+} from "../../admin/data/buildingPermissions";
 
 export const DEFAULT_ROLE_NAMES: RoleNameOverride[] = [
   { defaultRole: "Company Owner", customName: "" },

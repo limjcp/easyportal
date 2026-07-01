@@ -5,7 +5,7 @@ import { ActionButton } from "../../../shared/ActionButton";
 import { FormAlert } from "../../../shared/FormAlert";
 import { useAsyncAction } from "../../../shared/useAsyncAction";
 import { adminRepository } from "../../data/adminRepository";
-import { STRIPE_COUNTRIES, STRIPE_CURRENCIES } from "../../data/mock/stripeFormOptions";
+import { STRIPE_COUNTRIES, STRIPE_CURRENCIES } from "../../data/stripeFormOptions";
 import type { BuildingExternalData } from "../../../resident/data/types";
 
 const inputClass = "mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm";
@@ -26,7 +26,6 @@ export function StripePaymentsTab() {
         currency,
       });
       setData(updated);
-      alert("Stripe account signup submitted (mock).");
     }, [country, accountNumber, routingNumber, currency]),
     { successMessage: "Stripe account signup submitted." }
   );

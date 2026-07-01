@@ -11,7 +11,7 @@ import { ResidentNav } from "./components/ResidentNav";
 import { UserMenu } from "./components/UserMenu";
 import { usePortalConfig } from "./context/PortalConfigContext";
 import { getResidentBackgroundImage } from "./data/portalConfig";
-import { residentRepo } from "./data/mockRepository";
+import { residentRepo } from "./data/residentRepository";
 import type { ResidentRoute } from "./navigation";
 type ResidentLayoutProps = {
   route: ResidentRoute;

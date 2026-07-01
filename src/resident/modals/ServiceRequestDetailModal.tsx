@@ -6,7 +6,7 @@ import { Modal } from "../../shared/Modal";
 import { IncidentReportAttachmentGrid } from "../../shared/IncidentReportAttachmentThumb";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { useBusyWhile } from "../../shared/useBusyWhile";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type { ResidentServiceRequestDetail } from "../data/types";
 
 type ServiceRequestDetailModalProps = {

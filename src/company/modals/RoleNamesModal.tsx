@@ -3,7 +3,7 @@ import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
 import { useAsyncAction } from "../../shared/useAsyncAction";
-import { DEFAULT_ROLE_NAMES } from "../data/mock/permissions";
+import { DEFAULT_ROLE_NAMES } from "../data/permissions";
 import { companyRepository } from "../data/companyRepository";
 import type { RoleNameOverride } from "../../resident/data/types";
 

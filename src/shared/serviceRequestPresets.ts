@@ -1,9 +1,23 @@
-import { COMMON_AREAS } from "../admin/data/mock/buildingDefinitionConstants";
-import { seedServiceCategories } from "../admin/data/mock/serviceCategories";
+import { COMMON_AREAS } from "../admin/data/buildingDefinitionConstants";
 
 export const OTHER_OPTION = "Other";
 
-export const DEFAULT_SERVICE_REQUEST_CATEGORIES = seedServiceCategories.map((c) => c.name);
+export const DEFAULT_SERVICE_REQUEST_CATEGORIES = [
+  "Air/Heat",
+  "Appliances",
+  "Bathroom",
+  "Common Area",
+  "Doors & Locks",
+  "Electrical",
+  "Elevator",
+  "Flooring",
+  "HVAC",
+  "Landscaping",
+  "Other",
+  "Plumbing",
+  "Rules Infraction",
+  "Windows",
+];
 
 const LOCATION_EXTRAS = ["Common Area", "Parking"] as const;
 

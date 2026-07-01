@@ -9,7 +9,7 @@ import {
   getNextDueDate,
   isFireSafetyDue,
 } from "../data/fireSafetyUtils";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type { FireSafetySubmission } from "../data/types";
 
 const inputClass =

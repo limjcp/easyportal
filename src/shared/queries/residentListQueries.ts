@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { residentRepo } from "../../resident/data/mockRepository";
+import { residentRepo } from "../../resident/data/residentRepository";
 import { queryKeys } from "../queryKeys";
 import { useTenantContext } from "./useTenantContext";
 

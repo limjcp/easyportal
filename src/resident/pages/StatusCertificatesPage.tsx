@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { EmptyState } from "../../shared/EmptyState";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { usePortalConfig } from "../context/PortalConfigContext";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type { StatusCertificate } from "../data/types";
 
 type StatusCertificatesPageProps = {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CANADIAN_PROVINCES } from "../../admin/data/mock/buildingDefinitionConstants";
+import { CANADIAN_PROVINCES } from "../../admin/data/buildingDefinitionConstants";
 import { FileUploadZone } from "../../shared/FileUploadZone";
 import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";

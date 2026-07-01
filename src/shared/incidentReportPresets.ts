@@ -1,4 +1,4 @@
-import { COMMON_AREAS } from "../admin/data/mock/buildingDefinitionConstants";
+import { COMMON_AREAS } from "../admin/data/buildingDefinitionConstants";
 
 export const OTHER_OPTION = "Other";
 

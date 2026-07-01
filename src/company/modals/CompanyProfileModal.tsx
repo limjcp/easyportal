@@ -5,7 +5,7 @@ import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { PurplePanel } from "../components/PurplePanel";
 import { companyRepository } from "../data/companyRepository";
-import { TIMEZONE_OPTIONS } from "../data/mock/timezoneOptions";
+import { TIMEZONE_OPTIONS } from "../../shared/timezoneOptions";
 import type { CompanyUser } from "../../resident/data/types";
 import { cn } from "../../utils/cn";
 

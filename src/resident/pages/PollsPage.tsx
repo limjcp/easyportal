@@ -3,7 +3,7 @@ import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type { AgmMeeting, Poll, PollAttachment, PollResponse } from "../data/types";
 import { parsePollAnswerOptions } from "../../shared/pollUtils";
 

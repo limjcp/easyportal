@@ -5,7 +5,7 @@ import { Modal } from "../../shared/Modal";
 import { StatusBadge } from "../../shared/StatusBadge";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { usePortalConfig } from "../context/PortalConfigContext";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type { EmailRecord, NotificationPreference, ResidentUser } from "../data/types";
 
 type Tab = "profile" | "notifications" | "email";

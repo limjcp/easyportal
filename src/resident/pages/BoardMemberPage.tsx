@@ -6,7 +6,7 @@ import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { formatDisplayDate, isTermExpiringSoon } from "../data/fireSafetyUtils";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type { BoardFaqItem, BoardMember, BoardMemberApplication } from "../data/types";
 
 const inputClass =

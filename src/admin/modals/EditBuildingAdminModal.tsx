@@ -6,7 +6,7 @@ import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { useBusyWhile } from "../../shared/useBusyWhile";
 import { adminRepository } from "../data/adminRepository";
-import { BUILDING_ADMIN_ROLES } from "../data/mock/buildingPermissions";
+import { BUILDING_ADMIN_ROLES } from "../data/buildingPermissions";
 import type { BuildingAdmin } from "../../resident/data/types";
 
 const inputClass = "mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm";

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type { FaqItem } from "../data/types";
 
 export function FaqPage() {

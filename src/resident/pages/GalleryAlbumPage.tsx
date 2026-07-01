@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { Modal } from "../../shared/Modal";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type { GalleryAlbum, GalleryPhoto } from "../data/types";
 
 type GalleryAlbumPageProps = {

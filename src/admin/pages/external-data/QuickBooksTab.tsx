@@ -133,13 +133,18 @@ export function QuickBooksTab({ activeBuildingId, refreshKey = 0 }: QuickBooksTa
       setLastSyncLabel(new Date().toLocaleString());
       await load();
       invalidateBuilding();
-      const occupantTotal = (result.occupantsImported ?? 0) + (result.occupantsUpdated ?? 0);
-      alert(
-        `Synced ${result.imported} QBO customers and ${result.invoices ?? 0} open invoices. ` +
-          `${occupantTotal} occupant record(s) added or updated in Units & Users → Pending.`
-      );
+      return result;
     }, [buildingId, load, invalidateBuilding]),
-    { successMessage: "QuickBooks data synced." }
+    {
+      successMessage: (result) => {
+        if (!result) return "QuickBooks data synced.";
+        const occupantTotal = (result.occupantsImported ?? 0) + (result.occupantsUpdated ?? 0);
+        return (
+          `Synced ${result.imported} QBO customers and ${result.invoices ?? 0} open invoices. ` +
+          `${occupantTotal} occupant record(s) added or updated in Units & Users → Pending.`
+        );
+      },
+    }
   );
 
   const { run: handleConnect, loading: connecting } = useAsyncAction(

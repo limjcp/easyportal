@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ChatInbox } from "../../chat/components/ChatInbox";
 import { buildResidentChatActor } from "../../chat/hooks/useChatActor";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type { ResidentUser } from "../data/types";
 
 export function ResidentChatPage() {

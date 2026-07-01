@@ -7,7 +7,7 @@ import { FormAlert } from "../../shared/FormAlert";
 import { RowActionsMenu } from "../../shared/RowActionsMenu";
 import { Tooltip } from "../../shared/Tooltip";
 import { useAsyncAction } from "../../shared/useAsyncAction";
-import { useCompanyBuildings, useCompanyEmployees } from "../../shared/queries/companyQueries";
+import { useCompanyBuildingsForAssignment, useCompanyEmployees } from "../../shared/queries/companyQueries";
 import { useInvalidatePortalQueries } from "../../shared/queries/useInvalidatePortalQueries";
 import { isQueryInitiallyLoading } from "../../shared/useQueryPageBusy";
 import { companyRepository } from "../data/companyRepository";
@@ -53,7 +53,7 @@ export function EmployeesPage() {
   const { invalidateCompany } = useInvalidatePortalQueries();
   const employeesQuery = useCompanyEmployees();
   const { data: employees = [], error: employeesError, refetch: refetchEmployees } = employeesQuery;
-  const buildingsQuery = useCompanyBuildings();
+  const buildingsQuery = useCompanyBuildingsForAssignment();
   const { data: buildings = [], refetch: refetchBuildings } = buildingsQuery;
   const pageLoading =
     isQueryInitiallyLoading(employeesQuery) || isQueryInitiallyLoading(buildingsQuery);

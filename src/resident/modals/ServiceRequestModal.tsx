@@ -20,7 +20,7 @@ import {
   EmergencySeverityNoticeModal,
 } from "../../shared/EmergencySeverityNotice";
 import type { CreateServiceRequestInput } from "../data/types";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 
 const DEFAULT_VISIBILITY = "All users in this unit can see this request";
 

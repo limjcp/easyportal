@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { CANADIAN_PROVINCES } from "../../admin/data/mock/buildingDefinitionConstants";
+import { CANADIAN_PROVINCES } from "../../admin/data/buildingDefinitionConstants";
 import { ActionButton } from "../../shared/ActionButton";
 import { CrudPanel } from "../../shared/CrudPanel";
 import { FileUploadZone } from "../../shared/FileUploadZone";

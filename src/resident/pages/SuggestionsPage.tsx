@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { EmptyState } from "../../shared/EmptyState";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type { Suggestion } from "../data/types";
 
 type SuggestionsPageProps = {

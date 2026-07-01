@@ -3,7 +3,7 @@ import { useMutationBusy } from "./MutationBusyContext";
 import { ToastContext } from "./Toast";
 
 type AsyncActionOptions<T> = {
-  successMessage?: string;
+  successMessage?: string | ((result: T) => string | undefined);
   errorMessage?: string;
   onSuccess?: (result: T) => void;
   onError?: (message: string) => void;
@@ -48,8 +48,10 @@ export function useAsyncAction<T, A extends unknown[] = []>(
     if (trackBusy) busyRef.current?.beginBusy();
     try {
       const result = await action(...args);
-      if (showSuccessToast && successMessage && toastCtx) {
-        toastCtx.showToast({ message: successMessage, variant: "success" });
+      const resolvedSuccessMessage =
+        typeof successMessage === "function" ? successMessage(result) : successMessage;
+      if (showSuccessToast && resolvedSuccessMessage && toastCtx) {
+        toastCtx.showToast({ message: resolvedSuccessMessage, variant: "success" });
       }
       onSuccess?.(result);
       return result;

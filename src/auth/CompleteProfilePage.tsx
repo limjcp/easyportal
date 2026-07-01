@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { TIMEZONE_OPTIONS } from "../company/data/mock/timezoneOptions";
+import { TIMEZONE_OPTIONS } from "../shared/timezoneOptions";
 import type { ProfileCompletionStatus } from "../data/supabase/profileCompletion";
-import { residentRepo } from "../resident/data/mockRepository";
+import { residentRepo } from "../resident/data/residentRepository";
 import type { ProfileCompletionSavePayload } from "../resident/data/repository";
 import type {
   LoginPortalRole,

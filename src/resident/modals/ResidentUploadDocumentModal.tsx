@@ -4,7 +4,7 @@ import { ActionButton } from "../../shared/ActionButton";
 import { FileUploadZone } from "../../shared/FileUploadZone";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type { DocumentFolder } from "../data/types";
 
 type ResidentUploadDocumentModalProps = {

@@ -32,7 +32,7 @@ import {
   type ProfileCompletionStatus,
 } from "../data/supabase/profileCompletion";
 import { companyRepository } from "../company/data/companyRepository";
-import { residentRepo } from "../resident/data/mockRepository";
+import { residentRepo } from "../resident/data/residentRepository";
 import { useAccessibleBuildings } from "../shared/queries/companyQueries";
 import { removeBuildingQueries } from "../shared/queryInvalidation";
 
@@ -321,7 +321,7 @@ function StandaloneAdminPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { data: cachedBuildings = [] } = useAccessibleBuildings();
+  const { data: cachedBuildings = [], isLoading: buildingsLoading } = useAccessibleBuildings();
   const params = useParams();
   const buildingId = params.buildingId ?? null;
 
@@ -354,10 +354,16 @@ function StandaloneAdminPage() {
     null;
 
   useEffect(() => {
-    if (!buildingId && adminBuildings[0]) {
+    if (!adminBuildings.length) return;
+    const requestedId = buildingId ?? adminMatch?.buildingId ?? null;
+    if (!requestedId) {
+      navigate(standaloneAdminPrefix(adminBuildings[0].id), { replace: true });
+      return;
+    }
+    if (!adminBuildings.some((building) => building.id === requestedId)) {
       navigate(standaloneAdminPrefix(adminBuildings[0].id), { replace: true });
     }
-  }, [buildingId, adminBuildings, navigate]);
+  }, [buildingId, adminBuildings, adminMatch?.buildingId, navigate]);
 
   useEffect(() => {
     if (activeAdminBuilding) {
@@ -388,8 +394,23 @@ function StandaloneAdminPage() {
     navigate("/login");
   };
 
-  if (!activeAdminBuilding) {
+  if (buildingsLoading) {
     return <LoadingScreen />;
+  }
+
+  if (!activeAdminBuilding) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#e7edf3] px-4 text-center text-slate-700">
+        <p>No buildings are assigned to this account.</p>
+        <button
+          type="button"
+          className="rounded bg-[#3476ef] px-4 py-2 text-sm text-white"
+          onClick={() => void handleLogout()}
+        >
+          Sign out
+        </button>
+      </div>
+    );
   }
 
   const adminPathPrefix = standaloneAdminPrefix(activeAdminBuilding.id);

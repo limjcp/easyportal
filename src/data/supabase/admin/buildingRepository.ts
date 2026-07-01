@@ -445,7 +445,7 @@ export const buildingRepository = {
 
     const { count: customerCount, error: countError } = await sb()
       .from("quickbooks_customers")
-      .select("id", { count: "exact", head: true })
+      .select("customer_id", { count: "exact", head: true })
       .eq("building_id", buildingId);
     mapDbError(countError);
 

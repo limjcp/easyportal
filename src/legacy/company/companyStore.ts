@@ -16,37 +16,51 @@ import type {
   VendorInvitation,
   VendorNotification,
   VendorSession,
+  CompanyRole,
 } from "../../resident/data/types";
-import { seedVendorNotifications } from "../../vendor/data/mock/notifications";
-import { seedCompanyBuildings } from "../../company/data/mock/buildings";
-import { seedCompanyEmployees } from "../../company/data/mock/employees";
-import { seedCompanyNotifications } from "../../company/data/mock/notifications";
-import { seedCompanyUser } from "../../company/data/mock/companyUser";
-import { seedManagementCompanyProfile } from "../../company/data/mock/managementCompanyProfile";
-import { seedBuildingTotals } from "../../company/data/mock/buildingTotals";
-import { seedMasterReports } from "../../company/data/mock/masterReports";
-import { seedPurchaseOrders } from "../../company/data/mock/purchaseOrders";
-import { DEFAULT_ROLE_NAMES, createDefaultPermissionsForRole } from "../../company/data/mock/permissions";
-import { seedBuildingSubscriptions, seedCompanySubscriptions, seedStripePayouts } from "../../company/data/mock/subscriptions";
-import { seedVendors } from "../../company/data/mock/vendors";
-import type { CompanyRole } from "../../resident/data/types";
+import { DEFAULT_ROLE_NAMES, createDefaultPermissionsForRole } from "../../company/data/permissions";
+
+const emptyCompanyUser: CompanyUser = {
+  id: "",
+  displayName: "",
+  firstName: "",
+  lastName: "",
+  email: "",
+  role: "Company Owner",
+  managementCompany: "",
+};
+
+const emptyManagementCompany: ManagementCompanyProfile = {
+  id: "",
+  companyName: "",
+  address: "",
+  city: "",
+  postalZip: "",
+  country: "",
+  provinceState: "",
+  timezone: "America/Toronto",
+  companyEmail: "",
+  tel1: "",
+  tel2: "",
+  fax: "",
+};
 
 export const companyStore = {
-  user: { ...seedCompanyUser },
-  managementCompany: { ...seedManagementCompanyProfile },
-  buildings: [...seedCompanyBuildings] as CompanyBuilding[],
-  employees: [...seedCompanyEmployees] as CompanyEmployee[],
-  vendors: [...seedVendors] as Vendor[],
+  user: { ...emptyCompanyUser },
+  managementCompany: { ...emptyManagementCompany },
+  buildings: [] as CompanyBuilding[],
+  employees: [] as CompanyEmployee[],
+  vendors: [] as Vendor[],
   vendorInvitations: [] as VendorInvitation[],
   vendorSession: null as VendorSession | null,
-  vendorNotifications: [...seedVendorNotifications] as VendorNotification[],
-  purchaseOrders: [...seedPurchaseOrders] as PurchaseOrder[],
-  notifications: [...seedCompanyNotifications] as CompanyNotification[],
-  masterReports: [...seedMasterReports] as MasterReportRow[],
-  buildingTotals: [...seedBuildingTotals] as BuildingTotalRow[],
-  buildingSubscriptions: [...seedBuildingSubscriptions] as BuildingSubscription[],
-  companySubscriptions: [...seedCompanySubscriptions] as CompanySubscription[],
-  stripePayouts: [...seedStripePayouts] as StripePayout[],
+  vendorNotifications: [] as VendorNotification[],
+  purchaseOrders: [] as PurchaseOrder[],
+  notifications: [] as CompanyNotification[],
+  masterReports: [] as MasterReportRow[],
+  buildingTotals: [] as BuildingTotalRow[],
+  buildingSubscriptions: [] as BuildingSubscription[],
+  companySubscriptions: [] as CompanySubscription[],
+  stripePayouts: [] as StripePayout[],
   roleNameOverrides: DEFAULT_ROLE_NAMES.map((r) => ({ ...r })) as RoleNameOverride[],
   rolePermissions: [
     "Company Owner",
@@ -58,7 +72,7 @@ export const companyStore = {
     role: role as CompanyRole,
     permissions: createDefaultPermissionsForRole(role as CompanyRole),
   })) as RolePermissionDefaults[],
-  nextPoNumber: 5,
+  nextPoNumber: 1,
   nextId: 1000,
 };
 

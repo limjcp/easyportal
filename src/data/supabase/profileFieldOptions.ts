@@ -1,4 +1,4 @@
-import { seedProfileFieldOptions } from "../../admin/data/mock/profileFields";
+import { DEFAULT_PROFILE_FIELD_OPTIONS } from "../defaults/profileFieldOptions";
 import type { ProfileFieldOption } from "../../resident/data/types";
 
 type ProfileFieldOptionRow = {
@@ -29,11 +29,11 @@ export function resolveProfileFieldOptions(
 ): ProfileFieldOption[] {
   const fromDb = (dbRows ?? []).map(mapProfileFieldOptionRow);
   if (fromDb.length === 0) {
-    return seedProfileFieldOptions.map((f) => ({ ...f }));
+    return DEFAULT_PROFILE_FIELD_OPTIONS.map((f) => ({ ...f }));
   }
 
   const byKey = new Map(fromDb.map((f) => [f.fieldKey, f]));
-  const merged = seedProfileFieldOptions.map((seed) => {
+  const merged = DEFAULT_PROFILE_FIELD_OPTIONS.map((seed) => {
     const saved = byKey.get(seed.fieldKey);
     return saved ? { ...seed, ...saved } : { ...seed };
   });

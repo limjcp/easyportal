@@ -1,10 +1,10 @@
 import type { PortalModuleConfig } from "../../resident/data/types";
 import type { UnitsUsersResidentType } from "../../resident/data/types";
-import { createDefaultPermissionsForRole, PERMISSION_MODULES } from "../../company/data/mock/permissions";
+import { createDefaultPermissionsForRole, PERMISSION_MODULES } from "../../company/data/permissions";
 import {
   BUILDING_SIDEBAR_MODULES,
   createDefaultBuildingPermissionsForRole,
-} from "../../admin/data/mock/buildingPermissions";
+} from "../../admin/data/buildingPermissions";
 import type { CompanyRole, PermissionModuleRow } from "../../resident/data/types";
 import { mapDbError, sb } from "./base";
 import { buildingIdOrThrow } from "./base";

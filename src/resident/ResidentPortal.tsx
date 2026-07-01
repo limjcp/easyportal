@@ -7,7 +7,7 @@ import { ensureActiveBuildingForUser, getActiveBuildingId } from "../data/supaba
 import { PortalConfigProvider, usePortalConfig } from "./context/PortalConfigContext";
 import { isProfileCompletionBannerDismissed } from "./components/ProfileCompletionBanner";
 import { ResidentLayout } from "./ResidentLayout";
-import { residentRepo } from "./data/mockRepository";
+import { residentRepo } from "./data/residentRepository";
 import { IncidentReportModal } from "./modals/IncidentReportModal";
 import { ProfileModal } from "./modals/ProfileModal";
 import { ServiceRequestModal } from "./modals/ServiceRequestModal";

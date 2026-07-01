@@ -1,4 +1,4 @@
-import type { PermissionModuleRow } from "../../../resident/data/types";
+import type { PermissionModuleRow } from "../../resident/data/types";
 
 export const BUILDING_ADMIN_ROLES: { value: string; label: string }[] = [
   { value: "200", label: "Company Owner" },
@@ -117,11 +117,4 @@ export function createDefaultBuildingPermissionsForRole(role: string): Permissio
   return BUILDING_PERMISSION_MODULES.map((m) =>
     moduleRow(m.label, m.moduleKey, { view: m.moduleKey !== "company-subscriptions" })
   );
-}
-
-export function seedBuildingRolePermissions() {
-  return BUILDING_ADMIN_ROLES.map((r) => ({
-    role: r.label,
-    permissions: createDefaultBuildingPermissionsForRole(r.label),
-  }));
 }

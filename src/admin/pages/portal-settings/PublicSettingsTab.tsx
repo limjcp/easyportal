@@ -2,15 +2,17 @@ import { useCallback, useEffect, useState } from "react";
 import { FaPalette, FaHome, FaParagraph, FaDesktop, FaTwitter } from "react-icons/fa";
 import { AdminFormPanel } from "../../components/AdminFormPanel";
 import { adminRepository } from "../../data/adminRepository";
-import { PORTAL_THEME_COLORS } from "../../data/mock/publicPortalSettings";
+import { PORTAL_THEME_COLORS } from "../../data/portalThemeColors";
 import type { PublicPortalSettings } from "../../../resident/data/types";
 import { FileUploadZone } from "../../../shared/FileUploadZone";
 import { SaveBar } from "../../../shared/SaveBar";
 import { useAsyncAction } from "../../../shared/useAsyncAction";
+import { useToast } from "../../../shared/Toast";
 import { buildLobbyDisplayUrl, PORTAL_SUBDOMAIN_DOMAIN } from "../../../shared/portalDomain";
 import { PortalSettingsAlert } from "./PortalSettingsAlert";
 
 export function PublicSettingsTab() {
+  const { showToast } = useToast();
   const [form, setForm] = useState<PublicPortalSettings | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -43,7 +45,7 @@ export function PublicSettingsTab() {
 
   const copyLobbyUrl = () => {
     void navigator.clipboard.writeText(form.lobbyDisplayUrl);
-    alert(`Copied ${form.lobbyDisplayUrl} to your clipboard`);
+    showToast({ message: "Copied to clipboard.", subMessage: form.lobbyDisplayUrl, variant: "success" });
   };
 
   const updateSubdomain = (value: string) => {

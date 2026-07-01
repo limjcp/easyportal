@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaEdit, FaEnvelope, FaPlus } from "react-icons/fa";
 import { StatusBadge } from "../components/AdminBadges";
 import { AdminPanelTable } from "../components/AdminPanelTable";
@@ -8,6 +8,7 @@ import { AddBuildingAdminModal } from "../modals/AddBuildingAdminModal";
 import { BuildingPermissionDefaultsModal } from "../modals/BuildingPermissionDefaultsModal";
 import { EditBuildingAdminModal } from "../modals/EditBuildingAdminModal";
 import type { AdminRoute } from "../navigation";
+import { useAsyncAction } from "../../shared/useAsyncAction";
 import type { BuildingAdmin } from "../../resident/data/types";
 
 const STATUS_FILTER_OPTIONS = [
@@ -57,10 +58,16 @@ export function AdminsPage({ route, onNavigate, refreshKey, onRefresh }: AdminsP
     }
   };
 
-  const handleEmailLogin = async (admin: BuildingAdmin) => {
-    await adminRepository.emailBuildingAdminLoginDetails(admin.id);
-    alert(`Login details emailed to ${admin.email || admin.name}.`);
-  };
+  const { run: handleEmailLogin } = useAsyncAction(
+    useCallback(async (admin: BuildingAdmin) => {
+      await adminRepository.emailBuildingAdminLoginDetails(admin.id);
+      return admin;
+    }, []),
+    {
+      successMessage: (admin) =>
+        admin ? `Login details emailed to ${admin.email || admin.name}.` : "Login details emailed.",
+    }
+  );
 
   return (
     <>
@@ -177,7 +184,7 @@ export function AdminsPage({ route, onNavigate, refreshKey, onRefresh }: AdminsP
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleEmailLogin(r)}
+                  onClick={() => void handleEmailLogin(r)}
                   title="Email Login Details"
                   className="inline-flex items-center rounded-r border border-l-0 border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
                 >

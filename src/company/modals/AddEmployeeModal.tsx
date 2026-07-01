@@ -4,7 +4,7 @@ import { FormAlert } from "../../shared/FormAlert";
 import { Modal } from "../../shared/Modal";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { useAuth } from "../../auth/AuthProvider";
-import { companyRepository, requiresExplicitBuildingAssignments } from "../data/companyRepository";
+import { companyRepository } from "../data/companyRepository";
 import type { CompanyBuilding, CompanyRole } from "../../resident/data/types";
 
 const ROLES: CompanyRole[] = [
@@ -35,8 +35,8 @@ export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalPro
 
   const { run, loading, error, clearError } = useAsyncAction(
     useCallback(async () => {
-      if (requiresExplicitBuildingAssignments(role) && buildingIds.length === 0) {
-        throw new Error("Select at least one building assignment for this role.");
+      if (buildingIds.length === 0) {
+        throw new Error("Select at least one building assignment for this employee.");
       }
       await companyRepository.createEmployee({
         firstName: firstName.trim(),
@@ -66,7 +66,7 @@ export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalPro
       setBuildingIds([]);
       setValidationError(null);
       clearError();
-      companyRepository.getBuildings().then(setBuildings);
+      companyRepository.getCompanyBuildingsForAssignment().then(setBuildings);
     }
   }, [open, clearError]);
 
@@ -170,11 +170,6 @@ export function AddEmployeeModal({ open, onClose, onSaved }: AddEmployeeModalPro
               ))}
             </select>
           </label>
-          {!requiresExplicitBuildingAssignments(role) ? (
-            <p className="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-              Company Owners and Administrators with no assignments have access to all buildings.
-            </p>
-          ) : null}
           <div className="text-sm">
             <p className="mb-2 font-medium text-slate-700">Assigned Buildings</p>
             <div className="max-h-48 overflow-y-auto rounded border border-slate-200 p-2">

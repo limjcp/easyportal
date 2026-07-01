@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { FaCommentDots, FaTimes } from "react-icons/fa";
-import { residentRepo } from "../resident/data/mockRepository";
+import { residentRepo } from "../resident/data/residentRepository";
 import type { ResidentProfileDetails } from "../resident/data/types";
 
 type ChatMessage = {

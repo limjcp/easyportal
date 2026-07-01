@@ -1,6 +1,6 @@
-import type { ProfileFieldOption } from "../../../resident/data/types";
+import type { ProfileFieldOption } from "../../resident/data/types";
 
-export const seedProfileFieldOptions: ProfileFieldOption[] = [
+export const DEFAULT_PROFILE_FIELD_OPTIONS: ProfileFieldOption[] = [
   { fieldKey: "firstName", label: "First Name", show: true, editable: true, locked: true, note: "This field is enabled by default", requiredForCompletion: false },
   { fieldKey: "lastName", label: "Last Name", show: true, editable: true, locked: true, note: "This field is enabled by default", requiredForCompletion: false },
   { fieldKey: "email", label: "Email Address", show: true, editable: true, locked: true, note: "This field is enabled by default", requiredForCompletion: false },

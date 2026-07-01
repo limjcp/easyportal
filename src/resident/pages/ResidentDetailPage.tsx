@@ -6,7 +6,7 @@ import { useAsyncAction } from "../../shared/useAsyncAction";
 import { useBusyWhile } from "../../shared/useBusyWhile";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
 import { usePortalConfig } from "../context/PortalConfigContext";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import { getDetailSectionConfig } from "../data/residentDetailConfig";
 import type {
   ParkingRequest,

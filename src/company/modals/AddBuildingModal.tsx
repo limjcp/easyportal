@@ -14,7 +14,7 @@ import {
   MEXICO_STATES,
   UK_TERRITORIES,
   US_STATES,
-} from "../data/mock/buildingFormOptions";
+} from "../data/buildingFormOptions";
 import type { CompanyBuilding } from "../../resident/data/types";
 
 const inputClass = "mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm";

@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { CrudPanel } from "../../shared/CrudPanel";
 import { useLocalList } from "../../shared/useLocalList";
 import { ModuleMessageBanner } from "../components/ModuleMessageBanner";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 import type { ResidentRoute } from "../navigation";
 
 type GalleryPageProps = {

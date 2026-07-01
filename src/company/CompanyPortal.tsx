@@ -15,7 +15,12 @@ import type { CompanyRoute } from "./navigation";
 import { defaultCompanyRoute, isCompanyRouteAllowed } from "./navigation";
 import type { CompanyBuilding } from "../resident/data/types";
 import { useAuth } from "../auth/AuthProvider";
-import { useCompanyBuildings, useCompanyNavAccess, useCompanyUser } from "../shared/queries/companyQueries";
+import {
+  useAccessibleBuildings,
+  useCompanyBuildings,
+  useCompanyNavAccess,
+  useCompanyUser,
+} from "../shared/queries/companyQueries";
 import { useInvalidatePortalQueries } from "../shared/queries/useInvalidatePortalQueries";
 import { companyRepository } from "./data/companyRepository";
 import {
@@ -57,6 +62,7 @@ export function CompanyPortal({
   const bumpRefresh = () => setRefreshKey((k) => k + 1);
 
   const { data: buildings = [], refetch: refetchBuildings } = useCompanyBuildings();
+  const { data: accessibleBuildings = [] } = useAccessibleBuildings();
   const { data: user, isLoading: userLoading } = useCompanyUser();
   const { data: navAccess = null } = useCompanyNavAccess();
 
@@ -208,7 +214,7 @@ export function CompanyPortal({
           embedded
           adminPathPrefix={adminPathPrefix}
           buildingLabel={`(${activeBuilding.code}) ${activeBuilding.address} - ${activeBuilding.code}`}
-          buildings={buildings}
+          buildings={accessibleBuildings}
           activeBuildingId={activeBuilding.id}
           onSwitchBuilding={(building) => void handleSwitchBuilding(building)}
           onOpenResidentPortal={handleOpenResidentPortal}

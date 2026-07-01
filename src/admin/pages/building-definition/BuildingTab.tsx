@@ -12,7 +12,7 @@ import {
   CANADIAN_PROVINCES,
   COMMON_AREAS,
   CORPORATIONS,
-} from "../../data/mock/buildingDefinitionConstants";
+} from "../../data/buildingDefinitionConstants";
 import type { BuildingDefinition, CompanyBuilding } from "../../../resident/data/types";
 import { ActionButton } from "../../../shared/ActionButton";
 import { CrudPanel } from "../../../shared/CrudPanel";

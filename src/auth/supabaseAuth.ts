@@ -176,29 +176,10 @@ export async function resolvePortalAccess(
       .in("membership_id", membershipIds);
 
     const companyBuildingIds = new Set<string>();
-    const membershipsWithAssignments = new Set<string>();
 
     memberBuildings?.forEach((row) => {
       companyBuildingIds.add(row.building_id as string);
-      membershipsWithAssignments.add(row.membership_id as string);
     });
-
-    const ownerAdminCompanyIds = new Set<string>();
-    for (const membership of companyMemberships) {
-      const role = membership.role as string;
-      const isOwnerOrAdmin = role === "Company Owner" || role === "Company Administrator";
-      if (isOwnerOrAdmin && !membershipsWithAssignments.has(membership.id as string)) {
-        ownerAdminCompanyIds.add(membership.company_id as string);
-      }
-    }
-
-    if (ownerAdminCompanyIds.size > 0) {
-      const { data: companyBuildings } = await client
-        .from("buildings")
-        .select("id")
-        .in("company_id", [...ownerAdminCompanyIds]);
-      companyBuildings?.forEach((b) => companyBuildingIds.add(b.id as string));
-    }
 
     if (companyBuildingIds.size > 0) {
       portals.add("building");

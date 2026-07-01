@@ -5,7 +5,7 @@ import { ActionButton } from "../../shared/ActionButton";
 import { FormAlert } from "../../shared/FormAlert";
 import { useAsyncAction } from "../../shared/useAsyncAction";
 import { adminRepository } from "../data/adminRepository";
-import { BUILDING_ADMIN_ROLES } from "../data/mock/buildingPermissions";
+import { BUILDING_ADMIN_ROLES } from "../data/buildingPermissions";
 import type { PermissionModuleRow } from "../../resident/data/types";
 
 type BuildingPermissionDefaultsModalProps = {

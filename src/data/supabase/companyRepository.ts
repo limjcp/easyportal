@@ -47,6 +47,7 @@ import {
   requireActiveCompanyId,
   setActiveBuildingId,
 } from "./buildingContext";
+import { resolvePortalAccess } from "../../auth/supabaseAuth";
 import { mapDbError, nowIso, sb, todayIsoDate } from "./base";
 import { ensureDefaultDocumentFolders } from "./admin/documentFolders";
 import { ensureDefaultPortalModules } from "./admin/portalRepository";
@@ -55,10 +56,10 @@ import * as companyReportOps from "./companyReportOperations";
 import type { CertificateSettingsData } from "./companyReportOperations";
 import { provisionUser } from "./provisionUser";
 import { invokeSendPortalEmail } from "./sendPortalEmail";
-import { createDefaultPermissionsForRole, DEFAULT_ROLE_NAMES } from "../../company/data/mock/permissions";
+import { createDefaultPermissionsForRole, DEFAULT_ROLE_NAMES } from "../../company/data/permissions";
 import { ensureCompanyRolePermissions, mapCompanyPermissionDbRows, mergePermissionRows } from "./portalModulePermissions";
-import { certificateDetailFromRow } from "../../company/data/mock/certificateDetails";
-import { boardApprovalDetailFromRow } from "../../company/data/mock/boardApprovalDetails";
+import { certificateDetailFromRow } from "../../company/data/certificateDetailMapper";
+import { boardApprovalDetailFromRow } from "../../company/data/boardApprovalDetailMapper";
 import { buildLobbyDisplayUrl } from "../../shared/portalDomain";
 import { BUILDING_LIST_COLUMNS, ADMIN_USER_PROFILE_COLUMNS } from "./queryColumns";
 import {
@@ -167,30 +168,64 @@ async function ensureCompanyId(): Promise<string> {
   throw new Error("No active company context. Sign in as a company user first.");
 }
 
-const IMPLICIT_ALL_BUILDING_ROLES: CompanyRole[] = ["Company Owner", "Company Administrator"];
+/** Building IDs the signed-in user may open in building admin (explicit assignments only). Null = super admin (all). */
+async function loadAccessibleBuildingIds(): Promise<Set<string> | null> {
+  const {
+    data: { user },
+  } = await sb().auth.getUser();
+  if (!user) return new Set();
 
-function hasImplicitAllBuildings(role: CompanyRole, assignedCount: number): boolean {
-  return IMPLICIT_ALL_BUILDING_ROLES.includes(role) && assignedCount === 0;
+  const access = await resolvePortalAccess(user.id);
+  if (access.isSuperAdmin) return null;
+
+  return new Set(access.buildingIds);
 }
 
-export function requiresExplicitBuildingAssignments(role: CompanyRole): boolean {
-  return !IMPLICIT_ALL_BUILDING_ROLES.includes(role);
+/** Explicit company_member_buildings rows for the signed-in user. Null = super admin (all). */
+async function loadAssignedCompanyBuildingIds(): Promise<Set<string> | null> {
+  const {
+    data: { user },
+  } = await sb().auth.getUser();
+  if (!user) return new Set();
+
+  const { data: profile } = await sb()
+    .from("profiles")
+    .select("is_super_admin")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profile?.is_super_admin) return null;
+
+  try {
+    const membership = await getCurrentCompanyMembership();
+    return new Set(membership.assignedBuildingIds);
+  } catch {
+    return new Set();
+  }
+}
+
+function filterBuildingsByAccessibleIds(
+  buildings: CompanyBuilding[],
+  accessibleIds: Set<string> | null
+): CompanyBuilding[] {
+  if (accessibleIds === null) return buildings;
+  return buildings.filter((building) => accessibleIds.has(building.id));
+}
+
+/** Every employee role requires explicit building assignments for building admin access. */
+export function requiresExplicitBuildingAssignments(_role: CompanyRole): boolean {
+  return true;
 }
 
 async function syncMemberBuildingAssignments(
   membershipId: string,
   buildingIds: string[],
-  role: CompanyRole
+  _role: CompanyRole
 ): Promise<void> {
   const { error: deleteError } = await sb()
     .from("company_member_buildings")
     .delete()
     .eq("membership_id", membershipId);
   mapDbError(deleteError);
-
-  if (hasImplicitAllBuildings(role, buildingIds.length)) {
-    return;
-  }
 
   const uniqueIds = [...new Set(buildingIds.filter(Boolean))];
   if (uniqueIds.length === 0) return;
@@ -208,7 +243,6 @@ export type CurrentCompanyMembership = {
   membershipId: string;
   role: CompanyRole;
   assignedBuildingIds: string[];
-  hasImplicitAllBuildings: boolean;
 };
 
 async function getCurrentCompanyMembership(): Promise<CurrentCompanyMembership> {
@@ -234,19 +268,16 @@ async function getCurrentCompanyMembership(): Promise<CurrentCompanyMembership> 
   mapDbError(linksError);
 
   const assignedBuildingIds = (links ?? []).map((row) => row.building_id as string);
-  const role = membership.role as CompanyRole;
 
   return {
     membershipId: membership.id as string,
-    role,
+    role: membership.role as CompanyRole,
     assignedBuildingIds,
-    hasImplicitAllBuildings: hasImplicitAllBuildings(role, assignedBuildingIds.length),
   };
 }
 
 async function assignBuildingToCurrentMembership(buildingId: string): Promise<void> {
   const membership = await getCurrentCompanyMembership();
-  if (membership.hasImplicitAllBuildings) return;
 
   const { error } = await sb().from("company_member_buildings").upsert(
     {
@@ -260,26 +291,29 @@ async function assignBuildingToCurrentMembership(buildingId: string): Promise<vo
 
 export const supabaseCompanyRepository = {
   async assertBuildingAccess(buildingId: string): Promise<void> {
-    const { data, error } = await sb()
-      .from("buildings")
-      .select("id")
-      .eq("id", buildingId)
-      .maybeSingle();
-    mapDbError(error);
-    if (!data) {
-      throw new Error("You do not have access to this building.");
+    const accessibleIds = await loadAccessibleBuildingIds();
+    if (accessibleIds === null) {
+      const { data, error } = await sb()
+        .from("buildings")
+        .select("id")
+        .eq("id", buildingId)
+        .maybeSingle();
+      mapDbError(error);
+      if (!data) {
+        throw new Error("You do not have access to this building.");
+      }
+      return;
     }
+
+    if (accessibleIds.has(buildingId)) return;
+
+    throw new Error("You do not have access to this building.");
   },
 
   async resolveAccessibleBuildingIds(): Promise<string[] | null> {
-    try {
-      const membership = await getCurrentCompanyMembership();
-      if (membership.hasImplicitAllBuildings) return null;
-      return membership.assignedBuildingIds;
-    } catch {
-      const buildings = await this.getBuildings();
-      return buildings.map((b) => b.id);
-    }
+    const accessibleIds = await loadAccessibleBuildingIds();
+    if (accessibleIds === null) return null;
+    return [...accessibleIds];
   },
 
   async getCurrentCompanyMembership(): Promise<CurrentCompanyMembership> {
@@ -399,14 +433,26 @@ export const supabaseCompanyRepository = {
   },
 
   async getBuildings(): Promise<CompanyBuilding[]> {
-    return this.getBuildingsByStatus("active");
+    return this.getBuildingsByStatus("active", { scope: "accessible" });
   },
 
   async getArchivedBuildings(): Promise<CompanyBuilding[]> {
-    return this.getBuildingsByStatus("inactive");
+    return this.getBuildingsByStatus("inactive", { scope: "accessible" });
   },
 
-  async getBuildingsByStatus(status: "active" | "inactive"): Promise<CompanyBuilding[]> {
+  async getCompanyArchivedBuildings(): Promise<CompanyBuilding[]> {
+    return this.getBuildingsByStatus("inactive", { scope: "company" });
+  },
+
+  /** All buildings in the company (for employee assignment and other management UIs). */
+  async getCompanyBuildingsForAssignment(): Promise<CompanyBuilding[]> {
+    return this.getBuildingsByStatus("active", { scope: "company" });
+  },
+
+  async getBuildingsByStatus(
+    status: "active" | "inactive",
+    options?: { scope?: "accessible" | "company" }
+  ): Promise<CompanyBuilding[]> {
     const companyId = await ensureCompanyId();
     const { data, error } = await sb()
       .from("buildings")
@@ -414,7 +460,11 @@ export const supabaseCompanyRepository = {
       .eq("company_id", companyId)
       .eq("status", status);
     mapDbError(error);
-    const buildings = (data ?? []).map((row) => mapBuilding(row as Record<string, unknown>));
+    let buildings = (data ?? []).map((row) => mapBuilding(row as Record<string, unknown>));
+    if (options?.scope !== "company") {
+      const assignedIds = await loadAssignedCompanyBuildingIds();
+      buildings = filterBuildingsByAccessibleIds(buildings, assignedIds);
+    }
     const summaries = await loadBuildingAdminSummaries(buildings.map((b) => b.id));
     return buildings.map((b) => enrichBuilding(b, summaries.get(b.id)));
   },
@@ -512,12 +562,31 @@ export const supabaseCompanyRepository = {
     const companyId = await ensureCompanyId();
     const { data, error } = await sb()
       .from("company_memberships")
-      .select(
-        "id, role, profile:profiles(first_name, last_name, email, last_login_at), company_member_buildings(building_id)"
-      )
+      .select("id, role, profile:profiles(first_name, last_name, email, last_login_at)")
       .eq("company_id", companyId);
     mapDbError(error);
-    return (data ?? [])
+
+    const memberships = data ?? [];
+    const membershipIds = memberships.map((row) => row.id as string);
+    const buildingsByMembership = new Map<string, string[]>();
+
+    if (membershipIds.length > 0) {
+      const { data: buildingLinks, error: linksError } = await sb()
+        .from("company_member_buildings")
+        .select("membership_id, building_id")
+        .in("membership_id", membershipIds);
+      mapDbError(linksError);
+
+      for (const link of buildingLinks ?? []) {
+        const membershipId = link.membership_id as string;
+        const buildingId = link.building_id as string;
+        const existing = buildingsByMembership.get(membershipId) ?? [];
+        existing.push(buildingId);
+        buildingsByMembership.set(membershipId, existing);
+      }
+    }
+
+    return memberships
       .map((row) => {
         const profile = row.profile as {
           first_name: string;
@@ -526,15 +595,15 @@ export const supabaseCompanyRepository = {
           last_login_at: string | null;
         } | null;
         if (!profile) return null;
-        const buildingLinks = (row.company_member_buildings ?? []) as Array<{ building_id: string }>;
+        const membershipId = row.id as string;
         return {
-          id: row.id as string,
-          membershipId: row.id as string,
+          id: membershipId,
+          membershipId,
           firstName: profile.first_name,
           lastName: profile.last_name,
           email: profile.email,
           role: row.role as CompanyRole,
-          assignedBuildingIds: buildingLinks.map((link) => link.building_id),
+          assignedBuildingIds: buildingsByMembership.get(membershipId) ?? [],
           lastLogin: profile.last_login_at ?? undefined,
         };
       })

@@ -35,7 +35,7 @@ import {
   type BuildingAdminModulePermission,
   type ResidentPortalModulePermission,
 } from "./portalModulePermissions";
-import { BUILDING_ADMIN_ROLES } from "../../admin/data/mock/buildingPermissions";
+import { BUILDING_ADMIN_ROLES } from "../../admin/data/buildingPermissions";
 
 async function bid() {
   return buildingIdOrThrow();

@@ -16,7 +16,7 @@ import {
   resolveIncidentReportLocation,
 } from "../../shared/incidentReportPresets";
 import type { CreateIncidentReportInput } from "../data/types";
-import { residentRepo } from "../data/mockRepository";
+import { residentRepo } from "../data/residentRepository";
 
 type IncidentReportModalProps = {
   open: boolean;

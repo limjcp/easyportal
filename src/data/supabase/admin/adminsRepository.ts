@@ -9,7 +9,7 @@ import type {
 import {
   BUILDING_ADMIN_ROLES,
   createDefaultBuildingPermissionsForRole,
-} from "../../../admin/data/mock/buildingPermissions";
+} from "../../../admin/data/buildingPermissions";
 import { mapDbError, sb } from "../base";
 import { provisionUser } from "../provisionUser";
 import { invokeSendPortalEmail } from "../sendPortalEmail";
